@@ -202,6 +202,9 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             message: message
         });
 
+        // Initialize glow state
+        lastTopUpTimestamp[nftTokenId] = block.timestamp;
+
         // 3. Set metadata
         if (onChain) {
             onChainMedia[nftTokenId] = media;
@@ -348,51 +351,76 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
 
     /**
      * @dev Detect if a media string is an audio/video data URI or has a common multimedia extension.
+     * Uses optimized bitwise/fixed-size bytes comparisons.
      */
     function _isMultimedia(string memory _media) internal pure returns (bool) {
         bytes memory b = bytes(_media);
         uint256 len = b.length;
         if (len < 4) return false;
 
-        // Check for "data:audio/", "data:video/" or "data:image/gif" prefix
+        // Check for "data:" prefix (11+ chars for data:audio/ or data:video/)
         if (len >= 11) {
-            if (b[0] == 'd' && b[1] == 'a' && b[2] == 't' && b[3] == 'a' && b[4] == ':') {
-                if (b[5] == 'a' && b[6] == 'u' && b[7] == 'd' && b[8] == 'i' && b[9] == 'o' && b[10] == '/') return true;
-                if (b[5] == 'v' && b[6] == 'i' && b[7] == 'd' && b[8] == 'e' && b[9] == 'o' && b[10] == '/') return true;
-                if (len >= 14 && b[5] == 'i' && b[6] == 'm' && b[7] == 'a' && b[8] == 'g' && b[9] == 'e' && b[10] == '/' && b[11] == 'g' && b[12] == 'i' && b[13] == 'f') return true;
+            bytes5 prefix = _readBytes5(b, 0);
+            if (prefix == 0x646174613a) { // "data:"
+                bytes5 mediaType = _readBytes5(b, 5);
+                if (mediaType == 0x617564696f || mediaType == 0x766964656f) return true; // "audio", "video"
+                if (len >= 14) {
+                    bytes4 imgType = _readBytes4(b, 5);
+                    if (imgType == 0x696d6167) { // "imag"
+                        bytes3 subType = _readBytes3(b, 11);
+                        if (subType == 0x676966) return true; // "gif"
+                    }
+                }
             }
         }
 
-        // Check for 3-letter extensions: .mp3, .wav, .ogg, .m4a, .aac, .mp4, .mov, .ogv, .m4v, .gif
+        // Check extensions using fixed-size bytes
         if (b[len - 4] == '.') {
-            bytes1 b1 = _toLower(b[len - 3]);
-            bytes1 b2 = _toLower(b[len - 2]);
-            bytes1 b3 = _toLower(b[len - 1]);
-
-            if (b1 == 'm' && b2 == 'p' && b3 == '3') return true;
-            if (b1 == 'w' && b2 == 'a' && b3 == 'v') return true;
-            if (b1 == 'o' && b2 == 'g' && b3 == 'g') return true;
-            if (b1 == 'm' && b2 == '4' && b3 == 'a') return true;
-            if (b1 == 'a' && b2 == 'a' && b3 == 'c') return true;
-            if (b1 == 'm' && b2 == 'p' && b3 == '4') return true;
-            if (b1 == 'm' && b2 == 'o' && b3 == 'v') return true;
-            if (b1 == 'o' && b2 == 'g' && b3 == 'v') return true;
-            if (b1 == 'm' && b2 == '4' && b3 == 'v') return true;
-            if (b1 == 'g' && b2 == 'i' && b3 == 'f') return true;
+            bytes4 ext = _readBytes4(b, len - 4);
+            if (ext == 0x2e6d7033 || ext == 0x2e776176 || ext == 0x2e6f6767 || ext == 0x2e6d3461 || ext == 0x2e616163) return true;
+            if (ext == 0x2e6d7034 || ext == 0x2e6d6f76 || ext == 0x2e6f6776 || ext == 0x2e6d3476 || ext == 0x2e676966) return true;
+            if (ext == 0x2e676c62) return true;
         }
 
-        // Check for 4-letter extensions: .webm, .webp
         if (len >= 5 && b[len - 5] == '.') {
-            bytes1 b1 = _toLower(b[len - 4]);
-            bytes1 b2 = _toLower(b[len - 3]);
-            bytes1 b3 = _toLower(b[len - 2]);
-            bytes1 b4 = _toLower(b[len - 1]);
-
-            if (b1 == 'w' && b2 == 'e' && b3 == 'b' && b4 == 'm') return true;
-            if (b1 == 'w' && b2 == 'e' && b3 == 'b' && b4 == 'p') return true;
+            bytes5 ext = _readBytes5(b, len - 5);
+            if (ext == 0x2e7765626d || ext == 0x2e77656270 || ext == 0x2e676c7466) return true;
         }
 
         return false;
+    }
+
+    function _readBytes5(bytes memory b, uint256 offset) internal pure returns (bytes5) {
+        bytes5 out;
+        uint256 len = b.length;
+        for (uint256 i = 0; i < 5; i++) {
+            if (offset + i < len) {
+                out |= bytes5(_toLower(b[offset + i])) >> (i * 8);
+            }
+        }
+        return out;
+    }
+
+    function _readBytes3(bytes memory b, uint256 offset) internal pure returns (bytes3) {
+        bytes3 out;
+        uint256 len = b.length;
+        for (uint256 i = 0; i < 3; i++) {
+            if (offset + i < len) {
+                out |= bytes3(_toLower(b[offset + i])) >> (i * 8);
+            }
+        }
+        return out;
+    }
+
+    function _readBytes4(bytes memory b, uint256 offset) internal pure returns (bytes4) {
+        bytes4 out;
+        uint256 len = b.length;
+        for (uint256 i = 0; i < 4; i++) {
+            if (offset + i < len) {
+                out |= bytes4(_toLower(b[offset + i])) >> (i * 8);
+            }
+        }
+        return out;
     }
 
     function _toLower(bytes1 b) internal pure returns (bytes1) {
