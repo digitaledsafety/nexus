@@ -206,7 +206,7 @@ describe("BragNFT Dual-State Model", async function () {
   it("Should track supply correctly", async function () {
     const { bragNFT, donor, recipient } = await deployContracts();
 
-    assert.equal(await bragNFT.read.maxSupply(), 100n);
+    assert.equal(await bragNFT.read.maxSupply(), 10000n);
     assert.equal(await bragNFT.read.totalSupply(), 0n);
 
     await bragNFT.write.donate(["Supply test", "ipfs://uri"], {

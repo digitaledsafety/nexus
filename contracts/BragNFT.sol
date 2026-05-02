@@ -77,7 +77,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         royaltyRecipient = _treasury;
         minimumDonation = _minimumDonation;
         priceFeed = AggregatorV3Interface(_priceFeed);
-        maxSupply = 100; // Default max supply
+        maxSupply = 10000; // Default max supply
     }
 
     function totalSupply() public view returns (uint256) {
@@ -348,48 +348,56 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
 
     /**
      * @dev Detect if a media string is an audio/video data URI or has a common multimedia extension.
+     * Uses optimized bitwise comparisons for gas efficiency.
      */
     function _isMultimedia(string memory _media) internal pure returns (bool) {
         bytes memory b = bytes(_media);
         uint256 len = b.length;
         if (len < 4) return false;
 
-        // Check for "data:audio/", "data:video/" or "data:image/gif" prefix
+        // Check for "data:" prefix (0x646174613a)
         if (len >= 11) {
-            if (b[0] == 'd' && b[1] == 'a' && b[2] == 't' && b[3] == 'a' && b[4] == ':') {
-                if (b[5] == 'a' && b[6] == 'u' && b[7] == 'd' && b[8] == 'i' && b[9] == 'o' && b[10] == '/') return true;
-                if (b[5] == 'v' && b[6] == 'i' && b[7] == 'd' && b[8] == 'e' && b[9] == 'o' && b[10] == '/') return true;
-                if (len >= 14 && b[5] == 'i' && b[6] == 'm' && b[7] == 'a' && b[8] == 'g' && b[9] == 'e' && b[10] == '/' && b[11] == 'g' && b[12] == 'i' && b[13] == 'f') return true;
+            bytes5 prefix;
+            assembly { prefix := mload(add(b, 32)) }
+            if (prefix == 0x646174613a) {
+                bytes5 subType;
+                assembly { subType := mload(add(b, 37)) }
+                if (subType == 0x617564696f) return true; // audio
+                if (subType == 0x766964656f) return true; // video
+                if (len >= 14) {
+                    bytes5 img;
+                    assembly { img := mload(add(b, 37)) }
+                    if (img == 0x696d616765) {
+                        bytes4 gif;
+                        assembly { gif := mload(add(b, 42)) } // "data:image" is 10 chars, b+32+10 = b+42
+                        if (gif == 0x2f676966) return true; // /gif
+                    }
+                }
             }
         }
 
-        // Check for 3-letter extensions: .mp3, .wav, .ogg, .m4a, .aac, .mp4, .mov, .ogv, .m4v, .gif
+        // Check for common extensions
         if (b[len - 4] == '.') {
+            bytes3 ext;
             bytes1 b1 = _toLower(b[len - 3]);
             bytes1 b2 = _toLower(b[len - 2]);
             bytes1 b3 = _toLower(b[len - 1]);
+            ext = bytes3(abi.encodePacked(b1, b2, b3));
 
-            if (b1 == 'm' && b2 == 'p' && b3 == '3') return true;
-            if (b1 == 'w' && b2 == 'a' && b3 == 'v') return true;
-            if (b1 == 'o' && b2 == 'g' && b3 == 'g') return true;
-            if (b1 == 'm' && b2 == '4' && b3 == 'a') return true;
-            if (b1 == 'a' && b2 == 'a' && b3 == 'c') return true;
-            if (b1 == 'm' && b2 == 'p' && b3 == '4') return true;
-            if (b1 == 'm' && b2 == 'o' && b3 == 'v') return true;
-            if (b1 == 'o' && b2 == 'g' && b3 == 'v') return true;
-            if (b1 == 'm' && b2 == '4' && b3 == 'v') return true;
-            if (b1 == 'g' && b2 == 'i' && b3 == 'f') return true;
+            if (ext == "mp3" || ext == "wav" || ext == "ogg" || ext == "m4a" || ext == "aac") return true;
+            if (ext == "mp4" || ext == "mov" || ext == "ogv" || ext == "m4v" || ext == "gif") return true;
+            if (ext == "glb") return true;
         }
 
-        // Check for 4-letter extensions: .webm, .webp
         if (len >= 5 && b[len - 5] == '.') {
+            bytes4 ext;
             bytes1 b1 = _toLower(b[len - 4]);
             bytes1 b2 = _toLower(b[len - 3]);
             bytes1 b3 = _toLower(b[len - 2]);
             bytes1 b4 = _toLower(b[len - 1]);
+            ext = bytes4(abi.encodePacked(b1, b2, b3, b4));
 
-            if (b1 == 'w' && b2 == 'e' && b3 == 'b' && b4 == 'm') return true;
-            if (b1 == 'w' && b2 == 'e' && b3 == 'b' && b4 == 'p') return true;
+            if (ext == "webm" || ext == "webp" || ext == "gltf") return true;
         }
 
         return false;
