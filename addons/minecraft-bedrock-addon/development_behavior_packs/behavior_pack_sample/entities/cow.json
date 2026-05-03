@@ -1,5 +1,5 @@
 {
-    "format_version": "1.16.0",
+    "format_version": "1.20.0",
     "minecraft:entity": {
         "description": {
             "identifier": "minecraft:cow",
@@ -18,9 +18,10 @@
                     "default": "temperate"
                 },
                 "minecraft:sound_variant": {
-                    "type": "string",
+                    "type": "int",
+                    "range": [0, 10],
                     "client_sync": true,
-                    "default": "default"
+                    "default": 0
                 }
             }
         },

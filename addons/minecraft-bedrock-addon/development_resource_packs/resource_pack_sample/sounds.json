@@ -1,0 +1,18 @@
+{
+  "entity_sounds": {
+    "entities": {
+      "cow": {
+        "volume": 1.0,
+        "pitch": [0.8, 1.2],
+        "events": {
+          "ambient": "mob.cow.say",
+          "hurt": "mob.cow.hurt",
+          "death": "mob.cow.death",
+          "milk": "mob.cow.milk",
+          "step": "mob.cow.step"
+        },
+        "variant": "query.property('minecraft:sound_variant') == 0 ? 'default' : 'default'"
+      }
+    }
+  }
+}
