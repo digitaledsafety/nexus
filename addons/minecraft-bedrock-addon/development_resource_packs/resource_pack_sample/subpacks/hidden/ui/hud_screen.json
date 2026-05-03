@@ -1,0 +1,21 @@
+{
+  "namespace": "hud",
+  "preview_info_panel": {
+    "modifications": [
+      {
+        "array_name": "controls",
+        "operation": "remove",
+        "control_name": "test_version_info"
+      }
+    ]
+  },
+  "debug_panel": {
+    "modifications": [
+      {
+        "array_name": "controls",
+        "operation": "remove",
+        "control_name": "debug_info"
+      }
+    ]
+  }
+}
