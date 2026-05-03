@@ -69,4 +69,24 @@ describe('Minecraft Addon Validation', () => {
             assert.ok(stats.size > 0, 'Texture file is empty (Invalid for engine)');
         });
     });
+
+    describe('UI Modifications', () => {
+        const hudScreenPath = path.join(RESOURCE_PATH, 'ui/hud_screen.json');
+        const uiDefsPath = path.join(RESOURCE_PATH, 'ui/_ui_defs.json');
+
+        it('should have hud_screen.json to hide preview text', () => {
+            assert.ok(fs.existsSync(hudScreenPath), 'hud_screen.json missing');
+            const hudScreen = JSON.parse(fs.readFileSync(hudScreenPath, 'utf8'));
+
+            assert.strictEqual(hudScreen.namespace, 'hud', 'Namespace should be hud');
+            assert.ok(hudScreen.preview_info_panel?.modifications, 'preview_info_panel modifications missing');
+            assert.ok(hudScreen.debug_panel?.modifications, 'debug_panel modifications missing');
+        });
+
+        it('should have _ui_defs.json including hud_screen.json', () => {
+            assert.ok(fs.existsSync(uiDefsPath), '_ui_defs.json missing');
+            const uiDefs = JSON.parse(fs.readFileSync(uiDefsPath, 'utf8'));
+            assert.ok(uiDefs.ui_defs.includes('ui/hud_screen.json'), 'hud_screen.json not in ui_defs');
+        });
+    });
 });
