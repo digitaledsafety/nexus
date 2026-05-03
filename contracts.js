@@ -8633,12 +8633,12 @@ const CONTRACT_DATA = {
       "MockPriceFeed": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
     },
     "11155111": {
-      "BragToken": "0xdaC504Dfa012B1b46d86243fCa9331572554253c",
-      "NFTMarketplace": "0x2aB8cD37a3ad1B4299973e125f4Ce898342F77aD",
-      "BragNFT": "0xe2B4dE155b5F527abE3668b40C8EA381Ce14ea4f",
-      "ExhibitRegistry": "0x1159e2F6d9c363196E39E58bE7d6F4759Df3b4b9",
+      "BragToken": "0xBC79DF000d2fedc32C7c7b809f2DCf0f095a68A0",
+      "NFTMarketplace": "0x2cCCC99cDb16aeA06e84ae18099cdFC049Cc5400",
+      "BragNFT": "0x35cbc958045c589cF80B6708aED0dEE1bfC17292",
+      "ExhibitRegistry": "0x920d8cA9623346fDAd652000b3DeB2189756Ed57",
       "DonationReceipt": "0x5555555555555555555555555555555555555555",
-      "Treasury": "0x007D77548Ee21B31C60112a1a76Df3b527bB2937"
+      "Treasury": "0x1BD94710C997c5f01e9c0EDBdEDF0C7e188b9545"
     },
     "chain-31337": {
       "BragToken": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
@@ -8650,12 +8650,12 @@ const CONTRACT_DATA = {
       "MockPriceFeed": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
     },
     "chain-11155111": {
-      "BragToken": "0xdaC504Dfa012B1b46d86243fCa9331572554253c",
-      "NFTMarketplace": "0x2aB8cD37a3ad1B4299973e125f4Ce898342F77aD",
-      "BragNFT": "0xe2B4dE155b5F527abE3668b40C8EA381Ce14ea4f",
-      "ExhibitRegistry": "0x1159e2F6d9c363196E39E58bE7d6F4759Df3b4b9",
+      "BragToken": "0xBC79DF000d2fedc32C7c7b809f2DCf0f095a68A0",
+      "NFTMarketplace": "0x2cCCC99cDb16aeA06e84ae18099cdFC049Cc5400",
+      "BragNFT": "0x35cbc958045c589cF80B6708aED0dEE1bfC17292",
+      "ExhibitRegistry": "0x920d8cA9623346fDAd652000b3DeB2189756Ed57",
       "DonationReceipt": "0x5555555555555555555555555555555555555555",
-      "Treasury": "0x007D77548Ee21B31C60112a1a76Df3b527bB2937"
+      "Treasury": "0x1BD94710C997c5f01e9c0EDBdEDF0C7e188b9545"
     }
   },
   "externalCollections": [
