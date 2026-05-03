@@ -1,0 +1,37 @@
+{
+  "format_version": "1.20.0",
+  "minecraft:client_entity": {
+    "description": {
+      "identifier": "minecraft:cow",
+      "materials": {
+        "default": "cow"
+      },
+      "textures": {
+        "default": "textures/entity/cow/cow"
+      },
+      "geometry": {
+        "default": "geometry.cow"
+      },
+      "animations": {
+        "setup": "animation.cow.setup",
+        "walk": "animation.cow.walk",
+        "look_at_target": "animation.common.look_at_target",
+        "baby_transform": "animation.cow.baby_transform"
+      },
+      "scripts": {
+        "animate": [
+          "setup",
+          { "walk": "query.modified_move_speed" },
+          "look_at_target",
+          { "baby_transform": "query.is_baby" }
+        ],
+        "initialize": [
+          "t.variant = query.property('minecraft:climate_variant');",
+          "v.index = (t.variant == 'temperate') ? 0 : ((t.variant == 'warm') ? 1 : 2);",
+          "v.is_cold = t.variant == 'cold';"
+        ]
+      },
+      "render_controllers": [ "controller.render.cow" ]
+    }
+  }
+}
