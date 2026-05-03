@@ -70,17 +70,34 @@ describe('Minecraft Addon Validation', () => {
         });
     });
 
-    describe('UI Modifications', () => {
-        const hudScreenPath = path.join(RESOURCE_PATH, 'ui/hud_screen.json');
+    describe('UI Modifications (Subpacks)', () => {
+        const hudScreenHiddenPath = path.join(RESOURCE_PATH, 'subpacks/hidden/ui/hud_screen.json');
+        const hudScreenDefaultPath = path.join(RESOURCE_PATH, 'subpacks/default/ui/hud_screen.json');
         const uiDefsPath = path.join(RESOURCE_PATH, 'ui/_ui_defs.json');
+        const manifestPath = path.join(RESOURCE_PATH, 'manifest.json');
 
-        it('should have hud_screen.json to hide preview text', () => {
-            assert.ok(fs.existsSync(hudScreenPath), 'hud_screen.json missing');
-            const hudScreen = JSON.parse(fs.readFileSync(hudScreenPath, 'utf8'));
+        it('should have subpacks defined in manifest.json', () => {
+            const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+            assert.ok(Array.isArray(manifest.subpacks), 'manifest.subpacks should be an array');
+            assert.strictEqual(manifest.subpacks.length, 2);
+            assert.strictEqual(manifest.subpacks[0].folder_name, 'default');
+            assert.strictEqual(manifest.subpacks[1].folder_name, 'hidden');
+        });
+
+        it('should have hidden subpack with hud_screen.json that hides debug text', () => {
+            assert.ok(fs.existsSync(hudScreenHiddenPath), 'hidden hud_screen.json missing');
+            const hudScreen = JSON.parse(fs.readFileSync(hudScreenHiddenPath, 'utf8'));
 
             assert.strictEqual(hudScreen.namespace, 'hud', 'Namespace should be hud');
             assert.ok(hudScreen.preview_info_panel?.modifications, 'preview_info_panel modifications missing');
             assert.ok(hudScreen.debug_panel?.modifications, 'debug_panel modifications missing');
+        });
+
+        it('should have default subpack with hud_screen.json that is empty/neutral', () => {
+            assert.ok(fs.existsSync(hudScreenDefaultPath), 'default hud_screen.json missing');
+            const hudScreen = JSON.parse(fs.readFileSync(hudScreenDefaultPath, 'utf8'));
+            assert.strictEqual(hudScreen.namespace, 'hud', 'Namespace should be hud');
+            assert.ok(!hudScreen.preview_info_panel, 'Default subpack should not hide preview_info_panel');
         });
 
         it('should have _ui_defs.json including hud_screen.json', () => {
