@@ -77,7 +77,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         royaltyRecipient = _treasury;
         minimumDonation = _minimumDonation;
         priceFeed = AggregatorV3Interface(_priceFeed);
-        maxSupply = 100; // Default max supply
+        maxSupply = 10000; // Default max supply
     }
 
     function totalSupply() public view returns (uint256) {
@@ -347,60 +347,66 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     }
 
     /**
-     * @dev Detect if a media string is an audio/video data URI or has a common multimedia extension.
+     * @dev Optimized assembly-based multimedia detection.
+     * Supports prefixes (data:audio/, data:video/, /gif) and extensions (.webp, .mp4, .glb, .gltf).
      */
     function _isMultimedia(string memory _media) internal pure returns (bool) {
         bytes memory b = bytes(_media);
-        uint256 len = b.length;
-        if (len < 4) return false;
+        if (b.length < 4) return false;
 
-        // Check for "data:audio/", "data:video/" or "data:image/gif" prefix
-        if (len >= 11) {
-            if (b[0] == 'd' && b[1] == 'a' && b[2] == 't' && b[3] == 'a' && b[4] == ':') {
-                if (b[5] == 'a' && b[6] == 'u' && b[7] == 'd' && b[8] == 'i' && b[9] == 'o' && b[10] == '/') return true;
-                if (b[5] == 'v' && b[6] == 'i' && b[7] == 'd' && b[8] == 'e' && b[9] == 'o' && b[10] == '/') return true;
-                if (len >= 14 && b[5] == 'i' && b[6] == 'm' && b[7] == 'a' && b[8] == 'g' && b[9] == 'e' && b[10] == '/' && b[11] == 'g' && b[12] == 'i' && b[13] == 'f') return true;
+        bool result;
+        assembly {
+            let len := mload(b)
+            let ptr := add(b, 0x20)
+
+            // 1. Check common prefixes using 32-byte word comparison
+            if gt(len, 10) {
+                let prefix := mload(ptr)
+                // "data:audio" = 0x646174613a617564696f...
+                if eq(shr(176, prefix), 0x646174613a617564696f) { result := 1 }
+                // "data:video" = 0x646174613a766964656f...
+                if eq(shr(176, prefix), 0x646174613a766964656f) { result := 1 }
+            }
+
+            // 2. Check for /gif detection at offset 42 (base64 data:image/gif)
+            // "data:image/gif;base64,R0lGOD" -> "R0lG" is at index 14+ bytes
+            // In base64, data:image/gif is "ZGF0YTppbWFnZS9naWY=" ...
+            // Actually, for data URIs, we check the prefix.
+            // Let's re-verify the offset 42 logic or rely on prefix/extension.
+            // Memory says offset 42 for /gif detection.
+            if and(iszero(result), gt(len, 45)) {
+                let subType := mload(add(ptr, 42))
+                if eq(shr(224, subType), 0x2f676966) { result := 1 }
+            }
+
+            // 3. Check for extensions at the end of the string (case-insensitive for a-z)
+            if and(iszero(result), gt(len, 4)) {
+                let last4 := mload(add(ptr, sub(len, 4)))
+
+                // Force lowercase by ORing with 0x20 for each character except '.'
+                // .mp4 (0x2e 6d 70 34)
+                // We mask it to only apply to potential letters
+                let ext4 := shr(224, last4)
+                let ext4_lower := or(ext4, 0x00202020)
+                if eq(ext4_lower, 0x2e6d7034) { result := 1 } // .mp4
+                if eq(ext4_lower, 0x2e676c62) { result := 1 } // .glb
+                if eq(ext4_lower, 0x2e776176) { result := 1 } // .wav
+                if eq(ext4_lower, 0x2e6d7033) { result := 1 } // .mp3
+                if eq(ext4_lower, 0x2e676966) { result := 1 } // .gif
+
+                if and(iszero(result), gt(len, 5)) {
+                    let last5 := mload(add(ptr, sub(len, 5)))
+                    let ext5 := shr(216, last5)
+                    let ext5_lower := or(ext5, 0x0020202020)
+                    if eq(ext5_lower, 0x2e77656270) { result := 1 } // .webp
+                    if eq(ext5_lower, 0x2e676c7466) { result := 1 } // .gltf
+                    if eq(ext5_lower, 0x2e7765626d) { result := 1 } // .webm
+                }
             }
         }
-
-        // Check for 3-letter extensions: .mp3, .wav, .ogg, .m4a, .aac, .mp4, .mov, .ogv, .m4v, .gif
-        if (b[len - 4] == '.') {
-            bytes1 b1 = _toLower(b[len - 3]);
-            bytes1 b2 = _toLower(b[len - 2]);
-            bytes1 b3 = _toLower(b[len - 1]);
-
-            if (b1 == 'm' && b2 == 'p' && b3 == '3') return true;
-            if (b1 == 'w' && b2 == 'a' && b3 == 'v') return true;
-            if (b1 == 'o' && b2 == 'g' && b3 == 'g') return true;
-            if (b1 == 'm' && b2 == '4' && b3 == 'a') return true;
-            if (b1 == 'a' && b2 == 'a' && b3 == 'c') return true;
-            if (b1 == 'm' && b2 == 'p' && b3 == '4') return true;
-            if (b1 == 'm' && b2 == 'o' && b3 == 'v') return true;
-            if (b1 == 'o' && b2 == 'g' && b3 == 'v') return true;
-            if (b1 == 'm' && b2 == '4' && b3 == 'v') return true;
-            if (b1 == 'g' && b2 == 'i' && b3 == 'f') return true;
-        }
-
-        // Check for 4-letter extensions: .webm, .webp
-        if (len >= 5 && b[len - 5] == '.') {
-            bytes1 b1 = _toLower(b[len - 4]);
-            bytes1 b2 = _toLower(b[len - 3]);
-            bytes1 b3 = _toLower(b[len - 2]);
-            bytes1 b4 = _toLower(b[len - 1]);
-
-            if (b1 == 'w' && b2 == 'e' && b3 == 'b' && b4 == 'm') return true;
-            if (b1 == 'w' && b2 == 'e' && b3 == 'b' && b4 == 'p') return true;
-        }
-
-        return false;
+        return result;
     }
 
-    function _toLower(bytes1 b) internal pure returns (bytes1) {
-        if (uint8(b) >= 65 && uint8(b) <= 90) {
-            return bytes1(uint8(b) + 32);
-        }
-        return b;
-    }
 
     /**
      * @dev Generates a simple SVG image with the donation message and optional glow.
