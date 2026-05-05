@@ -18,7 +18,7 @@ window.APP_CONFIG = {
         31337: {
             apiKey: "LOCAL",
             gasPolicyId: "",
-            rpcUrl: "http://127.0.0.1:8545",
+            rpcUrl: "http://0.0.0.0:8545",
             entryPointAddress: "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
             factoryAddress: "0x000000000019d2Ee9F2729A65AfE20bb0020AefC"
         }
