@@ -166,6 +166,56 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     }
 
     /**
+     * @dev Mint multiple BragNFTs in a single transaction.
+     * @param recipients Array of addresses that will receive the NFTs.
+     * @param messages Array of donation messages.
+     * @param mediaURIs Array of media URIs or on-chain data.
+     * @param onChainFlags Array of booleans indicating if media should be stored on-chain.
+     */
+    /**
+     * @dev Mint multiple BragNFTs in a single transaction.
+     * @param recipients Array of addresses that will receive the NFTs.
+     * @param messages Array of donation messages.
+     * @param mediaURIs Array of media URIs or on-chain data.
+     * @param onChainFlags Array of booleans indicating if media should be stored on-chain.
+     */
+    function donateBatch(
+        address[] calldata recipients,
+        string[] calldata messages,
+        string[] calldata mediaURIs,
+        bool[] calldata onChainFlags
+    ) external payable nonReentrant {
+        uint256 count = recipients.length;
+        require(count > 0, "Empty batch");
+        require(count == messages.length && count == mediaURIs.length && count == onChainFlags.length, "Mismatched arrays");
+
+        uint256 totalMinDonation = minimumDonation * count;
+        require(msg.value >= totalMinDonation, "Total donation below minimum");
+
+        uint256 valuePerNFT = msg.value / count;
+
+        // 1. Get USD Price once for the whole batch to save gas
+        int256 ethPrice = 0;
+        if (address(priceFeed) != address(0)) {
+            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
+                ethPrice = answer;
+            } catch {
+                emit PriceFeedFailed();
+            }
+        }
+
+        for (uint256 i = 0; i < count; i++) {
+            // Distribute any remainder to the first NFT (simplified)
+            uint256 currentAmount = (i == 0) ? valuePerNFT + (msg.value % count) : valuePerNFT;
+            _donateInternal(recipients[i], messages[i], mediaURIs[i], onChainFlags[i], currentAmount, ethPrice);
+        }
+
+        // 2. Transfer total value to treasury once
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Transfer to treasury failed");
+    }
+
+    /**
      * @dev Fallback to handle raw ETH transfers.
      */
     receive() external payable nonReentrant {
@@ -176,21 +226,31 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
      * @dev Internal donation logic. Records a permanent tax record and mints the NFT.
      */
     function _donate(address recipient, string memory message, string memory media, bool onChain) internal {
-        require(msg.value >= minimumDonation, "Donation below minimum");
+        int256 ethPrice = 0;
+        if (address(priceFeed) != address(0)) {
+            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
+                ethPrice = answer;
+            } catch {
+                emit PriceFeedFailed();
+            }
+        }
+        _donateInternal(recipient, message, media, onChain, msg.value, ethPrice);
+
+        // Single transfer to treasury
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Transfer to treasury failed");
+    }
+
+    function _donateInternal(address recipient, string memory message, string memory media, bool onChain, uint256 amount, int256 ethPrice) internal {
+        require(amount >= minimumDonation, "Donation below minimum");
         require(nextTokenId < maxSupply, "Max supply reached");
 
         uint256 nftTokenId = nextTokenId++;
 
-        // 1. Get USD Value from Chainlink
+        // 1. Calculate USD Value using passed price
         uint256 usdValue = 0;
-        if (address(priceFeed) != address(0)) {
-            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
-                if (answer > 0) {
-                    usdValue = (uint256(answer) * msg.value) / 1e18;
-                }
-            } catch {
-                emit PriceFeedFailed();
-            }
+        if (ethPrice > 0) {
+            usdValue = (uint256(ethPrice) * amount) / 1e18;
         }
 
         // 2. Create Permanent Record (Effect)
@@ -217,11 +277,9 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             bragToken.mint(msg.sender, usdValue * 10**16);
         }
 
-        // 6. Transfer to treasury
-        (bool success, ) = treasury.call{value: msg.value}("");
-        require(success, "Transfer to treasury failed");
+        // 6. Transfer to treasury (Handled in calling function for efficiency)
 
-        emit Donated(msg.sender, msg.value, usdValue, nftTokenId, message);
+        emit Donated(msg.sender, amount, usdValue, nftTokenId, message);
     }
 
     /**
@@ -363,11 +421,20 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             }
         }
 
+        // Isolate the filename from query parameters or fragments
+        uint256 end = len;
+        for (uint256 i = 0; i < len; i++) {
+            if (b[i] == '?' || b[i] == '#') {
+                end = i;
+                break;
+            }
+        }
+
         // Check for 3-letter extensions: .mp3, .wav, .ogg, .m4a, .aac, .mp4, .mov, .ogv, .m4v, .gif
-        if (b[len - 4] == '.') {
-            bytes1 b1 = _toLower(b[len - 3]);
-            bytes1 b2 = _toLower(b[len - 2]);
-            bytes1 b3 = _toLower(b[len - 1]);
+        if (end >= 4 && b[end - 4] == '.') {
+            bytes1 b1 = _toLower(b[end - 3]);
+            bytes1 b2 = _toLower(b[end - 2]);
+            bytes1 b3 = _toLower(b[end - 1]);
 
             if (b1 == 'm' && b2 == 'p' && b3 == '3') return true;
             if (b1 == 'w' && b2 == 'a' && b3 == 'v') return true;
@@ -382,11 +449,11 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         }
 
         // Check for 4-letter extensions: .webm, .webp
-        if (len >= 5 && b[len - 5] == '.') {
-            bytes1 b1 = _toLower(b[len - 4]);
-            bytes1 b2 = _toLower(b[len - 3]);
-            bytes1 b3 = _toLower(b[len - 2]);
-            bytes1 b4 = _toLower(b[len - 1]);
+        if (end >= 5 && b[end - 5] == '.') {
+            bytes1 b1 = _toLower(b[end - 4]);
+            bytes1 b2 = _toLower(b[end - 3]);
+            bytes1 b3 = _toLower(b[end - 2]);
+            bytes1 b4 = _toLower(b[end - 1]);
 
             if (b1 == 'w' && b2 == 'e' && b3 == 'b' && b4 == 'm') return true;
             if (b1 == 'w' && b2 == 'e' && b3 == 'b' && b4 == 'p') return true;
