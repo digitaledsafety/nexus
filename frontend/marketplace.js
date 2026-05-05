@@ -90,6 +90,27 @@ async function loadNFTs() {
 async function renderNFTCard(contract, tokenId, collectionName = "Impact NFT") {
     const nftGrid = document.getElementById('nftGrid');
     try {
+        const marketplace = getContract('NFTMarketplace');
+        let listingPrice = null;
+        let listingSeller = null;
+
+        if (marketplace) {
+            try {
+                // We check for the owner's listing (simplified check)
+                let owner;
+                if (contract.ownerOf) owner = await contract.ownerOf(tokenId);
+                if (owner) {
+                    const listing = await marketplace.listings(contract.address, tokenId, owner);
+                    if (listing.active) {
+                        listingPrice = ethers.utils.formatEther(listing.price);
+                        listingSeller = listing.seller;
+                    }
+                }
+            } catch (e) {
+                // Non-ownerOf contract or other error
+            }
+        }
+
         let tokenURI;
         if (contract.tokenURI) {
             tokenURI = await contract.tokenURI(tokenId);
@@ -125,6 +146,7 @@ async function renderNFTCard(contract, tokenId, collectionName = "Impact NFT") {
                 <div class="absolute top-4 right-4 flex flex-col items-end gap-2">
                     <span class="px-3 py-1 rounded-full bg-slate-950/80 backdrop-blur-md text-[10px] font-black text-white/50 border border-white/5">#${tokenId.length > 10 ? tokenId.substring(0, 4) + '...' + tokenId.substring(tokenId.length - 4) : tokenId}</span>
                     ${isExternal ? `<span class="px-2 py-1 rounded-lg bg-indigo-500 text-white text-[8px] font-black uppercase tracking-tighter shadow-lg">Legacy Collection</span>` : ''}
+                    ${listingPrice ? `<span class="px-2 py-1 rounded-lg bg-emerald-500 text-white text-[8px] font-black uppercase tracking-tighter shadow-lg">${listingPrice} BRAG</span>` : ''}
                 </div>
             </div>
             <div class="p-6 space-y-4">
@@ -135,7 +157,9 @@ async function renderNFTCard(contract, tokenId, collectionName = "Impact NFT") {
                     </div>
                 </div>
                 <div class="flex items-center justify-between pt-2 border-t border-white/5">
-                    <div class="text-[10px] font-black uppercase tracking-widest text-indigo-400">View Details</div>
+                    <div class="text-[10px] font-black uppercase tracking-widest text-indigo-400">
+                        ${listingPrice ? `<span class="text-emerald-400">Buy Now</span>` : 'View Details'}
+                    </div>
                     <button class="add-to-cart-btn w-8 h-8 rounded-full bg-white/5 hover:bg-indigo-500 text-slate-400 hover:text-white transition-colors flex items-center justify-center">
                         <i class="fas fa-cart-plus text-xs"></i>
                     </button>
