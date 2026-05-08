@@ -3,9 +3,12 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 
 interface IExhibitRegistry {
     struct VaultInfo {
@@ -24,7 +27,8 @@ interface IExhibitRegistry {
  * It tracks the original owner and allows them to withdraw or move the NFT,
  * with optional time-gating (duration).
  */
-contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard {
+contract ExhibitVault is ERC721Holder, ERC1155Holder, AccessControl, ReentrancyGuard {
+    using SafeERC20 for IERC20;
     IExhibitRegistry public registry;
 
     // Track original owner of ERC721 tokens
@@ -46,8 +50,28 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard {
     event Moved721(address indexed nftContract, uint256 indexed tokenId, address indexed owner, address destinationVault);
     event Moved1155(address indexed nftContract, uint256 indexed tokenId, address indexed owner, uint256 amount, address destinationVault);
 
-    constructor(address _registry) {
+    constructor(address initialAdmin, address _registry) {
+        _grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
         registry = IExhibitRegistry(_registry);
+    }
+
+    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC1155Holder, AccessControl) returns (bool) {
+        return super.supportsInterface(interfaceId);
+    }
+
+    /**
+     * @dev Withdraw ERC20 tokens sent to this contract by mistake.
+     */
+    function withdrawERC20(address token, address to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        IERC20(token).safeTransfer(to, amount);
+    }
+
+    /**
+     * @dev Withdraw ETH sent to this contract by mistake.
+     */
+    function withdrawETH(address payable to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        (bool success, ) = to.call{value: amount}("");
+        require(success, "ETH transfer failed");
     }
 
     function _parseDepositData(

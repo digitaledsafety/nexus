@@ -302,6 +302,10 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271 {
         return proposals[proposalId].approved[owner];
     }
 
+    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC1155Holder) returns (bool) {
+        return super.supportsInterface(interfaceId);
+    }
+
     function isValidSignature(bytes32 hash, bytes calldata signature) external view override returns (bytes4) {
         if (_rawSignatureValidation(hash, signature)) {
             return IERC1271.isValidSignature.selector;

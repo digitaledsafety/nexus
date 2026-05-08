@@ -188,7 +188,7 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
      */
     function cancelOffers(address[] calldata nftContracts, uint256[] calldata tokenIds) external nonReentrant {
         require(nftContracts.length == tokenIds.length, "Mismatched arrays");
-        for (uint256 i = 0; i < nftContracts.length; i++) {
+        for (uint256 i = 0; i < nftContracts.length; i = _uncheckedInc(i)) {
             address nftContract = nftContracts[i];
             uint256 tokenId = tokenIds[i];
             Offer memory offer = offers[nftContract][tokenId][msg.sender];
@@ -243,5 +243,26 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
     function setMinOfferPrice(uint256 _minPrice) external onlyRole(DEFAULT_ADMIN_ROLE) {
         minOfferPrice = _minPrice;
         emit MinOfferPriceUpdated(_minPrice);
+    }
+
+    function _uncheckedInc(uint256 i) internal pure returns (uint256) {
+        unchecked {
+            return i + 1;
+        }
+    }
+
+    /**
+     * @dev Withdraw ERC20 tokens sent to this contract by mistake.
+     */
+    function withdrawERC20(address token, address to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        IERC20(token).safeTransfer(to, amount);
+    }
+
+    /**
+     * @dev Withdraw ETH sent to this contract by mistake.
+     */
+    function withdrawETH(address payable to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        (bool success, ) = to.call{value: amount}("");
+        require(success, "ETH transfer failed");
     }
 }

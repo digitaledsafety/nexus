@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 interface IBragToken {
     function mint(address to, uint256 amount) external;
@@ -36,6 +37,7 @@ interface AggregatorV3Interface {
  */
 contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, IERC6454 {
     using Strings for uint256;
+    using SafeERC20 for IERC20;
 
     enum TaxStatus { Pending, Verified, Claimed, Flagged }
 
@@ -92,6 +94,21 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         return interfaceId == type(IERC2981).interfaceId ||
                interfaceId == type(IERC6454).interfaceId ||
                super.supportsInterface(interfaceId);
+    }
+
+    /**
+     * @dev Withdraw ERC20 tokens sent to this contract by mistake.
+     */
+    function withdrawERC20(address token, address to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        IERC20(token).safeTransfer(to, amount);
+    }
+
+    /**
+     * @dev Withdraw ETH sent to this contract by mistake.
+     */
+    function withdrawETH(address payable to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        (bool success, ) = to.call{value: amount}("");
+        require(success, "ETH transfer failed");
     }
 
     /**
@@ -407,7 +424,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
      */
     function _generateSVG(uint256 tokenId, string memory message) internal view returns (string memory) {
         bool glowing = isGlowing(tokenId);
-        string memory displayText = bytes(message).length > 0 ? _escapeSVG(message) : string(abi.encodePacked("BragNFT #", tokenId.toString()));
+        string memory displayText = bytes(message).length > 0 ? _escapeSVG(_substring(message, 32)) : string(abi.encodePacked("BragNFT #", tokenId.toString()));
 
         string memory filterDef = "";
         string memory textStyle = "fill: white; font-family: sans-serif; font-size: 20px; font-weight: bold;";
@@ -467,6 +484,30 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             }
         }
         return string(outputBytes);
+    }
+
+    /**
+     * @dev Truncate a string to a maximum number of bytes without splitting UTF-8 characters.
+     */
+    function _substring(string memory str, uint256 count) internal pure returns (string memory) {
+        bytes memory strBytes = bytes(str);
+        if (strBytes.length <= count) {
+            return str;
+        }
+
+        uint256 actualEnd = count;
+        while (actualEnd > 0 && (uint8(strBytes[actualEnd]) & 0xC0) == 0x80) {
+            actualEnd--;
+        }
+        if (actualEnd < count && actualEnd > 0) {
+            actualEnd--;
+        }
+
+        bytes memory result = new bytes(actualEnd);
+        for (uint256 i = 0; i < actualEnd; i++) {
+            result[i] = strBytes[i];
+        }
+        return string(result);
     }
 
     /**
