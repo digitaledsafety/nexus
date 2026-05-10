@@ -137,6 +137,11 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         bragToken = IBragToken(_bragToken);
     }
 
+    function updateOnChainMedia(uint256 tokenId, string calldata media) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _requireOwned(tokenId);
+        onChainMedia[tokenId] = media;
+    }
+
     /**
      * @dev Mint a new BragNFT by donating ETH.
      */
@@ -403,11 +408,36 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     }
 
     /**
+     * @dev UTF-8 safe substring function that ensures truncation doesn't split multi-byte characters.
+     * Truncates to approximately `maxBytes` bytes.
+     */
+    function _substring(string memory str, uint256 maxBytes) internal pure returns (string memory) {
+        bytes memory strBytes = bytes(str);
+        if (strBytes.length <= maxBytes) {
+            return str;
+        }
+
+        uint256 end = maxBytes;
+        if ((uint8(strBytes[end]) & 0xC0) == 0x80) {
+            while (end > 0 && (uint8(strBytes[end]) & 0xC0) == 0x80) {
+                end--;
+            }
+        }
+
+        bytes memory result = new bytes(end);
+        for (uint256 i = 0; i < end; i++) {
+            result[i] = strBytes[i];
+        }
+        return string(result);
+    }
+
+    /**
      * @dev Generates a simple SVG image with the donation message and optional glow.
      */
     function _generateSVG(uint256 tokenId, string memory message) internal view returns (string memory) {
         bool glowing = isGlowing(tokenId);
-        string memory displayText = bytes(message).length > 0 ? _escapeSVG(message) : string(abi.encodePacked("BragNFT #", tokenId.toString()));
+        string memory truncatedMessage = _substring(message, 32);
+        string memory displayText = bytes(truncatedMessage).length > 0 ? _escapeSVG(truncatedMessage) : string(abi.encodePacked("BragNFT #", tokenId.toString()));
 
         string memory filterDef = "";
         string memory textStyle = "fill: white; font-family: sans-serif; font-size: 20px; font-weight: bold;";

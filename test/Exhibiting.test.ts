@@ -12,8 +12,8 @@ describe("Exhibiting System", async function () {
     const registry = await viem.deployContract("ExhibitRegistry", [owner.account.address]);
 
     // Deploy two vaults
-    const vault1 = await viem.deployContract("ExhibitVault", [registry.address]);
-    const vault2 = await viem.deployContract("ExhibitVault", [registry.address]);
+    const vault1 = await viem.deployContract("ExhibitVault", [owner.account.address, registry.address]);
+    const vault2 = await viem.deployContract("ExhibitVault", [owner.account.address, registry.address]);
 
     // Verify vaults in registry
     await registry.write.verifyVault([vault1.address, 0, "Minecraft Vault", "Vault for Minecraft"]);

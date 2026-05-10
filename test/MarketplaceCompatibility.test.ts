@@ -24,7 +24,7 @@ describe("Marketplace Compatibility (ERC721 & ERC1155)", async function () {
 
 
     // ERC1155
-    const mock1155 = await viem.deployContract("MockERC1155");
+    const mock1155 = await viem.deployContract("MockERC1155", []);
 
     return { marketplace, bragNFT, mock1155, bragToken, owner, seller, buyer };
   }
@@ -118,7 +118,7 @@ describe("Marketplace Compatibility (ERC721 & ERC1155)", async function () {
     await mock1155.write.setApprovalForAll([marketplace.address, true], { account: seller.account });
     await assert.rejects(
         marketplace.write.acceptOffer([mock1155.address, tokenId, buyer.account.address], { account: seller.account }),
-        /Insufficient balance/
+        /From has insufficient balance/
     );
   });
 
