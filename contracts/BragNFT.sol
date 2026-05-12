@@ -2,6 +2,8 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/interfaces/IERC2981.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
@@ -36,6 +38,7 @@ interface AggregatorV3Interface {
  */
 contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, IERC6454 {
     using Strings for uint256;
+    using SafeERC20 for IERC20;
 
     enum TaxStatus { Pending, Verified, Claimed, Flagged }
 
@@ -135,6 +138,31 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
 
     function setBragToken(address _bragToken) external onlyRole(DEFAULT_ADMIN_ROLE) {
         bragToken = IBragToken(_bragToken);
+    }
+
+    /**
+     * @dev Administrative function to update on-chain media.
+     */
+    function updateOnChainMedia(uint256 tokenId, string calldata media) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _requireOwned(tokenId);
+        onChainMedia[tokenId] = media;
+    }
+
+    /**
+     * @dev Withdraw ETH from the contract (emergency use).
+     */
+    function withdrawETH() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 balance = address(this).balance;
+        (bool success, ) = msg.sender.call{value: balance}("");
+        require(success, "Withdraw failed");
+    }
+
+    /**
+     * @dev Withdraw ERC20 tokens from the contract (emergency use).
+     */
+    function withdrawERC20(address token) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 balance = IERC20(token).balanceOf(address(this));
+        IERC20(token).safeTransfer(msg.sender, balance);
     }
 
     /**
@@ -407,7 +435,11 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
      */
     function _generateSVG(uint256 tokenId, string memory message) internal view returns (string memory) {
         bool glowing = isGlowing(tokenId);
-        string memory displayText = bytes(message).length > 0 ? _escapeSVG(message) : string(abi.encodePacked("BragNFT #", tokenId.toString()));
+        string memory truncated = message;
+        if (bytes(message).length > 32) {
+            truncated = _substring(message, 0, 32);
+        }
+        string memory displayText = bytes(truncated).length > 0 ? _escapeSVG(truncated) : string(abi.encodePacked("BragNFT #", tokenId.toString()));
 
         string memory filterDef = "";
         string memory textStyle = "fill: white; font-family: sans-serif; font-size: 20px; font-weight: bold;";
@@ -507,5 +539,30 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             }
         }
         return string(outputBytes);
+    }
+
+    /**
+     * @dev Safely truncates a UTF-8 string to a maximum number of bytes without breaking multi-byte characters.
+     */
+    function _substring(string memory str, uint256 startIndex, uint256 endIndex) internal pure returns (string memory) {
+        bytes memory strBytes = bytes(str);
+        if (endIndex > strBytes.length) {
+            endIndex = strBytes.length;
+        }
+        if (startIndex >= endIndex) {
+            return "";
+        }
+
+        // If the byte at endIndex is a continuation byte (0x80 to 0xBF),
+        // we move backwards until we find the start of the character.
+        while (endIndex > startIndex && (uint8(strBytes[endIndex]) & 0xC0) == 0x80) {
+            endIndex--;
+        }
+
+        bytes memory result = new bytes(endIndex - startIndex);
+        for (uint256 i = startIndex; i < endIndex; i++) {
+            result[i - startIndex] = strBytes[i];
+        }
+        return string(result);
     }
 }

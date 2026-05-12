@@ -11,7 +11,7 @@ describe("New Features", async function () {
 
     // Deploy ExhibitVault and Registry
     const registry = await viem.deployContract("ExhibitRegistry", [owner.account.address]);
-    const vault = await viem.deployContract("ExhibitVault", [registry.address]);
+    const vault = await viem.deployContract("ExhibitVault", [owner.account.address, registry.address]);
     await registry.write.verifyVault([vault.address, 0, "Test Vault", "Description"]);
 
     // Deploy BragToken

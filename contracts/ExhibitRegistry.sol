@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
 /**
@@ -10,6 +12,8 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
  * Uses AccessControl for flexible permissions.
  */
 contract ExhibitRegistry is AccessControl {
+    using SafeERC20 for IERC20;
+
     bytes32 public constant VERIFIER_ROLE = keccak256("VERIFIER_ROLE");
 
     enum LocationType { Game, Physical, Website, Gallery, Other }
@@ -76,4 +80,26 @@ contract ExhibitRegistry is AccessControl {
     function getVaultInfo(address vault) external view returns (VaultInfo memory) {
         return vaults[vault];
     }
+
+    /**
+     * @dev Withdraw ETH from the contract (emergency use).
+     */
+    function withdrawETH() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 balance = address(this).balance;
+        (bool success, ) = msg.sender.call{value: balance}("");
+        require(success, "Withdraw failed");
+    }
+
+    /**
+     * @dev Withdraw ERC20 tokens from the contract (emergency use).
+     */
+    function withdrawERC20(address token) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 balance = IERC20(token).balanceOf(address(this));
+        IERC20(token).safeTransfer(msg.sender, balance);
+    }
+
+    /**
+     * @dev Allows the contract to receive ETH.
+     */
+    receive() external payable {}
 }
