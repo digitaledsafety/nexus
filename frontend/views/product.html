@@ -94,7 +94,10 @@
                         <div class="flex items-end justify-between">
                             <div>
                                 <span id="highestOfferPrice" class="text-4xl font-black text-white">0.00 BRAG</span>
-                                <p id="highestOfferBuyer" class="text-[10px] text-slate-500 font-mono mt-1">by 0x...</p>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <p id="highestOfferBuyer" class="text-[10px] text-slate-500 font-mono">by 0x...</p>
+                                    <span id="highestOfferExpiry" class="text-[8px] font-black uppercase text-indigo-400/60"></span>
+                                </div>
                             </div>
                             <div class="text-[10px] font-bold text-slate-500 uppercase">Locked in escrow</div>
                         </div>
@@ -106,9 +109,22 @@
                     </div>
 
                     <div class="space-y-4">
-                        <div class="relative group">
-                            <input type="number" id="offerAmount" class="input-field w-full py-5 pl-20 rounded-2xl text-2xl font-black focus:ring-2 focus:ring-indigo-500/20" placeholder="0.00" step="0.01">
-                            <div class="absolute left-6 top-1/2 -translate-y-1/2 text-slate-500 font-black text-sm tracking-widest">BRAG</div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="relative group">
+                                <input type="number" id="offerAmount" class="input-field w-full py-5 pl-20 rounded-2xl text-2xl font-black focus:ring-2 focus:ring-indigo-500/20" placeholder="0.00" step="0.01">
+                                <div class="absolute left-6 top-1/2 -translate-y-1/2 text-slate-500 font-black text-sm tracking-widest">BRAG</div>
+                            </div>
+                            <div class="relative">
+                                <select id="offerExpiry" class="input-field w-full py-5 px-6 rounded-2xl text-sm font-black focus:ring-2 focus:ring-indigo-500/20 appearance-none bg-slate-900/50">
+                                    <option value="0">Never Expires</option>
+                                    <option value="1">1 Day</option>
+                                    <option value="7">7 Days</option>
+                                    <option value="30">30 Days</option>
+                                </select>
+                                <div class="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+                                    <i class="fas fa-chevron-down"></i>
+                                </div>
+                            </div>
                         </div>
                         <div class="grid grid-cols-5 gap-3">
                             <button id="btnMakeOffer" class="btn-primary col-span-4 py-5 rounded-2xl font-black uppercase tracking-[0.2em] text-xs shadow-xl">
