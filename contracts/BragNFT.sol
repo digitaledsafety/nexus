@@ -348,48 +348,69 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
 
     /**
      * @dev Detect if a media string is an audio/video data URI or has a common multimedia extension.
+     * Uses bitwise operations for gas efficiency.
      */
     function _isMultimedia(string memory _media) internal pure returns (bool) {
         bytes memory b = bytes(_media);
         uint256 len = b.length;
         if (len < 4) return false;
 
-        // Check for "data:audio/", "data:video/" or "data:image/gif" prefix
+        // Check for "data:" prefix (4 bytes)
         if (len >= 11) {
-            if (b[0] == 'd' && b[1] == 'a' && b[2] == 't' && b[3] == 'a' && b[4] == ':') {
-                if (b[5] == 'a' && b[6] == 'u' && b[7] == 'd' && b[8] == 'i' && b[9] == 'o' && b[10] == '/') return true;
-                if (b[5] == 'v' && b[6] == 'i' && b[7] == 'd' && b[8] == 'e' && b[9] == 'o' && b[10] == '/') return true;
-                if (len >= 14 && b[5] == 'i' && b[6] == 'm' && b[7] == 'a' && b[8] == 'g' && b[9] == 'e' && b[10] == '/' && b[11] == 'g' && b[12] == 'i' && b[13] == 'f') return true;
+            bytes4 prefix;
+            assembly { prefix := mload(add(b, 32)) }
+            if (prefix == 0x64617461) { // "data"
+                if (b[4] == ':') {
+                    // Check "audio/" (6 bytes)
+                    bytes4 sub1;
+                    bytes2 sub2;
+                    assembly {
+                        sub1 := mload(add(b, 37)) // b[5..8]
+                        sub2 := mload(add(b, 41)) // b[9..10]
+                    }
+                    if (sub1 == 0x61756469 && sub2 == 0x6f2f) return true; // "audio/"
+
+                    // Check "video/" (6 bytes)
+                    if (sub1 == 0x76696465 && sub2 == 0x6f2f) return true; // "video/"
+
+                    // Check "image/gif"
+                    if (len >= 14) {
+                        bytes4 slashGif;
+                        assembly { slashGif := mload(add(b, 42)) } // b[10..13]
+                        if (sub1 == 0x696d6167 && b[9] == 'e' && slashGif == 0x2f676966) return true;
+                    }
+                }
             }
         }
 
-        // Check for 3-letter extensions: .mp3, .wav, .ogg, .m4a, .aac, .mp4, .mov, .ogv, .m4v, .gif
+        // Check for extensions using bitwise OR to handle case-insensitivity for alpha chars
         if (b[len - 4] == '.') {
-            bytes1 b1 = _toLower(b[len - 3]);
-            bytes1 b2 = _toLower(b[len - 2]);
-            bytes1 b3 = _toLower(b[len - 1]);
-
-            if (b1 == 'm' && b2 == 'p' && b3 == '3') return true;
-            if (b1 == 'w' && b2 == 'a' && b3 == 'v') return true;
-            if (b1 == 'o' && b2 == 'g' && b3 == 'g') return true;
-            if (b1 == 'm' && b2 == '4' && b3 == 'a') return true;
-            if (b1 == 'a' && b2 == 'a' && b3 == 'c') return true;
-            if (b1 == 'm' && b2 == 'p' && b3 == '4') return true;
-            if (b1 == 'm' && b2 == 'o' && b3 == 'v') return true;
-            if (b1 == 'o' && b2 == 'g' && b3 == 'v') return true;
-            if (b1 == 'm' && b2 == '4' && b3 == 'v') return true;
-            if (b1 == 'g' && b2 == 'i' && b3 == 'f') return true;
+            bytes4 ext;
+            uint256 extOffset = len - 3;
+            assembly { ext := mload(add(b, add(32, extOffset))) }
+            // Mask to keep only the 3 bytes and handle case by ORing with 0x20
+            bytes4 masked = (ext | 0x20202000) & 0xffffff00;
+            if (masked == 0x6d703300) return true; // .mp3
+            if (masked == 0x77617600) return true; // .wav
+            if (masked == 0x6f676700) return true; // .ogg
+            if (masked == 0x6d346100) return true; // .m4a
+            if (masked == 0x61616300) return true; // .aac
+            if (masked == 0x6d703400) return true; // .mp4
+            if (masked == 0x6d6f7600) return true; // .mov
+            if (masked == 0x6f677600) return true; // .ogv
+            if (masked == 0x6d347600) return true; // .m4v
+            if (masked == 0x67696600) return true; // .gif
+            if (masked == 0x676c6200) return true; // .glb
         }
 
-        // Check for 4-letter extensions: .webm, .webp
         if (len >= 5 && b[len - 5] == '.') {
-            bytes1 b1 = _toLower(b[len - 4]);
-            bytes1 b2 = _toLower(b[len - 3]);
-            bytes1 b3 = _toLower(b[len - 2]);
-            bytes1 b4 = _toLower(b[len - 1]);
-
-            if (b1 == 'w' && b2 == 'e' && b3 == 'b' && b4 == 'm') return true;
-            if (b1 == 'w' && b2 == 'e' && b3 == 'b' && b4 == 'p') return true;
+            bytes4 ext;
+            uint256 extOffset = len - 4;
+            assembly { ext := mload(add(b, add(32, extOffset))) }
+            bytes4 masked = (ext | 0x20202020);
+            if (masked == 0x7765626d) return true; // .webm
+            if (masked == 0x77656270) return true; // .webp
+            if (masked == 0x676c7466) return true; // .gltf
         }
 
         return false;

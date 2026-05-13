@@ -187,6 +187,17 @@ async function loadProductData(contractAddr, tokenId) {
                     document.getElementById('offerExists').classList.remove('hidden');
                     document.getElementById('highestOfferPrice').textContent = `${ethers.utils.formatEther(highestOffer.price)} BRAG`;
                     document.getElementById('highestOfferBuyer').textContent = `by ${highestOffer.buyer.substring(0, 6)}...${highestOffer.buyer.substring(38)}`;
+
+                    const currentOffer = await marketplace.offers(contractAddr, tokenId, highestOffer.buyer);
+                    const expiry = currentOffer.expiry.toNumber();
+                    const expiryEl = document.getElementById('highestOfferExpiry');
+                    if (expiry > 0) {
+                        const isExpired = Date.now() / 1000 > expiry;
+                        expiryEl.textContent = isExpired ? ' (Expired)' : ` - Expires ${new Date(expiry * 1000).toLocaleDateString()}`;
+                        if (isExpired) expiryEl.classList.add('text-red-400');
+                    } else {
+                        expiryEl.textContent = ' - Never Expires';
+                    }
                 }
             } catch (err) {
                 console.warn("Failed to load offers", err);
@@ -293,6 +304,7 @@ function setupProductActions(contractAddr, tokenId, metadata) {
 
     document.getElementById('btnMakeOffer').onclick = async () => {
         const priceStr = document.getElementById('offerAmount').value;
+        const expiryDays = parseInt(document.getElementById('offerExpiry').value);
         if (!priceStr || parseFloat(priceStr) <= 0) return alert('Enter valid BRAG price');
 
         const marketplace = getContract('NFTMarketplace');
@@ -302,6 +314,7 @@ function setupProductActions(contractAddr, tokenId, metadata) {
         try {
             const price = ethers.utils.parseEther(priceStr);
             const amount = 1; // Default to 1 for now
+            const expiry = expiryDays > 0 ? Math.floor(Date.now() / 1000) + (expiryDays * 86400) : 0;
 
             // In gasless mode, the SCA is the one making the offer, so it needs the allowance.
             const owner = isGaslessMode ? scaAddress : userAddress;
@@ -314,8 +327,8 @@ function setupProductActions(contractAddr, tokenId, metadata) {
                 if (appTx.wait) await appTx.wait();
             }
 
-            // Use unified txHandler
-            const tx = await txHandler(marketplace, 'createOffer', [contractAddr, tokenId, amount, price]);
+            // Use unified txHandler with 5-parameter createOffer
+            const tx = await txHandler(marketplace, 'createOffer(address,uint256,uint256,uint256,uint256)', [contractAddr, tokenId, amount, price, expiry]);
             alert('Offer submitted!');
             await tx.wait();
             window.location.reload();
