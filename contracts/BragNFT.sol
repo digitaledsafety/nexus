@@ -182,16 +182,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         uint256 nftTokenId = nextTokenId++;
 
         // 1. Get USD Value from Chainlink
-        uint256 usdValue = 0;
-        if (address(priceFeed) != address(0)) {
-            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
-                if (answer > 0) {
-                    usdValue = (uint256(answer) * msg.value) / 1e18;
-                }
-            } catch {
-                emit PriceFeedFailed();
-            }
-        }
+        uint256 usdValue = _getUsdValue(msg.value);
 
         // 2. Create Permanent Record (Effect)
         taxRegistry[nftTokenId] = PermanentRecord({
@@ -231,16 +222,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     function topUp(uint256 tokenId) external payable nonReentrant {
         _requireOwned(tokenId);
 
-        uint256 usdValue = 0;
-        if (address(priceFeed) != address(0)) {
-            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
-                if (answer > 0) {
-                    usdValue = (uint256(answer) * msg.value) / 1e18;
-                }
-            } catch {
-                emit PriceFeedFailed();
-            }
-        }
+        uint256 usdValue = _getUsdValue(msg.value);
 
         require(usdValue >= 1e8, "Top-up requires $1.00 USD");
 
@@ -250,6 +232,21 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         require(success, "Transfer to treasury failed");
 
         emit TopUp(tokenId, msg.sender, msg.value);
+    }
+
+    /**
+     * @dev Helper to get USD value of an ETH amount from Chainlink.
+     */
+    function _getUsdValue(uint256 ethAmount) internal returns (uint256) {
+        if (address(priceFeed) == address(0)) return 0;
+        try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
+            if (answer > 0) {
+                return (uint256(answer) * ethAmount) / 1e18;
+            }
+        } catch {
+            emit PriceFeedFailed();
+        }
+        return 0;
     }
 
     /**
@@ -411,6 +408,8 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
 
         string memory filterDef = "";
         string memory textStyle = "fill: white; font-family: sans-serif; font-size: 20px; font-weight: bold;";
+        string memory rectColor = glowing ? "#4f46e5" : "#6366f1";
+        string memory border = glowing ? '<rect width="340" height="340" x="5" y="5" fill="none" stroke="white" stroke-width="4" rx="10"/>' : "";
 
         if (glowing) {
             filterDef = '<defs><filter id="glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="5" result="blur"/><feComposite in="SourceGraphic" in2="blur" operator="over"/></filter></defs>';
@@ -422,7 +421,8 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             '<svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet" viewBox="0 0 350 350">',
             filterDef,
             '<style>.base { ', textStyle, ' }</style>',
-            '<rect width="100%" height="100%" fill="#6366f1" />',
+            '<rect width="100%" height="100%" fill="', rectColor, '" />',
+            border,
             gStart,
             '<text x="50%" y="50%" class="base" dominant-baseline="middle" text-anchor="middle">',
             displayText,
