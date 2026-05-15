@@ -363,7 +363,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             }
         }
 
-        // Check for 3-letter extensions: .mp3, .wav, .ogg, .m4a, .aac, .mp4, .mov, .ogv, .m4v, .gif
+        // Check for 3-letter extensions: .mp3, .wav, .ogg, .m4a, .aac, .mp4, .mov, .ogv, .m4v, .gif, .glb
         if (b[len - 4] == '.') {
             bytes1 b1 = _toLower(b[len - 3]);
             bytes1 b2 = _toLower(b[len - 2]);
@@ -379,9 +379,10 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             if (b1 == 'o' && b2 == 'g' && b3 == 'v') return true;
             if (b1 == 'm' && b2 == '4' && b3 == 'v') return true;
             if (b1 == 'g' && b2 == 'i' && b3 == 'f') return true;
+            if (b1 == 'g' && b2 == 'l' && b3 == 'b') return true;
         }
 
-        // Check for 4-letter extensions: .webm, .webp
+        // Check for 4-letter extensions: .webm, .webp, .gltf
         if (len >= 5 && b[len - 5] == '.') {
             bytes1 b1 = _toLower(b[len - 4]);
             bytes1 b2 = _toLower(b[len - 3]);
@@ -390,6 +391,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
 
             if (b1 == 'w' && b2 == 'e' && b3 == 'b' && b4 == 'm') return true;
             if (b1 == 'w' && b2 == 'e' && b3 == 'b' && b4 == 'p') return true;
+            if (b1 == 'g' && b2 == 'l' && b3 == 't' && b4 == 'f') return true;
         }
 
         return false;
