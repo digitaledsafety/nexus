@@ -16,6 +16,10 @@ contract MockERC1155 is ERC1155, AccessControl {
         _mint(to, id, amount, "");
     }
 
+    function mintBatch(address to, uint256[] memory ids, uint256[] memory amounts, bytes memory data) external onlyRole(MINTER_ROLE) {
+        _mintBatch(to, ids, amounts, data);
+    }
+
     function supportsInterface(bytes4 interfaceId) public view virtual override(ERC1155, AccessControl) returns (bool) {
         return super.supportsInterface(interfaceId);
     }
