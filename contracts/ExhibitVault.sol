@@ -58,14 +58,17 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard {
         actualOwner = (from == address(0)) ? operator : from;
         duration = 0;
 
+        bool verifiedOperator = registry.isVerified(operator);
+        bool verifiedFrom = from != address(0) && registry.isVerified(from);
+
         if (data.length == 32) {
-            if (registry.isVerified(from)) {
+            if (verifiedFrom || verifiedOperator) {
                 actualOwner = abi.decode(data, (address));
             } else {
                 duration = abi.decode(data, (uint256));
             }
         } else if (data.length == 64) {
-            if (registry.isVerified(from)) {
+            if (verifiedFrom || verifiedOperator) {
                 (actualOwner, duration) = abi.decode(data, (address, uint256));
             } else {
                 duration = abi.decode(data, (uint256));
