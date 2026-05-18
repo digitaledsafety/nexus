@@ -228,4 +228,41 @@ describe("BragNFT Dual-State Model", async function () {
         /Max supply reached/
     );
   });
+
+  it("Should correctly detect multimedia with query params and fragments", async function () {
+    const { bragNFT, donor } = await deployContracts();
+
+    const multimediaURIs = [
+        "https://example.com/audio.mp3?v=1",
+        "https://example.com/video.mp4#t=10",
+        "https://example.com/movie.webm?auth=abc#chapter1"
+    ];
+
+    for (const uri of multimediaURIs) {
+        await bragNFT.write.donate(["Multimedia test", uri], {
+            account: donor.account,
+            value: parseEther("0.1")
+        });
+        const tokenId = await bragNFT.read.totalSupply() - 1n;
+        const metadataBase64 = await bragNFT.read.tokenURI([tokenId]);
+        const metadata = JSON.parse(Buffer.from(metadataBase64.split(",")[1], "base64").toString());
+        assert.equal(metadata.animation_url, uri, `Should detect animation_url for ${uri}`);
+    }
+
+    const nonMultimediaURIs = [
+        "https://example.com/image.png?v=1",
+        "https://example.com/doc.pdf#page=1"
+    ];
+
+    for (const uri of nonMultimediaURIs) {
+        await bragNFT.write.donate(["Non-multimedia test", uri], {
+            account: donor.account,
+            value: parseEther("0.1")
+        });
+        const tokenId = await bragNFT.read.totalSupply() - 1n;
+        const metadataBase64 = await bragNFT.read.tokenURI([tokenId]);
+        const metadata = JSON.parse(Buffer.from(metadataBase64.split(",")[1], "base64").toString());
+        assert.ok(!metadata.animation_url, `Should NOT detect animation_url for ${uri}`);
+    }
+  });
 });
