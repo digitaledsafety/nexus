@@ -104,6 +104,12 @@ async function main() {
             apiKey: alchemyApiKey,
             gasManagerConfig: {
                 policyId: gasPolicyId,
+            },
+            opts: {
+                feeOptions: {
+                    maxFeePerGas: { multiplier: 1.5 },
+                    maxPriorityFeePerGas: { multiplier: 1.5 }
+                }
             }
         } : {
             rpcUrl
@@ -112,6 +118,32 @@ async function main() {
 
     const scaAddress = smartAccountClient.account.address;
     console.log(`Smart Contract Account Address: ${scaAddress}`);
+
+    /**
+     * Robust UserOperation waiter with retries and exponential backoff.
+     * Mitigates FailedToFindTransactionError and bundler latency on Sepolia.
+     */
+    async function waitForUserOp(uoHash: Hex) {
+        console.log(`Waiting for UserOp: ${uoHash}...`);
+        let retries = 0;
+        const maxRetries = 20;
+        const baseInterval = 5000;
+
+        while (retries < maxRetries) {
+            try {
+                const txHash = await smartAccountClient.waitForUserOperationTransaction({ hash: uoHash });
+                console.log(`UserOp mined! Tx Hash: ${txHash}`);
+                return txHash;
+            } catch (e: any) {
+                retries++;
+                const delay = baseInterval + (Math.pow(2, retries) * 100);
+                console.warn(`Retry ${retries}/${maxRetries} for ${uoHash}. Waiting ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                if (retries === maxRetries) throw e;
+            }
+        }
+        throw new Error(`UserOp ${uoHash} timed out after ${maxRetries} retries`);
+    }
 
     async function deploy(name: string, args: any[]) {
         console.log(`Deploying ${name}...`);
@@ -129,7 +161,8 @@ async function main() {
                 const uoResponse = await smartAccountClient.sendUserOperation({
                     uo: { target: factoryAddress, data }
                 });
-                const txHash = await smartAccountClient.waitForUserOperationTransaction(uoResponse);
+
+                const txHash = await waitForUserOp(uoResponse.hash);
                 await publicClient.waitForTransactionReceipt({ hash: txHash });
 
                 const deployedAddress = getContractAddress({
@@ -293,7 +326,7 @@ async function main() {
         }))
     });
     
-    const batchTxHash = await smartAccountClient.waitForUserOperationTransaction(uoResponse);
+    const batchTxHash = await waitForUserOp(uoResponse.hash);
     await publicClient.waitForTransactionReceipt({ hash: batchTxHash });
     console.log("Batch setup complete!");
 
