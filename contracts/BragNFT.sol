@@ -173,6 +173,22 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     }
 
     /**
+     * @dev Get USD value from Chainlink price feed.
+     */
+    function _getUsdValue(uint256 ethAmount) internal returns (uint256) {
+        if (address(priceFeed) != address(0)) {
+            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
+                if (answer > 0) {
+                    return (uint256(answer) * ethAmount) / 1e18;
+                }
+            } catch {
+                emit PriceFeedFailed();
+            }
+        }
+        return 0;
+    }
+
+    /**
      * @dev Internal donation logic. Records a permanent tax record and mints the NFT.
      */
     function _donate(address recipient, string memory message, string memory media, bool onChain) internal {
@@ -182,16 +198,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         uint256 nftTokenId = nextTokenId++;
 
         // 1. Get USD Value from Chainlink
-        uint256 usdValue = 0;
-        if (address(priceFeed) != address(0)) {
-            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
-                if (answer > 0) {
-                    usdValue = (uint256(answer) * msg.value) / 1e18;
-                }
-            } catch {
-                emit PriceFeedFailed();
-            }
-        }
+        uint256 usdValue = _getUsdValue(msg.value);
 
         // 2. Create Permanent Record (Effect)
         taxRegistry[nftTokenId] = PermanentRecord({
@@ -231,16 +238,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     function topUp(uint256 tokenId) external payable nonReentrant {
         _requireOwned(tokenId);
 
-        uint256 usdValue = 0;
-        if (address(priceFeed) != address(0)) {
-            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
-                if (answer > 0) {
-                    usdValue = (uint256(answer) * msg.value) / 1e18;
-                }
-            } catch {
-                emit PriceFeedFailed();
-            }
-        }
+        uint256 usdValue = _getUsdValue(msg.value);
 
         require(usdValue >= 1e8, "Top-up requires $1.00 USD");
 
@@ -348,6 +346,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
 
     /**
      * @dev Detect if a media string is an audio/video data URI or has a common multimedia extension.
+     * Correctly handles URLs with query parameters or fragments.
      */
     function _isMultimedia(string memory _media) internal pure returns (bool) {
         bytes memory b = bytes(_media);
@@ -363,11 +362,22 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             }
         }
 
+        // Isolate the base part before any '?' or '#'
+        uint256 baseLen = len;
+        for (uint256 i = 0; i < len; i++) {
+            if (b[i] == '?' || b[i] == '#') {
+                baseLen = i;
+                break;
+            }
+        }
+
+        if (baseLen < 4) return false;
+
         // Check for 3-letter extensions: .mp3, .wav, .ogg, .m4a, .aac, .mp4, .mov, .ogv, .m4v, .gif
-        if (b[len - 4] == '.') {
-            bytes1 b1 = _toLower(b[len - 3]);
-            bytes1 b2 = _toLower(b[len - 2]);
-            bytes1 b3 = _toLower(b[len - 1]);
+        if (baseLen >= 4 && b[baseLen - 4] == '.') {
+            bytes1 b1 = _toLower(b[baseLen - 3]);
+            bytes1 b2 = _toLower(b[baseLen - 2]);
+            bytes1 b3 = _toLower(b[baseLen - 1]);
 
             if (b1 == 'm' && b2 == 'p' && b3 == '3') return true;
             if (b1 == 'w' && b2 == 'a' && b3 == 'v') return true;
@@ -382,11 +392,11 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         }
 
         // Check for 4-letter extensions: .webm, .webp
-        if (len >= 5 && b[len - 5] == '.') {
-            bytes1 b1 = _toLower(b[len - 4]);
-            bytes1 b2 = _toLower(b[len - 3]);
-            bytes1 b3 = _toLower(b[len - 2]);
-            bytes1 b4 = _toLower(b[len - 1]);
+        if (baseLen >= 5 && b[baseLen - 5] == '.') {
+            bytes1 b1 = _toLower(b[baseLen - 4]);
+            bytes1 b2 = _toLower(b[baseLen - 3]);
+            bytes1 b3 = _toLower(b[baseLen - 2]);
+            bytes1 b4 = _toLower(b[baseLen - 1]);
 
             if (b1 == 'w' && b2 == 'e' && b3 == 'b' && b4 == 'm') return true;
             if (b1 == 'w' && b2 == 'e' && b3 == 'b' && b4 == 'p') return true;
