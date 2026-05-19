@@ -128,6 +128,11 @@ function setupManagerListeners() {
     const btnAI = document.getElementById('btnGenerateAI');
     if (btnAI) {
         btnAI.onclick = async () => {
+            const mintTokenURI = document.getElementById('mintTokenURI');
+            const mintOnChain = document.getElementById('mintOnChain');
+            const preview = document.getElementById('aiPreview');
+            const previewImg = document.getElementById('aiPreviewImg');
+
             try {
                 btnAI.disabled = true;
                 const originalHtml = btnAI.innerHTML;
@@ -142,13 +147,11 @@ function setupManagerListeners() {
                 if (!response.ok) throw new Error('AI Generation failed');
                 const data = await response.json();
 
-                document.getElementById('mintTokenURI').value = data.image;
-                document.getElementById('mintOnChain').checked = true;
+                if (mintTokenURI) mintTokenURI.value = data.image;
+                if (mintOnChain) mintOnChain.checked = true;
 
-                const preview = document.getElementById('aiPreview');
-                const previewImg = document.getElementById('aiPreviewImg');
-                previewImg.src = data.image;
-                preview.classList.remove('hidden');
+                if (previewImg) previewImg.src = data.image;
+                if (preview) preview.classList.remove('hidden');
 
                 log(`AI Image generated!`, 'success');
             } catch (error) {
@@ -163,11 +166,19 @@ function setupManagerListeners() {
     const btnMint = document.getElementById('btnMint');
     if (btnMint) {
         btnMint.onclick = async () => {
-            const addr = document.getElementById('addrBragNFT').value;
-            const amount = document.getElementById('mintAmount').value;
-            const message = document.getElementById('mintMessage').value;
-            const tokenURI = document.getElementById('mintTokenURI').value;
-            const onChain = document.getElementById('mintOnChain').checked;
+            const addrEl = document.getElementById('addrBragNFT');
+            const amountEl = document.getElementById('mintAmount');
+            const messageEl = document.getElementById('mintMessage');
+            const tokenURIEl = document.getElementById('mintTokenURI');
+            const onChainEl = document.getElementById('mintOnChain');
+
+            if (!addrEl || !amountEl) return log('Required fields missing', 'error');
+
+            const addr = addrEl.value;
+            const amount = amountEl.value;
+            const message = messageEl ? messageEl.value : "";
+            const tokenURI = tokenURIEl ? tokenURIEl.value : "";
+            const onChain = onChainEl ? onChainEl.checked : false;
 
             try {
                 const contract = getAdminContract('BragNFT', addr);
