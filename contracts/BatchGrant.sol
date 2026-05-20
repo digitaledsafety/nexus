@@ -29,7 +29,7 @@ contract BatchGrant is AccessControl {
      */
     function distribute(IERC20 token, address[] calldata recipients, uint256[] calldata amounts) external {
         require(recipients.length == amounts.length, "Mismatched arrays");
-        for (uint256 i = 0; i < recipients.length; i++) {
+        for (uint256 i = 0; i < recipients.length; i = _uncheckedInc(i)) {
             token.safeTransferFrom(msg.sender, recipients[i], amounts[i]);
         }
     }
@@ -42,13 +42,13 @@ contract BatchGrant is AccessControl {
     function distributeETH(address[] calldata recipients, uint256[] calldata amounts) external payable {
         require(recipients.length == amounts.length, "Mismatched arrays");
         uint256 total = 0;
-        for (uint256 i = 0; i < recipients.length; i++) {
+        for (uint256 i = 0; i < recipients.length; i = _uncheckedInc(i)) {
             total += amounts[i];
         }
         // Explicitly check that msg.value matches total to avoid draining contract balance
         require(msg.value == total, "Incorrect ETH amount sent");
 
-        for (uint256 i = 0; i < recipients.length; i++) {
+        for (uint256 i = 0; i < recipients.length; i = _uncheckedInc(i)) {
             (bool success, ) = recipients[i].call{value: amounts[i]}("");
             require(success, "ETH transfer failed");
         }
@@ -60,7 +60,7 @@ contract BatchGrant is AccessControl {
      */
     function distributeFromBalance(IERC20 token, address[] calldata recipients, uint256[] calldata amounts) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(recipients.length == amounts.length, "Mismatched arrays");
-        for (uint256 i = 0; i < recipients.length; i++) {
+        for (uint256 i = 0; i < recipients.length; i = _uncheckedInc(i)) {
             token.safeTransfer(recipients[i], amounts[i]);
         }
     }
@@ -71,9 +71,15 @@ contract BatchGrant is AccessControl {
      */
     function distributeETHFromBalance(address[] calldata recipients, uint256[] calldata amounts) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(recipients.length == amounts.length, "Mismatched arrays");
-        for (uint256 i = 0; i < recipients.length; i++) {
+        for (uint256 i = 0; i < recipients.length; i = _uncheckedInc(i)) {
             (bool success, ) = recipients[i].call{value: amounts[i]}("");
             require(success, "ETH transfer failed");
+        }
+    }
+
+    function _uncheckedInc(uint256 i) internal pure returns (uint256) {
+        unchecked {
+            return i + 1;
         }
     }
 }

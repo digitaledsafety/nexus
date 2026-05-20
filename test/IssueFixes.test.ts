@@ -21,7 +21,7 @@ describe("Issue Fixes", async function () {
         await bragToken.write.grantRole([MINTER_ROLE, bragNFT.address]);
 
         const registry = await viem.deployContract("ExhibitRegistry", [owner.account.address]);
-        const vault = await viem.deployContract("ExhibitVault", [registry.address]);
+        const vault = await viem.deployContract("ExhibitVault", [owner.account.address, registry.address]);
 
         return {
             owner,
