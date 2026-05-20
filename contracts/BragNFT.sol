@@ -173,6 +173,22 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     }
 
     /**
+     * @dev Internal helper to get the USD value of an ETH amount using Chainlink.
+     * Recorded in 8 decimals.
+     */
+    function _getUsdValue(uint256 ethAmount) internal returns (uint256) {
+        if (address(priceFeed) == address(0)) return 0;
+        try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
+            if (answer > 0) {
+                return (uint256(answer) * ethAmount) / 1e18;
+            }
+        } catch {
+            emit PriceFeedFailed();
+        }
+        return 0;
+    }
+
+    /**
      * @dev Internal donation logic. Records a permanent tax record and mints the NFT.
      */
     function _donate(address recipient, string memory message, string memory media, bool onChain) internal {
@@ -182,16 +198,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         uint256 nftTokenId = nextTokenId++;
 
         // 1. Get USD Value from Chainlink
-        uint256 usdValue = 0;
-        if (address(priceFeed) != address(0)) {
-            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
-                if (answer > 0) {
-                    usdValue = (uint256(answer) * msg.value) / 1e18;
-                }
-            } catch {
-                emit PriceFeedFailed();
-            }
-        }
+        uint256 usdValue = _getUsdValue(msg.value);
 
         // 2. Create Permanent Record (Effect)
         taxRegistry[nftTokenId] = PermanentRecord({
@@ -231,16 +238,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     function topUp(uint256 tokenId) external payable nonReentrant {
         _requireOwned(tokenId);
 
-        uint256 usdValue = 0;
-        if (address(priceFeed) != address(0)) {
-            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
-                if (answer > 0) {
-                    usdValue = (uint256(answer) * msg.value) / 1e18;
-                }
-            } catch {
-                emit PriceFeedFailed();
-            }
-        }
+        uint256 usdValue = _getUsdValue(msg.value);
 
         require(usdValue >= 1e8, "Top-up requires $1.00 USD");
 
