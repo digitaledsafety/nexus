@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { network } from "hardhat";
+import { getAddress } from "viem";
 
 describe("BatchGrant", function () {
   async function setup() {
@@ -68,7 +69,7 @@ describe("BatchGrant", function () {
         // Approve the BatchGrant contract to spend the owner's BragToken
         await bragToken.write.approve([batchGrant.address, 1000n], { account: owner.account });
 
-        // Distribute the BragToken
+        // Distribute the split
         const recipients = [recipient1Address, recipient2Address];
         const amounts = [150n, 250n];
         await batchGrant.write.distribute([bragToken.address, recipients, amounts], {
@@ -213,6 +214,40 @@ describe("BatchGrant", function () {
 
       assert.equal(await publicClient.getBalance({ address: recipient1.account.address }), balance1Before + 100n);
       assert.equal(await publicClient.getBalance({ address: recipient2.account.address }), balance2Before + 200n);
+    });
+  });
+
+  describe("distributeETHNonAtomic", function () {
+    it("should distribute ETH and emit event on failure", async function () {
+      const { viem, owner, recipient1, batchGrant } = await setup();
+      const publicClient = await viem.getPublicClient();
+
+      const recipient1Address = recipient1.account.address;
+      const revertingContract = await viem.deployContract("RevertingRecipient");
+      const revertingAddress = revertingContract.address;
+
+      const balance1Before = await publicClient.getBalance({ address: recipient1Address });
+
+      const amounts = [100n, 200n];
+      const total = 300n;
+
+      await batchGrant.write.distributeETHNonAtomic([[recipient1Address, revertingAddress], amounts], {
+        account: owner.account,
+        value: total,
+      });
+
+      const balance1After = await publicClient.getBalance({ address: recipient1Address });
+      assert.equal(balance1After, balance1Before + 100n);
+
+      const logs = await publicClient.getContractEvents({
+        address: batchGrant.address,
+        abi: batchGrant.abi,
+        eventName: "DistributionFailed",
+      });
+
+      assert.equal(logs.length, 1);
+      assert.equal(getAddress(logs[0].args.recipient as string), getAddress(revertingAddress));
+      assert.equal(logs[0].args.amount, 200n);
     });
   });
 });
