@@ -1,0 +1,7 @@
+{
+  "format_version": "1.16.100",
+  "minecraft:texture_set": {
+    "color": "textures/entity/wolf/wolf_collar_baby",
+    "metalness_emissive_roughness": "textures/entity/wolf/wolf_collar_baby_mers"
+  }
+}

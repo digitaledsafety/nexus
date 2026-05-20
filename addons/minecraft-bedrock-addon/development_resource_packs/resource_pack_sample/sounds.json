@@ -11,7 +11,7 @@
           "milk": "mob.cow.milk",
           "step": "mob.cow.step"
         },
-        "variant": "query.property('minecraft:sound_variant') == 0 ? 'default' : 'default'"
+        "variant": "(query.property('minecraft:sound_variant') ?? 0) == 0 ? 'default' : 'default'"
       }
     }
   }

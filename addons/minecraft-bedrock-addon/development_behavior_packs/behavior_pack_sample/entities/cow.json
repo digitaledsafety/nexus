@@ -213,6 +213,12 @@
                 "is_pushable": true,
                 "is_pushable_by_piston": true
             },
+            "minecraft:actor_properties": {
+                "properties": [
+                    "minecraft:climate_variant",
+                    "minecraft:sound_variant"
+                ]
+            },
             "minecraft:conditional_bandwidth_optimization": {},
             "minecraft:behavior.nearest_attackable_target": {
                 "priority": 2,
