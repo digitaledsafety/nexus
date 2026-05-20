@@ -9,7 +9,7 @@ contract MaliciousBuyer is IERC721Receiver {
     NFTMarketplace public marketplace;
     address public nftContract;
 
-    constructor(address _marketplace, address _nftContract) {
+    constructor(address payable _marketplace, address _nftContract) {
         marketplace = NFTMarketplace(_marketplace);
         nftContract = _nftContract;
     }
