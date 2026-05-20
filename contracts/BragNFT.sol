@@ -409,7 +409,8 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
      */
     function _generateSVG(uint256 tokenId, string memory message) internal view returns (string memory) {
         bool glowing = isGlowing(tokenId);
-        string memory displayText = bytes(message).length > 0 ? _escapeSVG(message) : string(abi.encodePacked("BragNFT #", tokenId.toString()));
+        string memory truncatedMessage = _substring(message, 32);
+        string memory displayText = bytes(truncatedMessage).length > 0 ? _escapeSVG(truncatedMessage) : string(abi.encodePacked("BragNFT #", tokenId.toString()));
 
         string memory filterDef = "";
         string memory textStyle = "fill: white; font-family: sans-serif; font-size: 20px; font-weight: bold;";
@@ -440,7 +441,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         uint256 length = inputBytes.length;
         uint256 extraLength = 0;
 
-        for (uint256 i = 0; i < length; i++) {
+        for (uint256 i = 0; i < length; i = _uncheckedInc(i)) {
             if (inputBytes[i] == '&') extraLength += 4; // &amp;
             else if (inputBytes[i] == '<') extraLength += 3; // &lt;
             else if (inputBytes[i] == '>') extraLength += 3; // &gt;
@@ -452,7 +453,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
 
         bytes memory outputBytes = new bytes(length + extraLength);
         uint256 j = 0;
-        for (uint256 i = 0; i < length; i++) {
+        for (uint256 i = 0; i < length; i = _uncheckedInc(i)) {
             bytes1 b = inputBytes[i];
             if (b == '&') {
                 outputBytes[j++] = '&'; outputBytes[j++] = 'a'; outputBytes[j++] = 'm'; outputBytes[j++] = 'p'; outputBytes[j++] = ';';
@@ -472,6 +473,27 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     }
 
     /**
+     * @dev Safely truncate a string to a given length without splitting UTF-8 characters.
+     */
+    function _substring(string memory str, uint256 length) internal pure returns (string memory) {
+        bytes memory strBytes = bytes(str);
+        if (strBytes.length <= length) {
+            return str;
+        }
+
+        uint256 actualLength = length;
+        while (actualLength > 0 && (uint8(strBytes[actualLength]) & 0xC0) == 0x80) {
+            actualLength--;
+        }
+
+        bytes memory result = new bytes(actualLength);
+        for (uint256 i = 0; i < actualLength; i = _uncheckedInc(i)) {
+            result[i] = strBytes[i];
+        }
+        return string(result);
+    }
+
+    /**
      * @dev Escape double quotes, backslashes and control characters for JSON compatibility.
      */
     function _escapeJSON(string memory input) internal pure returns (string memory) {
@@ -479,7 +501,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         uint256 length = inputBytes.length;
         uint256 extraLength = 0;
 
-        for (uint256 i = 0; i < length; i++) {
+        for (uint256 i = 0; i < length; i = _uncheckedInc(i)) {
             if (inputBytes[i] == '"' || inputBytes[i] == '\\') {
                 extraLength++;
             } else if (uint8(inputBytes[i]) < 0x20) {
@@ -491,7 +513,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
 
         bytes memory outputBytes = new bytes(length + extraLength);
         uint256 j = 0;
-        for (uint256 i = 0; i < length; i++) {
+        for (uint256 i = 0; i < length; i = _uncheckedInc(i)) {
             uint8 b = uint8(inputBytes[i]);
             if (b == 0x22 || b == 0x5C) { // " or \
                 outputBytes[j++] = '\\';
@@ -509,5 +531,11 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             }
         }
         return string(outputBytes);
+    }
+
+    function _uncheckedInc(uint256 i) internal pure returns (uint256) {
+        unchecked {
+            return i + 1;
+        }
     }
 }

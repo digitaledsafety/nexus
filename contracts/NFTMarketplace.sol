@@ -243,15 +243,20 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
      */
     function cancelOffers(address[] calldata nftContracts, uint256[] calldata tokenIds) external nonReentrant {
         require(nftContracts.length == tokenIds.length, "Mismatched arrays");
-        for (uint256 i = 0; i < nftContracts.length; i++) {
+        uint256 totalRefund = 0;
+        for (uint256 i = 0; i < nftContracts.length; i = unchecked_inc(i)) {
             address nftContract = nftContracts[i];
             uint256 tokenId = tokenIds[i];
             Offer memory offer = offers[nftContract][tokenId][msg.sender];
             if (offer.price > 0) {
+                totalRefund += offer.price;
                 delete offers[nftContract][tokenId][msg.sender];
-                paymentToken.safeTransfer(msg.sender, offer.price);
                 emit OfferCanceled(nftContract, tokenId, msg.sender);
             }
+        }
+
+        if (totalRefund > 0) {
+            paymentToken.safeTransfer(msg.sender, totalRefund);
         }
     }
 
@@ -298,5 +303,11 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
     function setMinOfferPrice(uint256 _minPrice) external onlyRole(DEFAULT_ADMIN_ROLE) {
         minOfferPrice = _minPrice;
         emit MinOfferPriceUpdated(_minPrice);
+    }
+
+    function unchecked_inc(uint256 i) internal pure returns (uint256) {
+        unchecked {
+            return i + 1;
+        }
     }
 }
