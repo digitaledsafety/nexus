@@ -31,7 +31,7 @@ describe("Contract Hardening Tests", async function () {
     const batchGrant = await viem.deployContract("BatchGrant", [owner.account.address]);
 
     // MockERC1155
-    const mock1155 = await viem.deployContract("MockERC1155");
+    const mock1155 = await viem.deployContract("MockERC1155", []);
 
     return { marketplace, bragNFT, bragToken, treasury, batchGrant, mock1155, owner, seller, buyer, other };
   }
@@ -151,7 +151,7 @@ describe("Contract Hardening Tests", async function () {
       const { batchGrant, owner, other } = await setup();
 
       // Deploy a contract that reverts on receive
-      const reverter = await viem.deployContract("Reverter");
+      const reverter = await viem.deployContract("Reverter", []);
 
       const recipients = [other.account.address, reverter.address];
       const amounts = [parseEther("1"), parseEther("1")];
@@ -168,7 +168,7 @@ describe("Contract Hardening Tests", async function () {
       const { marketplace, bragNFT, bragToken, owner, seller, buyer } = await setup();
 
       // Attacker/Seller mints a RevertingRoyaltyNFT
-      const reverter = await viem.deployContract("Reverter");
+      const reverter = await viem.deployContract("Reverter", []);
       const revNFT = await viem.deployContract("RevertingRoyaltyNFT", [reverter.address]);
       const tokenId = 0n;
 

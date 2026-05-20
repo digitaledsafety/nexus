@@ -20,12 +20,12 @@ describe("Batch Operations", async function () {
 
 
     const registry = await viem.deployContract("ExhibitRegistry", [owner.account.address]);
-    const vault1 = await viem.deployContract("ExhibitVault", [registry.address]);
-    const vault2 = await viem.deployContract("ExhibitVault", [registry.address]);
+    const vault1 = await viem.deployContract("ExhibitVault", [owner.account.address, registry.address]);
+    const vault2 = await viem.deployContract("ExhibitVault", [owner.account.address, registry.address]);
     await registry.write.verifyVault([vault1.address, 0, "Vault 1", "D1"]);
     await registry.write.verifyVault([vault2.address, 0, "Vault 2", "D2"]);
 
-    const mock1155 = await viem.deployContract("MockERC1155");
+    const mock1155 = await viem.deployContract("MockERC1155", []);
 
     return { marketplace, bragNFT, bragToken, registry, vault1, vault2, mock1155, owner, seller, buyer, treasury };
   }

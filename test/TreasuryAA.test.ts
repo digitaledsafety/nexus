@@ -30,8 +30,8 @@ describe("Treasury Multi-sig Smart Wallet", async function () {
     owner3 = wallets[2];
     nonOwner = wallets[3];
 
-    entryPoint = await viem.deployContract("MockEntryPoint");
-    factory = await viem.deployContract("TreasuryFactory");
+    entryPoint = await viem.deployContract("MockEntryPoint", []);
+    factory = await viem.deployContract("TreasuryFactory", []);
   });
 
   describe("Deployment", async () => {

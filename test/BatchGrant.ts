@@ -7,7 +7,7 @@ describe("BatchGrant", function () {
     const { viem } = await network.connect();
     const [owner, recipient1, recipient2] = await viem.getWalletClients();
 
-    const mockUsdc = await viem.deployContract("MockUSDC");
+    const mockUsdc = await viem.deployContract("MockUSDC", []);
     const bragToken = await viem.deployContract("BragToken", [
       owner.account.address,
       0n,
