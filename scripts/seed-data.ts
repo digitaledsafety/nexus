@@ -177,9 +177,13 @@ async function main() {
     // 1. Initial Donations
     console.log("Seeding donations...");
     const donations = [
-        { message: "Art Deco Masterpiece", uri: "https://picsum.photos/id/10/800/800" },
-        { message: "On-Chain SVG Native", uri: "" },
-        { message: "Multimedia Impact (Video)", uri: "https://www.w3schools.com/html/mov_bbb.mp4" }
+        { message: "Art Deco Masterpiece", uri: "https://picsum.photos/id/10/800/800", onChain: false },
+        { message: "On-Chain SVG Native", uri: "", onChain: false },
+        { message: "Multimedia Impact (Video)", uri: "https://www.w3schools.com/html/mov_bbb.mp4", onChain: false },
+        { message: "Echoes of Charity (Audio)", uri: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", onChain: false },
+        { message: "Dimensional Giving (3D)", uri: "https://modelviewer.dev/shared-assets/models/Astronaut.glb", onChain: true },
+        { message: "Dynamic Impact (GIF)", uri: "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==", onChain: true },
+        { message: "Crystal Clear Support (WebP)", uri: "https://www.gstatic.com/webp/gallery/1.webp", onChain: false }
     ];
 
     let lastTokenId = 0n;
@@ -190,7 +194,7 @@ async function main() {
             data: encodeFunctionData({
                 abi: bragNFTArtifact.abi,
                 functionName: 'donate',
-                args: [d.message, d.uri]
+                args: [d.message, d.uri, d.onChain]
             }),
             value: donationAmount
         }]);
