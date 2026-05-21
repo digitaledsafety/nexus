@@ -107,8 +107,8 @@ async function main() {
             },
             opts: {
                 feeOptions: {
-                    maxFeePerGas: { multiplier: 2.0 },
-                    maxPriorityFeePerGas: { multiplier: 2.0 }
+                    maxFeePerGas: { multiplier: 3.0 },
+                    maxPriorityFeePerGas: { multiplier: 3.0 }
                 }
             }
         } : {
