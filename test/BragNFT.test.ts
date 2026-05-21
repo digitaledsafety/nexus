@@ -132,6 +132,17 @@ describe("BragNFT Dual-State Model", async function () {
       assert.ok(svg.includes('filter="url(#glow)"'), "SVG should include glow filter");
   });
 
+  it("Should handle multimedia URLs with query params/fragments", async function () {
+    const { bragNFT, donor } = await deployContracts();
+
+    const videoUrl = "https://example.com/video.mp4?v=1#t=10";
+    await bragNFT.write.donate(["Video test", videoUrl], { account: donor.account, value: parseEther("0.1") });
+
+    const uri = await bragNFT.read.tokenURI([0n]);
+    const json = JSON.parse(Buffer.from(uri.split(",")[1], "base64").toString());
+    assert.equal(json.animation_url, videoUrl);
+  });
+
   it("Should allow BragNFT to be exhibited", async function () {
     const { bragNFT, vault, donor } = await deployContracts();
 

@@ -214,5 +214,37 @@ describe("BatchGrant", function () {
       assert.equal(await publicClient.getBalance({ address: recipient1.account.address }), balance1Before + 100n);
       assert.equal(await publicClient.getBalance({ address: recipient2.account.address }), balance2Before + 200n);
     });
+
+    it("should distribute ETH non-atomically and emit event on failure", async function () {
+      const { viem, owner, recipient1, batchGrant } = await setup();
+      const publicClient = await viem.getPublicClient();
+
+      const revertingRecipient = await viem.deployContract("RevertingRecipient");
+      const recipient1Address = recipient1.account.address;
+
+      // Send ETH to contract
+      await owner.sendTransaction({
+        to: batchGrant.address,
+        value: 300n,
+      });
+
+      const balance1Before = await publicClient.getBalance({ address: recipient1Address });
+
+      const recipients = [recipient1Address, revertingRecipient.address];
+      const amounts = [100n, 200n];
+
+      const tx = await batchGrant.write.distributeETHNonAtomic([recipients, amounts], {
+        account: owner.account,
+      });
+
+      const receipt = await publicClient.getTransactionReceipt({ hash: tx });
+
+      // Check for DistributionFailed event
+      // We search manually or use viem's decodeEventLog if we have the ABI
+      const logs = receipt.logs;
+      assert.ok(logs.length > 0);
+
+      assert.equal(await publicClient.getBalance({ address: recipient1Address }), balance1Before + 100n);
+    });
   });
 });

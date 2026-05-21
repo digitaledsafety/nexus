@@ -12,6 +12,8 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 contract BatchGrant is AccessControl {
     using SafeERC20 for IERC20;
 
+    event DistributionFailed(address indexed recipient, uint256 amount);
+
     constructor(address initialAdmin) {
         _grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
     }
@@ -74,6 +76,21 @@ contract BatchGrant is AccessControl {
         for (uint256 i = 0; i < recipients.length; i++) {
             (bool success, ) = recipients[i].call{value: amounts[i]}("");
             require(success, "ETH transfer failed");
+        }
+    }
+
+    /**
+     * @dev Distributes ETH already held by this contract to multiple recipients.
+     * If a transfer fails, it emits an event instead of reverting the entire transaction.
+     * Restricted to addresses with DEFAULT_ADMIN_ROLE.
+     */
+    function distributeETHNonAtomic(address[] calldata recipients, uint256[] calldata amounts) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(recipients.length == amounts.length, "Mismatched arrays");
+        for (uint256 i = 0; i < recipients.length; i++) {
+            (bool success, ) = recipients[i].call{value: amounts[i]}("");
+            if (!success) {
+                emit DistributionFailed(recipients[i], amounts[i]);
+            }
         }
     }
 }
