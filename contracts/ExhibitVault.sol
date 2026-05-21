@@ -207,6 +207,26 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard {
     }
 
     /**
+     * @dev Withdraw multiple ERC1155 tokens from the same contract back to the owner's wallet.
+     */
+    function withdrawBatch1155(address nftContract, uint256[] calldata ids, uint256[] calldata amounts) external nonReentrant {
+        require(ids.length == amounts.length, "Mismatched arrays");
+        for (uint256 i = 0; i < ids.length; i++) {
+            uint256 id = ids[i];
+            uint256 amount = amounts[i];
+            require(balances1155[nftContract][id][msg.sender] >= amount, "Insufficient balance");
+            require(block.timestamp >= expiry1155[nftContract][id][msg.sender], "Exhibition not yet expired");
+
+            balances1155[nftContract][id][msg.sender] -= amount;
+            if (balances1155[nftContract][id][msg.sender] == 0) {
+                expiry1155[nftContract][id][msg.sender] = 0;
+            }
+            emit Withdrawn1155(nftContract, id, msg.sender, amount);
+        }
+        IERC1155(nftContract).safeBatchTransferFrom(address(this), msg.sender, ids, amounts, "");
+    }
+
+    /**
      * @dev Move an ERC721 token directly to another verified vault.
      */
     function move721(address nftContract, uint256 tokenId, address destinationVault) external nonReentrant {
@@ -288,6 +308,44 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard {
         IERC1155(nftContract).safeTransferFrom(address(this), destinationVault, tokenId, amount, data);
 
         emit Moved1155(nftContract, tokenId, msg.sender, amount, destinationVault);
+    }
+
+    /**
+     * @dev Move multiple ERC1155 tokens from the same contract directly to another verified vault.
+     */
+    function moveBatch1155(address nftContract, uint256[] calldata ids, uint256[] calldata amounts, address destinationVault) external nonReentrant {
+        _moveBatch1155(nftContract, ids, amounts, destinationVault, 0);
+    }
+
+    function moveBatch1155WithDuration(address nftContract, uint256[] calldata ids, uint256[] calldata amounts, address destinationVault, uint256 duration) public nonReentrant {
+        _moveBatch1155(nftContract, ids, amounts, destinationVault, duration);
+    }
+
+    function _moveBatch1155(address nftContract, uint256[] calldata ids, uint256[] calldata amounts, address destinationVault, uint256 duration) internal {
+        require(ids.length == amounts.length, "Mismatched arrays");
+        require(registry.isVerified(destinationVault), "Destination not verified");
+
+        for (uint256 i = 0; i < ids.length; i++) {
+            uint256 id = ids[i];
+            uint256 amount = amounts[i];
+            require(balances1155[nftContract][id][msg.sender] >= amount, "Insufficient balance");
+            require(block.timestamp >= expiry1155[nftContract][id][msg.sender], "Exhibition not yet expired");
+
+            balances1155[nftContract][id][msg.sender] -= amount;
+            if (balances1155[nftContract][id][msg.sender] == 0) {
+                expiry1155[nftContract][id][msg.sender] = 0;
+            }
+            emit Moved1155(nftContract, id, msg.sender, amount, destinationVault);
+        }
+
+        bytes memory data;
+        if (duration > 0) {
+            data = abi.encode(msg.sender, duration);
+        } else {
+            data = abi.encode(msg.sender);
+        }
+
+        IERC1155(nftContract).safeBatchTransferFrom(address(this), destinationVault, ids, amounts, data);
     }
 
 }
