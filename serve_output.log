@@ -1,0 +1,33 @@
+ INFO  Accepting connections at http://localhost:3000
+ HTTP  5/21/2026 3:35:03 PM ::1 GET /
+ HTTP  5/21/2026 3:35:03 PM ::1 Returned 200 in 52 ms
+ HTTP  5/21/2026 3:35:03 PM ::1 GET /style.css
+ HTTP  5/21/2026 3:35:03 PM ::1 Returned 200 in 9 ms
+ HTTP  5/21/2026 3:35:03 PM ::1 GET /config.js
+ HTTP  5/21/2026 3:35:03 PM ::1 Returned 200 in 16 ms
+ HTTP  5/21/2026 3:35:03 PM ::1 GET /contracts.js
+ HTTP  5/21/2026 3:35:03 PM ::1 Returned 200 in 18 ms
+ HTTP  5/21/2026 3:35:04 PM ::1 GET /core.js
+ HTTP  5/21/2026 3:35:04 PM ::1 GET /router.js
+ HTTP  5/21/2026 3:35:04 PM ::1 Returned 200 in 3 ms
+ HTTP  5/21/2026 3:35:04 PM ::1 Returned 200 in 5 ms
+ HTTP  5/21/2026 3:35:04 PM ::1 GET /home.js
+ HTTP  5/21/2026 3:35:04 PM ::1 GET /marketplace.js
+ HTTP  5/21/2026 3:35:04 PM ::1 Returned 200 in 2 ms
+ HTTP  5/21/2026 3:35:04 PM ::1 Returned 200 in 5 ms
+ HTTP  5/21/2026 3:35:04 PM ::1 GET /app.js
+ HTTP  5/21/2026 3:35:04 PM ::1 GET /env-control.js
+ HTTP  5/21/2026 3:35:04 PM ::1 Returned 200 in 3 ms
+ HTTP  5/21/2026 3:35:04 PM ::1 Returned 200 in 4 ms
+ HTTP  5/21/2026 3:35:04 PM ::1 GET /product.js
+ HTTP  5/21/2026 3:35:04 PM ::1 Returned 200 in 1 ms
+ HTTP  5/21/2026 3:35:04 PM ::1 GET /login.js
+ HTTP  5/21/2026 3:35:04 PM ::1 Returned 200 in 4 ms
+ HTTP  5/21/2026 3:35:05 PM ::1 GET /views/marketplace.html
+ HTTP  5/21/2026 3:35:05 PM ::1 Returned 301 in 1 ms
+ HTTP  5/21/2026 3:35:05 PM ::1 GET /views/marketplace
+ HTTP  5/21/2026 3:35:05 PM ::1 Returned 200 in 10 ms
+ HTTP  5/21/2026 3:35:10 PM ::1 GET /views/product.html
+ HTTP  5/21/2026 3:35:10 PM ::1 Returned 301 in 0 ms
+ HTTP  5/21/2026 3:35:10 PM ::1 GET /views/product
+ HTTP  5/21/2026 3:35:10 PM ::1 Returned 200 in 2 ms
