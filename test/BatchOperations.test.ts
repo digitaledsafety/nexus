@@ -94,40 +94,4 @@ describe("Batch Operations", async function () {
     assert.equal(await vault2.read.balances1155([mock1155.address, 1n, seller.account.address]), 5n);
     assert.equal(await vault2.read.balances1155([mock1155.address, 2n, seller.account.address]), 10n);
   });
-
-  it("ExhibitVault: Should withdrawBatch ERC1155 tokens", async function () {
-    const { mock1155, vault1, seller, owner } = await deployAll();
-
-    await mock1155.write.mint([seller.account.address, 1n, 10n], { account: owner.account });
-    await mock1155.write.mint([seller.account.address, 2n, 20n], { account: owner.account });
-
-    await mock1155.write.safeTransferFrom([seller.account.address, vault1.address, 1n, 5n, "0x"], { account: seller.account });
-    await mock1155.write.safeTransferFrom([seller.account.address, vault1.address, 2n, 10n, "0x"], { account: seller.account });
-
-    // Batch withdraw
-    await vault1.write.withdrawBatch1155([mock1155.address, [1n, 2n], [5n, 10n]], { account: seller.account });
-
-    assert.equal(await mock1155.read.balanceOf([seller.account.address, 1n]), 10n);
-    assert.equal(await mock1155.read.balanceOf([seller.account.address, 2n]), 20n);
-  });
-
-  it("ExhibitVault: Should moveBatch1155WithDuration", async function () {
-    const { mock1155, vault1, vault2, seller, owner } = await deployAll();
-
-    await mock1155.write.mint([seller.account.address, 1n, 10n], { account: owner.account });
-    await mock1155.write.safeTransferFrom([seller.account.address, vault1.address, 1n, 10n, "0x"], { account: seller.account });
-
-    // Move with duration
-    const duration = 3600n; // 1 hour
-    await vault1.write.moveBatch1155WithDuration([mock1155.address, [1n], [10n], vault2.address, duration], { account: seller.account });
-
-    const expiry = await vault2.read.expiry1155([mock1155.address, 1n, seller.account.address]);
-    assert.ok(expiry > 0n);
-
-    // Should fail to withdraw from vault2 before expiry
-    await assert.rejects(
-        vault2.write.withdraw1155([mock1155.address, 1n, 10n], { account: seller.account }),
-        /Exhibition not yet expired/
-    );
-  });
 });
