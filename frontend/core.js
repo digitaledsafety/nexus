@@ -463,6 +463,131 @@ function initCart() {
 
     const cartBtn = document.getElementById('cartBtn');
     if (cartBtn) cartBtn.onclick = () => document.getElementById('cartSidebar')?.classList.remove('translate-x-full');
+
+    const checkoutBtn = document.getElementById('btnCheckout');
+    if (checkoutBtn) checkoutBtn.onclick = showCheckoutModal;
+
+    const closeCheckout = document.getElementById('closeCheckout');
+    if (closeCheckout) closeCheckout.onclick = () => document.getElementById('checkoutModal')?.classList.add('hidden');
+
+    const submitBatch = document.getElementById('btnSubmitBatchOffers');
+    if (submitBatch) submitBatch.onclick = processBatchOffers;
+}
+
+function showCheckoutModal() {
+    if (cart.length === 0) return alert("Your cart is empty!");
+    if (!userAddress) return connectWallet();
+
+    const modal = document.getElementById('checkoutModal');
+    const list = document.getElementById('checkoutList');
+    if (!modal || !list) return;
+
+    // Close cart sidebar
+    document.getElementById('cartSidebar')?.classList.add('translate-x-full');
+
+    list.innerHTML = '';
+    cart.forEach((item, idx) => {
+        const div = document.createElement('div');
+        div.className = 'flex flex-col sm:flex-row sm:items-center gap-6 bg-white/5 p-6 rounded-3xl border border-white/5';
+        div.innerHTML = `
+            <div class="h-20 w-20 rounded-2xl overflow-hidden flex-shrink-0 bg-slate-800 shadow-xl">
+                <img src="${item.image}" class="w-full h-full object-cover" onerror="this.src='https://via.placeholder.com/150'">
+            </div>
+            <div class="flex-grow min-w-0">
+                <h4 class="font-black text-lg truncate">${item.name || 'Brag NFT'}</h4>
+                <p class="text-[10px] text-slate-500 font-black uppercase tracking-widest mt-1">ID: ${item.id}</p>
+            </div>
+            <div class="flex flex-col gap-2 min-w-[140px]">
+                <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest ml-1">Offer Price (BRAG)</label>
+                <input type="number" step="0.1" value="1.0" class="offer-price-input bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-indigo-400 focus:border-indigo-500 outline-none transition-colors" data-idx="${idx}">
+            </div>
+        `;
+        list.appendChild(div);
+    });
+
+    updateCheckoutTotal();
+
+    // Add input listeners for total calculation
+    list.querySelectorAll('.offer-price-input').forEach(input => {
+        input.oninput = updateCheckoutTotal;
+    });
+
+    modal.classList.remove('hidden');
+}
+
+function updateCheckoutTotal() {
+    const inputs = document.querySelectorAll('.offer-price-input');
+    let total = 0;
+    inputs.forEach(input => {
+        total += parseFloat(input.value) || 0;
+    });
+    const totalDisp = document.getElementById('checkoutTotal');
+    if (totalDisp) totalDisp.textContent = total.toFixed(2);
+}
+
+async function processBatchOffers() {
+    const submitBtn = document.getElementById('btnSubmitBatchOffers');
+    const originalText = submitBtn.innerText;
+
+    try {
+        const inputs = document.querySelectorAll('.offer-price-input');
+        const prices = [];
+        const nftContracts = [];
+        const tokenIds = [];
+        const amounts = [];
+        let totalRequired = ethers.BigNumber.from(0);
+
+        inputs.forEach(input => {
+            const idx = parseInt(input.dataset.idx);
+            const item = cart[idx];
+            const price = ethers.utils.parseEther(input.value || "0");
+
+            if (price.gt(0)) {
+                prices.push(price);
+                nftContracts.push(item.address);
+                tokenIds.push(item.id);
+                amounts.push(1); // Standardizing on 1 for now
+                totalRequired = totalRequired.add(price);
+            }
+        });
+
+        if (prices.length === 0) return alert("Please enter valid prices for your offers.");
+
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Processing...';
+
+        const marketplace = getContract('NFTMarketplace');
+        const bragToken = getContract('BragToken');
+        if (!marketplace || !bragToken) throw new Error("Contracts not configured.");
+
+        const owner = isGaslessMode ? scaAddress : userAddress;
+
+        // 1. Check Allowance
+        const allowance = await bragToken.allowance(owner, marketplace.address);
+        if (allowance.lt(totalRequired)) {
+            alert(`Approval required for ${ethers.utils.formatEther(totalRequired)} BRAG tokens.`);
+            const appTx = await txHandler(bragToken, 'approve', [marketplace.address, totalRequired], 'Approval successful');
+            if (!appTx) return;
+            if (appTx.wait) await appTx.wait();
+        }
+
+        // 2. Submit Batch Offer
+        const tx = await txHandler(marketplace, 'batchCreateOffers', [nftContracts, tokenIds, amounts, prices], 'Batch offers submitted!');
+        if (tx) {
+            alert('Batch offers successfully submitted!');
+            cart = [];
+            saveCart();
+            document.getElementById('checkoutModal')?.classList.add('hidden');
+            window.location.reload();
+        }
+
+    } catch (e) {
+        console.error(e);
+        alert(`Failed to submit batch offers: ${e.message}`);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerText = originalText;
+    }
 }
 
 function addToCart(item) {

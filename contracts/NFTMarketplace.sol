@@ -79,6 +79,20 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
         _createOffer(nftContract, tokenId, amount, price, expiry);
     }
 
+    /**
+     * @notice Batch create multiple offers
+     * @param nftContracts Array of NFT contract addresses
+     * @param tokenIds Array of token IDs
+     * @param amounts Array of amounts
+     * @param prices Array of prices
+     */
+    function batchCreateOffers(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256[] calldata amounts, uint256[] calldata prices) external nonReentrant {
+        require(nftContracts.length == tokenIds.length && tokenIds.length == amounts.length && amounts.length == prices.length, "Mismatched arrays");
+        for (uint256 i = 0; i < nftContracts.length; i++) {
+            _createOffer(nftContracts[i], tokenIds[i], amounts[i], prices[i], 0);
+        }
+    }
+
     function _createOffer(address nftContract, uint256 tokenId, uint256 amount, uint256 price, uint256 expiry) internal {
         require(price >= minOfferPrice, "Offer price below minimum");
         require(price > 0, "Offer price must be greater than 0");
@@ -291,6 +305,23 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
      * @notice Buy an NFT from a listing
      */
     function buyFromListing(address nftContract, uint256 tokenId, address seller) external nonReentrant {
+        _buyFromListing(nftContract, tokenId, seller);
+    }
+
+    /**
+     * @notice Batch buy multiple NFTs from listings
+     * @param nftContracts Array of NFT contract addresses
+     * @param tokenIds Array of token IDs
+     * @param sellers Array of seller addresses
+     */
+    function batchBuyFromListings(address[] calldata nftContracts, uint256[] calldata tokenIds, address[] calldata sellers) external nonReentrant {
+        require(nftContracts.length == tokenIds.length && tokenIds.length == sellers.length, "Mismatched arrays");
+        for (uint256 i = 0; i < nftContracts.length; i++) {
+            _buyFromListing(nftContracts[i], tokenIds[i], sellers[i]);
+        }
+    }
+
+    function _buyFromListing(address nftContract, uint256 tokenId, address seller) internal {
         Listing memory listing = listings[nftContract][tokenId][seller];
         require(listing.price > 0, "Listing does not exist");
 
@@ -300,8 +331,10 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
         // Transfer NFT from seller to buyer
         if (IERC165(nftContract).supportsInterface(type(IERC721).interfaceId)) {
             IERC721(nftContract).safeTransferFrom(seller, msg.sender, tokenId);
-        } else {
+        } else if (IERC165(nftContract).supportsInterface(type(IERC1155).interfaceId)) {
             IERC1155(nftContract).safeTransferFrom(seller, msg.sender, tokenId, listing.amount, "");
+        } else {
+            revert("Unsupported NFT type");
         }
 
         // CEI: Clear listing
