@@ -173,21 +173,6 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     }
 
     /**
-     * @dev Internal helper to get USD value from Chainlink.
-     */
-    function _getUsdValue(uint256 ethAmount) internal returns (uint256) {
-        if (address(priceFeed) == address(0)) return 0;
-        try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
-            if (answer > 0) {
-                return (uint256(answer) * ethAmount) / 1e18;
-            }
-        } catch {
-            emit PriceFeedFailed();
-        }
-        return 0;
-    }
-
-    /**
      * @dev Internal donation logic. Records a permanent tax record and mints the NFT.
      */
     function _donate(address recipient, string memory message, string memory media, bool onChain) internal {
@@ -197,7 +182,16 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         uint256 nftTokenId = nextTokenId++;
 
         // 1. Get USD Value from Chainlink
-        uint256 usdValue = _getUsdValue(msg.value);
+        uint256 usdValue = 0;
+        if (address(priceFeed) != address(0)) {
+            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
+                if (answer > 0) {
+                    usdValue = (uint256(answer) * msg.value) / 1e18;
+                }
+            } catch {
+                emit PriceFeedFailed();
+            }
+        }
 
         // 2. Create Permanent Record (Effect)
         taxRegistry[nftTokenId] = PermanentRecord({
@@ -237,7 +231,16 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     function topUp(uint256 tokenId) external payable nonReentrant {
         _requireOwned(tokenId);
 
-        uint256 usdValue = _getUsdValue(msg.value);
+        uint256 usdValue = 0;
+        if (address(priceFeed) != address(0)) {
+            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
+                if (answer > 0) {
+                    usdValue = (uint256(answer) * msg.value) / 1e18;
+                }
+            } catch {
+                emit PriceFeedFailed();
+            }
+        }
 
         require(usdValue >= 1e8, "Top-up requires $1.00 USD");
 
@@ -345,36 +348,26 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
 
     /**
      * @dev Detect if a media string is an audio/video data URI or has a common multimedia extension.
-     * Robust enough to handle query parameters or fragments in the URL.
      */
     function _isMultimedia(string memory _media) internal pure returns (bool) {
         bytes memory b = bytes(_media);
         uint256 len = b.length;
         if (len < 4) return false;
 
-        // 1. Check for "data:" prefix (Data URIs)
-        if (len >= 11 && b[0] == 'd' && b[1] == 'a' && b[2] == 't' && b[3] == 'a' && b[4] == ':') {
-            if (b[5] == 'a' && b[6] == 'u' && b[7] == 'd' && b[8] == 'i' && b[9] == 'o' && b[10] == '/') return true;
-            if (b[5] == 'v' && b[6] == 'i' && b[7] == 'd' && b[8] == 'e' && b[9] == 'o' && b[10] == '/') return true;
-            if (len >= 14 && b[5] == 'i' && b[6] == 'm' && b[7] == 'a' && b[8] == 'g' && b[9] == 'e' && b[10] == '/' && b[11] == 'g' && b[12] == 'i' && b[13] == 'f') return true;
-        }
-
-        // 2. Find the end of the base filename (before '?' or '#')
-        uint256 end = len;
-        for (uint256 i = 0; i < len; i++) {
-            if (b[i] == '?' || b[i] == '#') {
-                end = i;
-                break;
+        // Check for "data:audio/", "data:video/" or "data:image/gif" prefix
+        if (len >= 11) {
+            if (b[0] == 'd' && b[1] == 'a' && b[2] == 't' && b[3] == 'a' && b[4] == ':') {
+                if (b[5] == 'a' && b[6] == 'u' && b[7] == 'd' && b[8] == 'i' && b[9] == 'o' && b[10] == '/') return true;
+                if (b[5] == 'v' && b[6] == 'i' && b[7] == 'd' && b[8] == 'e' && b[9] == 'o' && b[10] == '/') return true;
+                if (len >= 14 && b[5] == 'i' && b[6] == 'm' && b[7] == 'a' && b[8] == 'g' && b[9] == 'e' && b[10] == '/' && b[11] == 'g' && b[12] == 'i' && b[13] == 'f') return true;
             }
         }
 
-        if (end < 4) return false;
-
-        // 3. Check for 3-letter extensions: .mp3, .wav, .ogg, .m4a, .aac, .mp4, .mov, .ogv, .m4v, .gif, .glb
-        if (b[end - 4] == '.') {
-            bytes1 b1 = _toLower(b[end - 3]);
-            bytes1 b2 = _toLower(b[end - 2]);
-            bytes1 b3 = _toLower(b[end - 1]);
+        // Check for 3-letter extensions: .mp3, .wav, .ogg, .m4a, .aac, .mp4, .mov, .ogv, .m4v, .gif, .glb
+        if (b[len - 4] == '.') {
+            bytes1 b1 = _toLower(b[len - 3]);
+            bytes1 b2 = _toLower(b[len - 2]);
+            bytes1 b3 = _toLower(b[len - 1]);
 
             if (b1 == 'm' && b2 == 'p' && b3 == '3') return true;
             if (b1 == 'w' && b2 == 'a' && b3 == 'v') return true;
@@ -389,12 +382,12 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             if (b1 == 'g' && b2 == 'l' && b3 == 'b') return true;
         }
 
-        // 4. Check for 4-letter extensions: .webm, .webp, .gltf
-        if (end >= 5 && b[end - 5] == '.') {
-            bytes1 b1 = _toLower(b[end - 4]);
-            bytes1 b2 = _toLower(b[end - 3]);
-            bytes1 b3 = _toLower(b[end - 2]);
-            bytes1 b4 = _toLower(b[end - 1]);
+        // Check for 4-letter extensions: .webm, .webp, .gltf
+        if (len >= 5 && b[len - 5] == '.') {
+            bytes1 b1 = _toLower(b[len - 4]);
+            bytes1 b2 = _toLower(b[len - 3]);
+            bytes1 b3 = _toLower(b[len - 2]);
+            bytes1 b4 = _toLower(b[len - 1]);
 
             if (b1 == 'w' && b2 == 'e' && b3 == 'b' && b4 == 'm') return true;
             if (b1 == 'w' && b2 == 'e' && b3 == 'b' && b4 == 'p') return true;
