@@ -26,10 +26,14 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271 {
     // Nonce -> Signer (to attribute actions across validation and execution)
     mapping(uint256 => address) private _signerByNonce;
 
+    struct Call {
+        address target;
+        uint256 value;
+        bytes data;
+    }
+
     struct Proposal {
-        address[] targets;
-        uint256[] values;
-        bytes[] datas;
+        Call[] calls;
         bool executed;
         bool canceled;
         address proposer;
@@ -43,7 +47,7 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271 {
     event OwnerAdded(address indexed owner);
     event OwnerRemoved(address indexed owner);
     event ThresholdChanged(uint256 threshold);
-    event Proposed(uint256 indexed proposalId, address indexed proposer, address[] targets, uint256[] values, bytes[] datas);
+    event Proposed(uint256 indexed proposalId, address indexed proposer, Call[] calls);
     event Approved(uint256 indexed proposalId, address indexed owner);
     event Executed(uint256 indexed proposalId);
     event Canceled(uint256 indexed proposalId);
@@ -137,19 +141,29 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271 {
      * @dev Propose a batch of transactions. The proposer auto-approves it.
      */
     function propose(address[] calldata targets, uint256[] calldata values, bytes[] calldata datas, uint256 nonce) external onlyOwner(nonce) returns (uint256) {
-        require(targets.length > 0, "Empty proposal");
-        require(targets.length == values.length && values.length == datas.length, "Mismatched arrays");
+        Call[] memory calls = new Call[](targets.length);
+        for (uint256 i = 0; i < targets.length; i++) {
+            calls[i] = Call({target: targets[i], value: values[i], data: datas[i]});
+        }
+        return proposeBatch(calls, nonce);
+    }
+
+    /**
+     * @dev Propose a batch of transactions using Call struct array.
+     */
+    function proposeBatch(Call[] memory calls, uint256 nonce) public onlyOwner(nonce) returns (uint256) {
+        require(calls.length > 0, "Empty proposal");
 
         address proposer = _getMsgSender(nonce);
         uint256 proposalId = proposalCount++;
 
         Proposal storage p = proposals[proposalId];
-        p.targets = targets;
-        p.values = values;
-        p.datas = datas;
+        for (uint256 i = 0; i < calls.length; i++) {
+            p.calls.push(calls[i]);
+        }
         p.proposer = proposer;
 
-        emit Proposed(proposalId, proposer, targets, values, datas);
+        emit Proposed(proposalId, proposer, calls);
 
         p.approved[proposer] = true;
         p.approvalCount = 1;
@@ -189,8 +203,8 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271 {
 
         p.executed = true;
 
-        for (uint256 i = 0; i < p.targets.length; i++) {
-            (bool success, ) = p.targets[i].call{value: p.values[i]}(p.datas[i]);
+        for (uint256 i = 0; i < p.calls.length; i++) {
+            (bool success, ) = p.calls[i].target.call{value: p.calls[i].value}(p.calls[i].data);
             if (!success) revert ExecutionFailed();
         }
 
@@ -198,7 +212,7 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271 {
     }
 
     /**
-     * @dev View function to get proposal data (since Solidity skips struct arrays in mapping getters).
+     * @dev View function to get proposal data (including individual arrays for backward compatibility).
      */
     function getProposal(uint256 proposalId) external view returns (
         address[] memory targets,
@@ -211,7 +225,24 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271 {
     ) {
         if (proposalId >= proposalCount) revert ProposalNotFound();
         Proposal storage p = proposals[proposalId];
-        return (p.targets, p.values, p.datas, p.executed, p.canceled, p.proposer, p.approvalCount);
+        uint256 len = p.calls.length;
+        targets = new address[](len);
+        values = new uint256[](len);
+        datas = new bytes[](len);
+        for (uint256 i = 0; i < len; i++) {
+            targets[i] = p.calls[i].target;
+            values[i] = p.calls[i].value;
+            datas[i] = p.calls[i].data;
+        }
+        return (targets, values, datas, p.executed, p.canceled, p.proposer, p.approvalCount);
+    }
+
+    /**
+     * @dev Get calls for a proposal.
+     */
+    function getProposalCalls(uint256 proposalId) external view returns (Call[] memory) {
+        if (proposalId >= proposalCount) revert ProposalNotFound();
+        return proposals[proposalId].calls;
     }
 
     /**
@@ -249,6 +280,30 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271 {
 
         (bool success, ) = target.call{value: value}(data);
         if (!success) revert ExecutionFailed();
+
+        // Clean up signer data if called by EntryPoint
+        if (msg.sender == address(entryPoint())) {
+            delete _signerByNonce[nonce];
+        }
+    }
+
+    /**
+     * @dev Batch direct execution.
+     */
+    function executeBatch(address[] calldata targets, uint256[] calldata values, bytes[] calldata datas, uint256 nonce) external {
+        if (msg.sender == address(entryPoint())) {
+            if (threshold != 1) revert InvalidThreshold();
+        } else if (msg.sender != address(this)) {
+            _checkOwner(msg.sender);
+            if (threshold != 1) revert InvalidThreshold();
+        }
+
+        require(targets.length == values.length && values.length == datas.length, "Mismatched arrays");
+
+        for (uint256 i = 0; i < targets.length; i++) {
+            (bool success, ) = targets[i].call{value: values[i]}(datas[i]);
+            if (!success) revert ExecutionFailed();
+        }
 
         // Clean up signer data if called by EntryPoint
         if (msg.sender == address(entryPoint())) {
