@@ -111,6 +111,7 @@ async function renderNFTCard(contract, tokenId, collectionName = "Impact NFT") {
         const isAudio = animUrl.includes('audio') || animUrl.match(/\.(mp3|wav|ogg|m4a|aac)$/i);
         const isVideo = animUrl.includes('video') || animUrl.match(/\.(mp4|mov|ogv|webm|m4v)$/i);
         const isGif = animUrl.includes('image/gif') || animUrl.match(/\.gif$/i);
+        const is3d = animUrl.match(/\.(glb|gltf)$/i);
 
         const isExternal = CONTRACT_DATA.externalCollections?.some(c => c.address.toLowerCase() === contract.address.toLowerCase());
 
@@ -120,7 +121,9 @@ async function renderNFTCard(contract, tokenId, collectionName = "Impact NFT") {
                     ? `<div class="text-center"><i class="fas fa-music text-4xl text-indigo-500 mb-2"></i></div>`
                     : (isVideo
                         ? `<div class="text-center"><i class="fas fa-video text-4xl text-indigo-500 mb-2"></i></div>`
-                        : `<img src="${isGif ? animUrl : metadata.image}" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" onerror="this.src='https://via.placeholder.com/400?text=NFT'">`)
+                        : (is3d
+                            ? `<div class="text-center"><i class="fas fa-cube text-4xl text-indigo-500 mb-2"></i></div>`
+                            : `<img src="${isGif ? animUrl : metadata.image}" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" onerror="this.src='https://via.placeholder.com/400?text=NFT'">`))
                 }
                 <div class="absolute top-4 right-4 flex flex-col items-end gap-2">
                     <span class="px-3 py-1 rounded-full bg-slate-950/80 backdrop-blur-md text-[10px] font-black text-white/50 border border-white/5">#${tokenId.length > 10 ? tokenId.substring(0, 4) + '...' + tokenId.substring(tokenId.length - 4) : tokenId}</span>

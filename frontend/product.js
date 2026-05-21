@@ -136,25 +136,26 @@ async function loadProductData(contractAddr, tokenId) {
         const isAudio = animUrl.includes('audio') || animUrl.match(/\.(mp3|wav|ogg|m4a|aac)$/i);
         const isVideo = animUrl.includes('video') || animUrl.match(/\.(mp4|mov|ogv|webm|m4v)$/i);
         const isGif = animUrl.includes('image/gif') || animUrl.match(/\.gif$/i);
+        const is3d = animUrl.match(/\.(glb|gltf)$/i);
+
+        // Reset players
+        ['nftImage', 'audioPlayer', 'videoPlayer', 'threeDPlayer'].forEach(id => {
+            document.getElementById(id)?.classList.add('hidden');
+        });
 
         if (isAudio) {
-            document.getElementById('nftImage').classList.add('hidden');
-            document.getElementById('videoPlayer').classList.add('hidden');
             document.getElementById('audioPlayer').classList.remove('hidden');
             document.getElementById('nftAudio').src = animUrl;
         } else if (isVideo) {
-            document.getElementById('nftImage').classList.add('hidden');
-            document.getElementById('audioPlayer').classList.add('hidden');
             document.getElementById('videoPlayer').classList.remove('hidden');
             document.getElementById('nftVideo').src = animUrl;
+        } else if (is3d) {
+            document.getElementById('threeDPlayer').classList.remove('hidden');
+            document.getElementById('nft3d').src = animUrl;
         } else if (isGif) {
-            document.getElementById('audioPlayer').classList.add('hidden');
-            document.getElementById('videoPlayer').classList.add('hidden');
             document.getElementById('nftImage').classList.remove('hidden');
             document.getElementById('nftImage').src = animUrl;
         } else {
-            document.getElementById('audioPlayer').classList.add('hidden');
-            document.getElementById('videoPlayer').classList.add('hidden');
             document.getElementById('nftImage').classList.remove('hidden');
             document.getElementById('nftImage').src = metadata.image;
         }
