@@ -122,4 +122,32 @@ describe("NFTMarketplace Fixed-Price Listings", async function () {
     // 5. Verify balance
     assert.equal(await mock1155.read.balanceOf([buyer.account.address, tokenId]), amount);
   });
+
+  it("ExhibitVault: Should batch withdraw and move ERC1155 tokens", async function () {
+    const registry = await viem.deployContract("ExhibitRegistry", [owner.account.address]);
+    const vault1 = await viem.deployContract("ExhibitVault", [registry.address]);
+    const vault2 = await viem.deployContract("ExhibitVault", [registry.address]);
+    const mock1155 = await viem.deployContract("MockERC1155");
+
+    await registry.write.verifyVault([vault1.address, 0, "Vault 1", ""]);
+    await registry.write.verifyVault([vault2.address, 0, "Vault 2", ""]);
+
+    const ids = [1n, 2n];
+    const amounts = [100n, 200n];
+
+    await mock1155.write.mint([owner.account.address, ids[0], amounts[0]]);
+    await mock1155.write.mint([owner.account.address, ids[1], amounts[1]]);
+    await mock1155.write.setApprovalForAll([vault1.address, true]);
+
+    // Deposit to vault1
+    await mock1155.write.safeBatchTransferFrom([owner.account.address, vault1.address, ids, amounts, "0x"]);
+
+    // Move to vault2
+    await vault1.write.moveBatch1155([mock1155.address, ids, amounts, vault2.address]);
+    assert.equal(await mock1155.read.balanceOf([vault2.address, ids[0]]), amounts[0]);
+
+    // Withdraw from vault2
+    await vault2.write.withdrawBatch1155([mock1155.address, ids, amounts]);
+    assert.equal(await mock1155.read.balanceOf([owner.account.address, ids[0]]), amounts[0]);
+  });
 });
