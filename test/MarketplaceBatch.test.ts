@@ -52,6 +52,9 @@ describe("Marketplace Batch Operations", async function () {
     await bragNFT.write.donate(["nft1", ""], { account: seller.account, value: parseEther("0.1") });
     await bragNFT.write.donate(["nft2", ""], { account: seller.account, value: parseEther("0.1") });
 
+    // Seller must approve marketplace to transfer NFTs
+    await bragNFT.write.setApprovalForAll([marketplace.address, true], { account: seller.account });
+
     // Seller creates 2 listings
     await marketplace.write.createListing([bragNFT.address, 0n, 1n, parseEther("1")], { account: seller.account });
     await marketplace.write.createListing([bragNFT.address, 1n, 1n, parseEther("2")], { account: seller.account });
@@ -59,9 +62,6 @@ describe("Marketplace Batch Operations", async function () {
     // Buyer gets tokens and approves marketplace
     await bragToken.write.transfer([buyer.account.address, parseEther("10")], { account: owner.account });
     await bragToken.write.approve([marketplace.address, parseEther("10")], { account: buyer.account });
-
-    // Seller must approve marketplace to transfer NFTs
-    await bragNFT.write.setApprovalForAll([marketplace.address, true], { account: seller.account });
 
     // Batch buy
     const nftContracts = [bragNFT.address, bragNFT.address];

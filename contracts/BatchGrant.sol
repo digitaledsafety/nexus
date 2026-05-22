@@ -12,6 +12,8 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 contract BatchGrant is AccessControl {
     using SafeERC20 for IERC20;
 
+    event DistributionFailed(address indexed recipient, uint256 amount);
+
     constructor(address initialAdmin) {
         _grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
     }
@@ -74,6 +76,48 @@ contract BatchGrant is AccessControl {
         for (uint256 i = 0; i < recipients.length; i++) {
             (bool success, ) = recipients[i].call{value: amounts[i]}("");
             require(success, "ETH transfer failed");
+        }
+    }
+
+    /**
+     * @dev Distributes native ETH to multiple recipients without reverting the entire batch on failure.
+     * @param recipients Array of recipient addresses.
+     * @param amounts Array of amounts to transfer to each recipient.
+     */
+    function distributeETHNonAtomic(address[] calldata recipients, uint256[] calldata amounts) external payable {
+        require(recipients.length == amounts.length, "Mismatched arrays");
+        uint256 total = 0;
+        for (uint256 i = 0; i < recipients.length; i++) {
+            total += amounts[i];
+        }
+        require(msg.value == total, "Incorrect ETH amount sent");
+
+        uint256 refundAmount = 0;
+        for (uint256 i = 0; i < recipients.length; i++) {
+            (bool success, ) = recipients[i].call{value: amounts[i]}("");
+            if (!success) {
+                emit DistributionFailed(recipients[i], amounts[i]);
+                refundAmount += amounts[i];
+            }
+        }
+
+        if (refundAmount > 0) {
+            (bool refundSuccess, ) = msg.sender.call{value: refundAmount}("");
+            require(refundSuccess, "Refund failed");
+        }
+    }
+
+    /**
+     * @dev Distributes ETH already held by this contract to multiple recipients without reverting on failure.
+     * Restricted to addresses with DEFAULT_ADMIN_ROLE.
+     */
+    function distributeETHFromBalanceNonAtomic(address[] calldata recipients, uint256[] calldata amounts) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(recipients.length == amounts.length, "Mismatched arrays");
+        for (uint256 i = 0; i < recipients.length; i++) {
+            (bool success, ) = recipients[i].call{value: amounts[i]}("");
+            if (!success) {
+                emit DistributionFailed(recipients[i], amounts[i]);
+            }
         }
     }
 }
