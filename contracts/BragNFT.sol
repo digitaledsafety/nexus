@@ -54,6 +54,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     uint256 public minimumDonation;
     IBragToken public bragToken;
     AggregatorV3Interface public priceFeed;
+    uint256 public glowDuration;
 
     // EIP-2981 Royalty Support (8% hardcoded for 2026 model)
     uint96 public constant ROYALTY_BPS = 800;
@@ -78,6 +79,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         minimumDonation = _minimumDonation;
         priceFeed = AggregatorV3Interface(_priceFeed);
         maxSupply = 100; // Default max supply
+        glowDuration = 30 days;
     }
 
     function totalSupply() public view returns (uint256) {
@@ -135,6 +137,10 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
 
     function setBragToken(address _bragToken) external onlyRole(DEFAULT_ADMIN_ROLE) {
         bragToken = IBragToken(_bragToken);
+    }
+
+    function setGlowDuration(uint256 _duration) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        glowDuration = _duration;
     }
 
     /**
@@ -267,7 +273,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
      * @dev Checks if the collectible is currently "glowing" (topped up in last 30 days).
      */
     function isGlowing(uint256 tokenId) public view returns (bool) {
-        return block.timestamp <= lastTopUpTimestamp[tokenId] + 30 days;
+        return block.timestamp <= lastTopUpTimestamp[tokenId] + glowDuration;
     }
 
     /**
@@ -359,11 +365,20 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             }
         }
 
+        // Isolate filename before query parameters or fragments
+        uint256 end = len;
+        for (uint256 i = 0; i < len; i++) {
+            if (b[i] == '?' || b[i] == '#') {
+                end = i;
+                break;
+            }
+        }
+
         // Check for 3-letter extensions: .mp3, .wav, .ogg, .m4a, .aac, .mp4, .mov, .ogv, .m4v, .gif, .glb
-        if (b[len - 4] == '.') {
-            bytes1 b1 = _toLower(b[len - 3]);
-            bytes1 b2 = _toLower(b[len - 2]);
-            bytes1 b3 = _toLower(b[len - 1]);
+        if (end >= 4 && b[end - 4] == '.') {
+            bytes1 b1 = _toLower(b[end - 3]);
+            bytes1 b2 = _toLower(b[end - 2]);
+            bytes1 b3 = _toLower(b[end - 1]);
 
             if (b1 == 'm' && b2 == 'p' && b3 == '3') return true;
             if (b1 == 'w' && b2 == 'a' && b3 == 'v') return true;
@@ -379,11 +394,11 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         }
 
         // Check for 4-letter extensions: .webm, .webp, .gltf
-        if (len >= 5 && b[len - 5] == '.') {
-            bytes1 b1 = _toLower(b[len - 4]);
-            bytes1 b2 = _toLower(b[len - 3]);
-            bytes1 b3 = _toLower(b[len - 2]);
-            bytes1 b4 = _toLower(b[len - 1]);
+        if (end >= 5 && b[end - 5] == '.') {
+            bytes1 b1 = _toLower(b[end - 4]);
+            bytes1 b2 = _toLower(b[end - 3]);
+            bytes1 b3 = _toLower(b[end - 2]);
+            bytes1 b4 = _toLower(b[end - 1]);
 
             if (b1 == 'w' && b2 == 'e' && b3 == 'b' && b4 == 'm') return true;
             if (b1 == 'w' && b2 == 'e' && b3 == 'b' && b4 == 'p') return true;

@@ -276,9 +276,16 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
 
         if (IERC165(nftContract).supportsInterface(type(IERC721).interfaceId)) {
             require(amount == 1, "ERC721 listing must have amount 1");
-            require(IERC721(nftContract).ownerOf(tokenId) == msg.sender, "You do not own this NFT");
+            IERC721 nft = IERC721(nftContract);
+            require(nft.ownerOf(tokenId) == msg.sender, "You do not own this NFT");
+            require(
+                nft.isApprovedForAll(msg.sender, address(this)) || nft.getApproved(tokenId) == address(this),
+                "Contract not approved to transfer NFT"
+            );
         } else if (IERC165(nftContract).supportsInterface(type(IERC1155).interfaceId)) {
-            require(IERC1155(nftContract).balanceOf(msg.sender, tokenId) >= amount, "Insufficient balance");
+            IERC1155 nft = IERC1155(nftContract);
+            require(nft.balanceOf(msg.sender, tokenId) >= amount, "Insufficient balance");
+            require(nft.isApprovedForAll(msg.sender, address(this)), "Contract not approved to transfer NFT");
         } else {
             revert("Unsupported NFT type");
         }

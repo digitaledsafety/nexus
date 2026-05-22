@@ -49,6 +49,7 @@ describe("NFTMarketplace Fixed-Price Listings", async function () {
 
     // 3. Create Listing
     const price = parseEther("10");
+    await bragNFT.write.approve([marketplace.address, tokenId]);
     await marketplace.write.createListing([bragNFT.address, tokenId, 1n, price]);
 
     const listing = await marketplace.read.listings([bragNFT.address, tokenId, owner.account.address]);
@@ -72,6 +73,7 @@ describe("NFTMarketplace Fixed-Price Listings", async function () {
     await bragNFT.write.donate(["Test NFT 2", "uri2", false], { value: 1n });
     const tokenId = 1n;
 
+    await bragNFT.write.approve([marketplace.address, tokenId]);
     await marketplace.write.createListing([bragNFT.address, tokenId, 1n, parseEther("5")]);
     await marketplace.write.cancelListing([bragNFT.address, tokenId]);
 
@@ -84,6 +86,7 @@ describe("NFTMarketplace Fixed-Price Listings", async function () {
     const tokenId = 2n;
 
     // Create listing
+    await bragNFT.write.approve([marketplace.address, tokenId]);
     await marketplace.write.createListing([bragNFT.address, tokenId, 1n, parseEther("50")]);
 
     // Buyer makes offer
