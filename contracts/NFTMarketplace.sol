@@ -57,6 +57,27 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
     }
 
     /**
+     * @dev Allows the contract to receive ETH.
+     */
+    receive() external payable {}
+
+    /**
+     * @dev Withdraw ETH from the contract. Restricted to DEFAULT_ADMIN_ROLE.
+     */
+    function withdrawETH() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        (bool success, ) = msg.sender.call{value: address(this).balance}("");
+        require(success, "ETH transfer failed");
+    }
+
+    /**
+     * @dev Withdraw ERC20 tokens from the contract. Restricted to DEFAULT_ADMIN_ROLE.
+     */
+    function withdrawERC20(address token) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 balance = IERC20(token).balanceOf(address(this));
+        IERC20(token).safeTransfer(msg.sender, balance);
+    }
+
+    /**
      * @notice Create an offer for an NFT
      * @param nftContract Address of the NFT contract
      * @param tokenId ID of the token being offered on
@@ -88,8 +109,9 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
      */
     function batchCreateOffers(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256[] calldata amounts, uint256[] calldata prices) external nonReentrant {
         require(nftContracts.length == tokenIds.length && tokenIds.length == amounts.length && amounts.length == prices.length, "Mismatched arrays");
-        for (uint256 i = 0; i < nftContracts.length; i++) {
+        for (uint256 i = 0; i < nftContracts.length; ) {
             _createOffer(nftContracts[i], tokenIds[i], amounts[i], prices[i], 0);
+            unchecked { i++; }
         }
     }
 
@@ -132,8 +154,9 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
      */
     function batchAcceptOffers(address[] calldata nftContracts, uint256[] calldata tokenIds, address[] calldata buyers) external nonReentrant {
         require(nftContracts.length == tokenIds.length && tokenIds.length == buyers.length, "Mismatched arrays");
-        for (uint256 i = 0; i < nftContracts.length; i++) {
+        for (uint256 i = 0; i < nftContracts.length; ) {
             _acceptOffer(nftContracts[i], tokenIds[i], buyers[i]);
+            unchecked { i++; }
         }
     }
 
@@ -251,7 +274,7 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
      */
     function cancelOffers(address[] calldata nftContracts, uint256[] calldata tokenIds) external nonReentrant {
         require(nftContracts.length == tokenIds.length, "Mismatched arrays");
-        for (uint256 i = 0; i < nftContracts.length; i++) {
+        for (uint256 i = 0; i < nftContracts.length; ) {
             address nftContract = nftContracts[i];
             uint256 tokenId = tokenIds[i];
             Offer memory offer = offers[nftContract][tokenId][msg.sender];
@@ -260,6 +283,7 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
                 paymentToken.safeTransfer(msg.sender, offer.price);
                 emit OfferCanceled(nftContract, tokenId, msg.sender);
             }
+            unchecked { i++; }
         }
     }
 
@@ -316,8 +340,9 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
      */
     function batchBuyFromListings(address[] calldata nftContracts, uint256[] calldata tokenIds, address[] calldata sellers) external nonReentrant {
         require(nftContracts.length == tokenIds.length && tokenIds.length == sellers.length, "Mismatched arrays");
-        for (uint256 i = 0; i < nftContracts.length; i++) {
+        for (uint256 i = 0; i < nftContracts.length; ) {
             _buyFromListing(nftContracts[i], tokenIds[i], sellers[i]);
+            unchecked { i++; }
         }
     }
 

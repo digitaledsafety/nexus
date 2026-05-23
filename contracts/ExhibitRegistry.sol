@@ -2,6 +2,8 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
  * @title ExhibitRegistry
@@ -10,6 +12,8 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
  * Uses AccessControl for flexible permissions.
  */
 contract ExhibitRegistry is AccessControl {
+    using SafeERC20 for IERC20;
+
     bytes32 public constant VERIFIER_ROLE = keccak256("VERIFIER_ROLE");
 
     enum LocationType { Game, Physical, Website, Gallery, Other }
@@ -30,6 +34,27 @@ contract ExhibitRegistry is AccessControl {
     constructor(address initialOwner) {
         _grantRole(DEFAULT_ADMIN_ROLE, initialOwner);
         _grantRole(VERIFIER_ROLE, initialOwner);
+    }
+
+    /**
+     * @dev Allows the contract to receive ETH.
+     */
+    receive() external payable {}
+
+    /**
+     * @dev Withdraw ETH from the contract. Restricted to DEFAULT_ADMIN_ROLE.
+     */
+    function withdrawETH() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        (bool success, ) = msg.sender.call{value: address(this).balance}("");
+        require(success, "ETH transfer failed");
+    }
+
+    /**
+     * @dev Withdraw ERC20 tokens from the contract. Restricted to DEFAULT_ADMIN_ROLE.
+     */
+    function withdrawERC20(address token) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 balance = IERC20(token).balanceOf(address(this));
+        IERC20(token).safeTransfer(msg.sender, balance);
     }
 
     /**
