@@ -29,8 +29,9 @@ contract BatchGrant is AccessControl {
      */
     function distribute(IERC20 token, address[] calldata recipients, uint256[] calldata amounts) external {
         require(recipients.length == amounts.length, "Mismatched arrays");
-        for (uint256 i = 0; i < recipients.length; i++) {
+        for (uint256 i = 0; i < recipients.length; ) {
             token.safeTransferFrom(msg.sender, recipients[i], amounts[i]);
+            unchecked { i++; }
         }
     }
 
@@ -42,15 +43,17 @@ contract BatchGrant is AccessControl {
     function distributeETH(address[] calldata recipients, uint256[] calldata amounts) external payable {
         require(recipients.length == amounts.length, "Mismatched arrays");
         uint256 total = 0;
-        for (uint256 i = 0; i < recipients.length; i++) {
+        for (uint256 i = 0; i < recipients.length; ) {
             total += amounts[i];
+            unchecked { i++; }
         }
         // Explicitly check that msg.value matches total to avoid draining contract balance
         require(msg.value == total, "Incorrect ETH amount sent");
 
-        for (uint256 i = 0; i < recipients.length; i++) {
+        for (uint256 i = 0; i < recipients.length; ) {
             (bool success, ) = recipients[i].call{value: amounts[i]}("");
             require(success, "ETH transfer failed");
+            unchecked { i++; }
         }
     }
 
@@ -60,8 +63,9 @@ contract BatchGrant is AccessControl {
      */
     function distributeFromBalance(IERC20 token, address[] calldata recipients, uint256[] calldata amounts) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(recipients.length == amounts.length, "Mismatched arrays");
-        for (uint256 i = 0; i < recipients.length; i++) {
+        for (uint256 i = 0; i < recipients.length; ) {
             token.safeTransfer(recipients[i], amounts[i]);
+            unchecked { i++; }
         }
     }
 
@@ -71,9 +75,26 @@ contract BatchGrant is AccessControl {
      */
     function distributeETHFromBalance(address[] calldata recipients, uint256[] calldata amounts) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(recipients.length == amounts.length, "Mismatched arrays");
-        for (uint256 i = 0; i < recipients.length; i++) {
+        for (uint256 i = 0; i < recipients.length; ) {
             (bool success, ) = recipients[i].call{value: amounts[i]}("");
             require(success, "ETH transfer failed");
+            unchecked { i++; }
         }
+    }
+
+    /**
+     * @dev Withdraw any ERC20 token from the contract. Restricted to DEFAULT_ADMIN_ROLE.
+     */
+    function withdrawERC20(address token) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 balance = IERC20(token).balanceOf(address(this));
+        IERC20(token).safeTransfer(msg.sender, balance);
+    }
+
+    /**
+     * @dev Withdraw ETH from the contract. Restricted to DEFAULT_ADMIN_ROLE.
+     */
+    function withdrawETH() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        (bool success, ) = msg.sender.call{value: address(this).balance}("");
+        require(success, "ETH transfer failed");
     }
 }

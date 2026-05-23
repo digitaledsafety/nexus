@@ -9,6 +9,7 @@ import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 /**
  * @title Treasury
@@ -16,7 +17,7 @@ import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155
  * Supports a "proposal and multi-transaction" flow for M-of-N operations.
  * Also supports direct 1-of-1 execution via AA or direct calls.
  */
-contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271 {
+contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessControl {
     using EnumerableSet for EnumerableSet.AddressSet;
 
     EnumerableSet.AddressSet private _owners;
@@ -80,6 +81,7 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271 {
             require(owner != address(0), "Invalid owner");
             if (_owners.add(owner)) {
                 emit OwnerAdded(owner);
+                _grantRole(DEFAULT_ADMIN_ROLE, owner);
             }
         }
         threshold = initialThreshold;
@@ -355,6 +357,10 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271 {
 
     function hasApproved(uint256 proposalId, address owner) external view returns (bool) {
         return proposals[proposalId].approved[owner];
+    }
+
+    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC1155Holder, AccessControl) returns (bool) {
+        return super.supportsInterface(interfaceId);
     }
 
     function isValidSignature(bytes32 hash, bytes calldata signature) external view override returns (bytes4) {

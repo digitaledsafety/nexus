@@ -7,6 +7,8 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 interface IBragToken {
     function mint(address to, uint256 amount) external;
@@ -36,6 +38,7 @@ interface AggregatorV3Interface {
  */
 contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, IERC6454 {
     using Strings for uint256;
+    using SafeERC20 for IERC20;
 
     enum TaxStatus { Pending, Verified, Claimed, Flagged }
 
@@ -92,6 +95,22 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         return interfaceId == type(IERC2981).interfaceId ||
                interfaceId == type(IERC6454).interfaceId ||
                super.supportsInterface(interfaceId);
+    }
+
+    /**
+     * @dev Withdraw ETH from the contract. Restricted to DEFAULT_ADMIN_ROLE.
+     */
+    function withdrawETH() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        (bool success, ) = msg.sender.call{value: address(this).balance}("");
+        require(success, "ETH transfer failed");
+    }
+
+    /**
+     * @dev Withdraw ERC20 tokens from the contract. Restricted to DEFAULT_ADMIN_ROLE.
+     */
+    function withdrawERC20(address token) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 balance = IERC20(token).balanceOf(address(this));
+        IERC20(token).safeTransfer(msg.sender, balance);
     }
 
     /**
@@ -405,7 +424,8 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
      */
     function _generateSVG(uint256 tokenId, string memory message) internal view returns (string memory) {
         bool glowing = isGlowing(tokenId);
-        string memory displayText = bytes(message).length > 0 ? _escapeSVG(message) : string(abi.encodePacked("BragNFT #", tokenId.toString()));
+        string memory truncatedMessage = _substring(message, 32);
+        string memory displayText = bytes(truncatedMessage).length > 0 ? _escapeSVG(truncatedMessage) : string(abi.encodePacked("BragNFT #", tokenId.toString()));
 
         string memory filterDef = "";
         string memory textStyle = "fill: white; font-family: sans-serif; font-size: 20px; font-weight: bold;";
@@ -426,6 +446,35 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             displayText,
             '</text></g></svg>'
         ));
+    }
+
+    /**
+     * @dev Safely truncate a UTF-8 string to a maximum number of bytes without splitting multi-byte characters.
+     */
+    function _substring(string memory str, uint256 maxLen) internal pure returns (string memory) {
+        bytes memory strBytes = bytes(str);
+        if (strBytes.length <= maxLen) return str;
+
+        uint256 len = maxLen;
+        // If the byte at maxLen is a continuation byte, we are in the middle of a character.
+        // We must back up to the start byte of this character.
+        if ((uint8(strBytes[len]) & 0xC0) == 0x80) {
+            while (len > 0 && (uint8(strBytes[len]) & 0xC0) == 0x80) {
+                len--;
+            }
+            // 'len' is now at the start byte of the truncated character.
+            // We should not include this start byte.
+        } else {
+            // The byte at 'maxLen' is a start byte or a single-byte character.
+            // So we can safely include everything from 0 to maxLen - 1.
+            // 'len' is already maxLen.
+        }
+
+        bytes memory result = new bytes(len);
+        for (uint256 i = 0; i < len; i++) {
+            result[i] = strBytes[i];
+        }
+        return string(result);
     }
 
     /**

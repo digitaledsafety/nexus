@@ -5,7 +5,10 @@ import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 
 interface IExhibitRegistry {
     struct VaultInfo {
@@ -24,7 +27,9 @@ interface IExhibitRegistry {
  * It tracks the original owner and allows them to withdraw or move the NFT,
  * with optional time-gating (duration).
  */
-contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard {
+contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessControl {
+    using SafeERC20 for IERC20;
+
     IExhibitRegistry public registry;
 
     // Track original owner of ERC721 tokens
@@ -46,8 +51,34 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard {
     event Moved721(address indexed nftContract, uint256 indexed tokenId, address indexed owner, address destinationVault);
     event Moved1155(address indexed nftContract, uint256 indexed tokenId, address indexed owner, uint256 amount, address destinationVault);
 
-    constructor(address _registry) {
+    constructor(address initialAdmin, address _registry) {
+        _grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
         registry = IExhibitRegistry(_registry);
+    }
+
+    /**
+     * @dev Allows the contract to receive ETH.
+     */
+    receive() external payable {}
+
+    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC1155Holder, AccessControl) returns (bool) {
+        return super.supportsInterface(interfaceId);
+    }
+
+    /**
+     * @dev Withdraw ETH from the contract. Restricted to DEFAULT_ADMIN_ROLE.
+     */
+    function withdrawETH() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        (bool success, ) = msg.sender.call{value: address(this).balance}("");
+        require(success, "ETH transfer failed");
+    }
+
+    /**
+     * @dev Withdraw ERC20 tokens from the contract. Restricted to DEFAULT_ADMIN_ROLE.
+     */
+    function withdrawERC20(address token) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 balance = IERC20(token).balanceOf(address(this));
+        IERC20(token).safeTransfer(msg.sender, balance);
     }
 
     function _parseDepositData(
