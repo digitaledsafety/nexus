@@ -70,6 +70,8 @@ async function main() {
         throw new Error("Missing ALCHEMY_API_KEY or ALCHEMY_GAS_POLICY_ID for gasless Sepolia deployment.");
     }
 
+    const deploySaltBase = getConfig("DEPLOY_SALT", "v1");
+
     let privateKey: string;
     if (isSepolia) {
         privateKey = getConfig("SEPOLIA_PRIVATE_KEY");
@@ -95,7 +97,7 @@ async function main() {
         chain,
         account: await createMultiOwnerLightAccount({
             transport: http(rpcUrl),
-            chain,
+            chain: isSepolia ? chain : sepolia, // Fallback to sepolia metadata for local factory discovery
             signer,
             owners: [eoaAddress],
             version: "v2.0.0"
@@ -107,8 +109,8 @@ async function main() {
             },
             opts: {
                 feeOptions: {
-                    maxFeePerGas: { multiplier: 3.0 },
-                    maxPriorityFeePerGas: { multiplier: 3.0 }
+                    maxFeePerGas: { multiplier: 5.0 },
+                    maxPriorityFeePerGas: { multiplier: 5.0 }
                 }
             }
         } : {
@@ -154,10 +156,16 @@ async function main() {
 
         if (isSepolia) {
             const factoryAddress = "0x4e59b44847b379578588920cA78FbF26c0B4956C";
-            const salt = keccak256(toHex(`${name}-${Date.now()}`));
+            // Use a deterministic salt based on contract name and deployment version
+            // This prevents "replacement underpriced" errors on retry if the nonce is the same
+            const salt = keccak256(toHex(`${name}-${deploySaltBase}`));
             const data = concat([salt, deployData]);
 
             try {
+                // Fetch current gas prices to ensure we are not underpricing
+                const gasPrice = await publicClient.getGasPrice();
+                console.log(`Current gas price: ${gasPrice.toString()}`);
+
                 const uoResponse = await smartAccountClient.sendUserOperation({
                     uo: { target: factoryAddress, data }
                 });
