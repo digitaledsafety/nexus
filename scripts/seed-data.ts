@@ -221,7 +221,7 @@ async function main() {
 
     for (const name of vaultNames) {
         const salt = keccak256(toHex(`${name}-${timestamp}`));
-        const deployData = encodeDeployData({ abi: vaultArtifact.abi, args: [registryAddr], bytecode: vaultArtifact.bytecode });
+        const deployData = encodeDeployData({ abi: vaultArtifact.abi, args: [client0.account.address, registryAddr], bytecode: vaultArtifact.bytecode });
 
         let vaultAddr: `0x${string}`;
         if (isSepolia) {
@@ -244,7 +244,7 @@ async function main() {
             const hash = await client0.deployContract({
                 abi: vaultArtifact.abi,
                 bytecode: vaultArtifact.bytecode,
-                args: [registryAddr]
+                args: [client0.account.address, registryAddr]
             });
             const receipt = await publicClient.waitForTransactionReceipt({ hash });
             vaultAddr = receipt.contractAddress!;
@@ -308,7 +308,7 @@ async function main() {
     if (!fs.existsSync(deploymentDir)) {
         fs.mkdirSync(deploymentDir, { recursive: true });
     }
-    const artifactFile = path.join(deploymentDir, `seed_artifacts.json`);
+    const artifactFile = path.join(deploymentDir, `seed-artifacts.json`);
     fs.writeFileSync(artifactFile, JSON.stringify(artifacts, null, 2));
 
     // Also save to root of deployments for easier artifact upload in workflow
@@ -316,7 +316,7 @@ async function main() {
     if (!fs.existsSync(rootArtifactDir)) {
         fs.mkdirSync(rootArtifactDir, { recursive: true });
     }
-    const rootArtifactFile = path.join(rootArtifactDir, "seed_artifacts.json");
+    const rootArtifactFile = path.join(rootArtifactDir, "seed-artifacts.json");
     fs.writeFileSync(rootArtifactFile, JSON.stringify(artifacts, null, 2));
 
     console.log("Seeding complete!");
@@ -324,4 +324,7 @@ async function main() {
     console.log(JSON.stringify(artifacts, null, 2));
 }
 
-main().catch(console.error);
+main().catch(error => {
+    console.error(error);
+    process.exit(1);
+});

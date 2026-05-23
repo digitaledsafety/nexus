@@ -26,8 +26,9 @@ mappings.json
 # Local development artifacts
 serve.log
 test-results/
+hardhat.log
 hardhat_node.log
 server.log
-seed_artifacts.json
+seed-artifacts.json
 /external
 /temp_addon
