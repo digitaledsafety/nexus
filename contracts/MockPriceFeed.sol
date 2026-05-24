@@ -21,12 +21,6 @@ contract MockPriceFeed {
         _shouldRevert = shouldRevert;
     }
 
-    uint256 private _updatedAt;
-
-    function setUpdatedAt(uint256 updatedAt) external {
-        _updatedAt = updatedAt;
-    }
-
     function latestRoundData()
         external
         view
@@ -41,7 +35,6 @@ contract MockPriceFeed {
         if (_shouldRevert) {
             revert("Price feed failure");
         }
-        uint256 ts = _updatedAt == 0 ? block.timestamp : _updatedAt;
-        return (0, _price, 0, ts, 0);
+        return (0, _price, 0, block.timestamp, 0);
     }
 }

@@ -70,7 +70,6 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
 
     event Donated(address indexed donor, uint256 amount, uint256 usdValue, uint256 tokenId, string message);
     event TopUp(uint256 indexed tokenId, address indexed donor, uint256 amount);
-    event MediaUpdated(uint256 indexed tokenId, string media, bool onChain);
     event PriceFeedFailed();
 
     constructor(address _initialOwner, address _treasury, uint256 _minimumDonation, address _priceFeed)
@@ -195,51 +194,15 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     function _getUsdValue(uint256 ethAmount) internal returns (uint256) {
         uint256 usdValue = 0;
         if (address(priceFeed) != address(0)) {
-            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256 updatedAt, uint80) {
-                require(answer > 0, "Invalid price");
-                require(block.timestamp <= updatedAt + 25 hours, "Stale price feed");
-                usdValue = (uint256(answer) * ethAmount) / 1e18;
-            } catch (bytes memory reason) {
-                emit PriceFeedFailed();
-
-                // Propagate specific failures (Invalid price, Stale price feed)
-                // but swallow general price feed reverts (MockPriceFeed failure)
-                if (reason.length > 0) {
-                    // Check if it's an Error(string) selector: 0x08c379a0
-                    if (reason.length >= 4 && bytes4(reason) == 0x08c379a0) {
-                        // Extract the error message to see if it's one of our expected ones
-                        string memory errorMessage = _decodeRevertReason(reason);
-                        bytes32 msgHash = keccak256(bytes(errorMessage));
-                        if (msgHash == keccak256("Invalid price") || msgHash == keccak256("Stale price feed")) {
-                            assembly {
-                                revert(add(32, reason), mload(reason))
-                            }
-                        }
-                    }
+            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
+                if (answer > 0) {
+                    usdValue = (uint256(answer) * ethAmount) / 1e18;
                 }
+            } catch {
+                emit PriceFeedFailed();
             }
         }
         return usdValue;
-    }
-
-    /**
-     * @dev Helper to decode revert reason string from bytes.
-     */
-    function _decodeRevertReason(bytes memory reason) internal pure returns (string memory) {
-        if (reason.length < 68) return "";
-        uint256 len;
-        assembly {
-            len := mload(add(reason, 68))
-        }
-        string memory str = new string(len);
-        assembly {
-            let offset := add(reason, 100)
-            let dest := add(str, 32)
-            for { let i := 0 } lt(i, len) { i := add(i, 32) } {
-                mstore(add(dest, i), mload(add(offset, i)))
-            }
-        }
-        return str;
     }
 
     /**
@@ -302,23 +265,6 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         require(success, "Transfer to treasury failed");
 
         emit TopUp(tokenId, msg.sender, msg.value);
-    }
-
-    /**
-     * @dev Update the visual art layer of an NFT.
-     * Only the current owner can update the media.
-     * The soulbound tax receipt remains unchanged.
-     */
-    function updateMedia(uint256 tokenId, string calldata media, bool onChain) external {
-        require(ownerOf(tokenId) == msg.sender, "Not the owner");
-        if (onChain) {
-            onChainMedia[tokenId] = media;
-        } else {
-            // Clear on-chain media if switching to URI
-            delete onChainMedia[tokenId];
-            _setTokenURI(tokenId, media);
-        }
-        emit MediaUpdated(tokenId, media, onChain);
     }
 
     /**
