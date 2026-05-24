@@ -180,6 +180,28 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
     }
 
     /**
+     * @dev Batch exhibit multiple ERC721 tokens from one contract.
+     */
+    function batchExhibit721(address nftContract, uint256[] calldata tokenIds, uint256 duration) external {
+        if (tokenIds.length == 0) return;
+        bytes memory data = abi.encode(msg.sender, duration);
+        for (uint256 i = 0; i < tokenIds.length; i++) {
+            IERC721(nftContract).safeTransferFrom(msg.sender, address(this), tokenIds[i], data);
+        }
+    }
+
+    /**
+     * @dev Batch exhibit multiple ERC1155 tokens from one contract.
+     * Uses safeBatchTransferFrom for efficiency.
+     */
+    function batchExhibit1155(address nftContract, uint256[] calldata ids, uint256[] calldata amounts, uint256 duration) external {
+        require(ids.length == amounts.length, "Mismatched arrays");
+        if (ids.length == 0) return;
+        bytes memory data = abi.encode(msg.sender, duration);
+        IERC1155(nftContract).safeBatchTransferFrom(msg.sender, address(this), ids, amounts, data);
+    }
+
+    /**
      * @dev Withdraw an ERC721 token back to the owner's wallet.
      */
     function withdraw721(address nftContract, uint256 tokenId) external nonReentrant {
