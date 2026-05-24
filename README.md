@@ -10,6 +10,13 @@ Whether you're building a decentralized gallery, a cross-platform gaming reward 
 
 ---
 
+## 📚 Documentation
+*   **[Features & Technical Specs](FEATURES.md):** Detailed breakdown of contract capabilities and ecosystem architecture.
+*   **[Changelog](CHANGELOG.md):** Track the evolution of the project and recent updates.
+*   **[Community & Governance](COMMUNITY.md):** Learn how to get involved and participate in the BRAG ecosystem.
+
+---
+
 ## What's Inside?
 
 1.  **Gasless Experience:** Built-in support for Alchemy Smart Accounts and Paymasters, allowing users to interact with your ecosystem without needing to hold native gas tokens.
