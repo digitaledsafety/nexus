@@ -148,21 +148,35 @@ async function main() {
     }
 
     async function deploy(name: string, args: any[]) {
-        console.log(`Deploying ${name}...`);
         const artifactPath = path.join(process.cwd(), `artifacts/contracts/${name}.sol/${name}.json`);
+        if (!fs.existsSync(artifactPath)) {
+            throw new Error(`Artifact not found for ${name} at ${artifactPath}`);
+        }
         const { abi, bytecode } = JSON.parse(fs.readFileSync(artifactPath, "utf8"));
-
         const deployData = encodeDeployData({ abi, args, bytecode });
 
         if (isSepolia) {
-            const factoryAddress = "0x4e59b44847b379578588920cA78FbF26c0B4956C";
-            // Use a deterministic salt based on contract name and deployment version
-            // This prevents "replacement underpriced" errors on retry if the nonce is the same
+            const factoryAddress = "0x4e59b44847b379578588920cA78FbF26c0B4956C" as Hex;
             const salt = keccak256(toHex(`${name}-${deploySaltBase}`));
+
+            const deployedAddress = getContractAddress({
+                bytecode: deployData,
+                from: factoryAddress,
+                opcode: "CREATE2",
+                salt
+            });
+
+            console.log(`Checking if ${name} is already deployed at ${deployedAddress}...`);
+            const code = await publicClient.getBytecode({ address: deployedAddress });
+            if (code && code !== "0x") {
+                console.log(`${name} already exists at ${deployedAddress}. Skipping deployment.`);
+                return { address: deployedAddress, abi };
+            }
+
+            console.log(`Deploying ${name} via factory...`);
             const data = concat([salt, deployData]);
 
             try {
-                // Fetch current gas prices to ensure we are not underpricing
                 const gasPrice = await publicClient.getGasPrice();
                 console.log(`Current gas price: ${gasPrice.toString()}`);
 
@@ -173,17 +187,16 @@ async function main() {
                 const txHash = await waitForUserOp(uoResponse.hash);
                 await publicClient.waitForTransactionReceipt({ hash: txHash });
 
-                const deployedAddress = getContractAddress({
-                    bytecode: deployData,
-                    from: factoryAddress,
-                    opcode: "CREATE2",
-                    salt
-                });
-
                 console.log(`${name} deployed at ${deployedAddress}`);
                 return { address: deployedAddress, abi };
             } catch (e: any) {
                 console.error(`Factory deployment failed for ${name}: ${e.message}`);
+                // Double check if it was actually deployed (maybe a race condition or bundler lag)
+                const checkCode = await publicClient.getBytecode({ address: deployedAddress });
+                if (checkCode && checkCode !== "0x") {
+                    console.log(`Confirmed: ${name} is deployed at ${deployedAddress} despite error.`);
+                    return { address: deployedAddress, abi };
+                }
                 throw e;
             }
         } else {
@@ -220,123 +233,108 @@ async function main() {
     const bragToken = await deploy("BragToken", [scaAddress, initialSupply, maxSupply]);
     const marketplace = await deploy("NFTMarketplace", [scaAddress, bragToken.address]);
 
-    // --- Batch Setup Transactions ---
-    console.log("Batching setup and ownership transfer...");
-    const setupTxs: any[] = [
-        {
-            to: bragNFT.address,
-            data: encodeFunctionData({
-                abi: bragNFT.abi,
-                functionName: "setBragToken",
-                args: [bragToken.address]
-            })
-        },
-        {
-            to: bragToken.address,
-            data: encodeFunctionData({
-                abi: bragToken.abi,
-                functionName: "grantRole",
-                args: [MINTER_ROLE, bragNFT.address]
-            })
+    // --- Idempotent Batch Setup ---
+    console.log("Verifying setup and roles...");
+    const setupTxs: any[] = [];
+
+    async function addSetupTx(target: `0x${string}`, abi: any, functionName: string, args: any[], check?: () => Promise<boolean>) {
+        if (check) {
+            const alreadySet = await check();
+            if (alreadySet) {
+                console.log(`  [OK] ${functionName} already configured for ${target}`);
+                return;
+            }
         }
-    ];
+        console.log(`  [+][PENDING] Adding ${functionName} for ${target}`);
+        setupTxs.push({
+            to: target,
+            data: encodeFunctionData({ abi, functionName, args })
+        });
+    }
 
-    // --- BragNFT Roles ---
-    setupTxs.push({
-        to: bragNFT.address,
-        data: encodeFunctionData({
+    async function checkRole(contract: `0x${string}`, abi: any, role: Hex, account: `0x${string}`) {
+        return await publicClient.readContract({
+            address: contract,
+            abi,
+            functionName: "hasRole",
+            args: [role, account]
+        }) as boolean;
+    }
+
+    // 1. BragNFT -> BragToken linkage
+    await addSetupTx(bragNFT.address, bragNFT.abi, "setBragToken", [bragToken.address], async () => {
+        const currentToken = await publicClient.readContract({
+            address: bragNFT.address,
             abi: bragNFT.abi,
-            functionName: "grantRole",
-            args: [DEFAULT_ADMIN_ROLE, eoaAddress]
-        })
+            functionName: "bragToken"
+        });
+        return getAddress(currentToken as string) === getAddress(bragToken.address);
     });
 
-    // --- BragToken Roles ---
-    setupTxs.push({
-        to: bragToken.address,
-        data: encodeFunctionData({
-            abi: bragToken.abi,
-            functionName: "grantRole",
-            args: [DEFAULT_ADMIN_ROLE, eoaAddress]
-        })
-    });
-    setupTxs.push({
-        to: bragToken.address,
-        data: encodeFunctionData({
-            abi: bragToken.abi,
-            functionName: "grantRole",
-            args: [MINTER_ROLE, eoaAddress]
-        })
-    });
+    // 2. BragToken Roles
+    await addSetupTx(bragToken.address, bragToken.abi, "grantRole", [MINTER_ROLE, bragNFT.address],
+        () => checkRole(bragToken.address, bragToken.abi, MINTER_ROLE, bragNFT.address));
+    await addSetupTx(bragToken.address, bragToken.abi, "grantRole", [DEFAULT_ADMIN_ROLE, eoaAddress],
+        () => checkRole(bragToken.address, bragToken.abi, DEFAULT_ADMIN_ROLE, eoaAddress));
+    await addSetupTx(bragToken.address, bragToken.abi, "grantRole", [MINTER_ROLE, eoaAddress],
+        () => checkRole(bragToken.address, bragToken.abi, MINTER_ROLE, eoaAddress));
 
-    // --- NFTMarketplace Roles & Fee Recipient ---
-    setupTxs.push({
-        to: marketplace.address,
-        data: encodeFunctionData({
+    // 3. BragNFT Admin Role
+    await addSetupTx(bragNFT.address, bragNFT.abi, "grantRole", [DEFAULT_ADMIN_ROLE, eoaAddress],
+        () => checkRole(bragNFT.address, bragNFT.abi, DEFAULT_ADMIN_ROLE, eoaAddress));
+
+    // 4. NFTMarketplace Roles & Fee Recipient
+    await addSetupTx(marketplace.address, marketplace.abi, "grantRole", [DEFAULT_ADMIN_ROLE, eoaAddress],
+        () => checkRole(marketplace.address, marketplace.abi, DEFAULT_ADMIN_ROLE, eoaAddress));
+    await addSetupTx(marketplace.address, marketplace.abi, "setFeeRecipient", [eoaAddress], async () => {
+        const currentRecipient = await publicClient.readContract({
+            address: marketplace.address,
             abi: marketplace.abi,
-            functionName: "grantRole",
-            args: [DEFAULT_ADMIN_ROLE, eoaAddress]
-        })
-    });
-    setupTxs.push({
-        to: marketplace.address,
-        data: encodeFunctionData({
-            abi: marketplace.abi,
-            functionName: "setFeeRecipient",
-            args: [eoaAddress]
-        })
+            functionName: "feeRecipient"
+        });
+        return getAddress(currentRecipient as string) === getAddress(eoaAddress);
     });
 
-    // --- ExhibitRegistry Roles ---
-    setupTxs.push({
-        to: exhibitRegistry.address,
-        data: encodeFunctionData({
-            abi: exhibitRegistry.abi,
-            functionName: "grantRole",
-            args: [DEFAULT_ADMIN_ROLE, eoaAddress]
-        })
-    });
-    setupTxs.push({
-        to: exhibitRegistry.address,
-        data: encodeFunctionData({
-            abi: exhibitRegistry.abi,
-            functionName: "grantRole",
-            args: [VERIFIER_ROLE, eoaAddress]
-        })
-    });
+    // 5. ExhibitRegistry Roles
+    await addSetupTx(exhibitRegistry.address, exhibitRegistry.abi, "grantRole", [DEFAULT_ADMIN_ROLE, eoaAddress],
+        () => checkRole(exhibitRegistry.address, exhibitRegistry.abi, DEFAULT_ADMIN_ROLE, eoaAddress));
+    await addSetupTx(exhibitRegistry.address, exhibitRegistry.abi, "grantRole", [VERIFIER_ROLE, eoaAddress],
+        () => checkRole(exhibitRegistry.address, exhibitRegistry.abi, VERIFIER_ROLE, eoaAddress));
 
-    // --- Treasury Ownership Transfer ---
-    // The smart account (scaAddress) is currently the only owner of the Treasury.
-    // We add the EOA as an owner so it can also manage the treasury.
-    setupTxs.push({
-        to: treasury.address,
-        data: encodeFunctionData({
+    // 6. Treasury Ownership
+    await addSetupTx(treasury.address, treasury.abi, "execute", [
+        treasury.address,
+        0n,
+        encodeFunctionData({
             abi: treasury.abi,
-            functionName: "execute",
-            args: [
-                treasury.address,
-                0n,
-                encodeFunctionData({
-                    abi: treasury.abi,
-                    functionName: "addOwner",
-                    args: [eoaAddress]
-                }),
-                0n
-            ]
-        })
+            functionName: "addOwner",
+            args: [eoaAddress]
+        }),
+        0n
+    ], async () => {
+        return await publicClient.readContract({
+            address: treasury.address,
+            abi: treasury.abi,
+            functionName: "isOwner",
+            args: [eoaAddress]
+        }) as boolean;
     });
 
-    console.log(`Sending batch of ${setupTxs.length} transactions...`);
-    const uoResponse = await smartAccountClient.sendUserOperation({
-        uo: setupTxs.map(tx => ({
-            target: tx.to,
-            data: tx.data
-        }))
-    });
-    
-    const batchTxHash = await waitForUserOp(uoResponse.hash);
-    await publicClient.waitForTransactionReceipt({ hash: batchTxHash });
-    console.log("Batch setup complete!");
+    if (setupTxs.length > 0) {
+        console.log(`Sending batch of ${setupTxs.length} transactions...`);
+        const uoResponse = await smartAccountClient.sendUserOperation({
+            uo: setupTxs.map(tx => ({
+                target: tx.to,
+                data: tx.data
+            }))
+        });
+
+        const batchTxHash = await waitForUserOp(uoResponse.hash);
+        await publicClient.waitForTransactionReceipt({ hash: batchTxHash });
+        console.log("Batch setup complete!");
+    } else {
+        console.log("Setup already complete. No transactions sent.");
+    }
 
     // --- Save Deployment Artifacts ---
     const chainId = await publicClient.getChainId();
