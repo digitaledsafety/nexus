@@ -24,6 +24,7 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
         address seller;
         uint256 price;
         uint256 amount;
+        address privateBuyer;
     }
 
     // Mapping from NFT contract -> Token ID -> Buyer -> Offer
@@ -43,7 +44,7 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
     event OfferCanceled(address indexed nftContract, uint256 indexed tokenId, address indexed buyer);
     event OfferUpdated(address indexed nftContract, uint256 indexed tokenId, address indexed buyer, uint256 newPrice, uint256 newAmount, uint256 newExpiry);
     event OfferRejected(address indexed nftContract, uint256 indexed tokenId, address indexed buyer, address seller);
-    event ListingCreated(address indexed nftContract, uint256 indexed tokenId, address indexed seller, uint256 price, uint256 amount);
+    event ListingCreated(address indexed nftContract, uint256 indexed tokenId, address indexed seller, uint256 price, uint256 amount, address privateBuyer);
     event ListingCanceled(address indexed nftContract, uint256 indexed tokenId, address indexed seller);
     event ListingBought(address indexed nftContract, uint256 indexed tokenId, address indexed buyer, address seller, uint256 price, uint256 amount);
     event FeeRecipientUpdated(address indexed newRecipient);
@@ -295,6 +296,22 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
      * @param price Total price for the listing in payment tokens
      */
     function createListing(address nftContract, uint256 tokenId, uint256 amount, uint256 price) external {
+        _createListing(nftContract, tokenId, amount, price, address(0));
+    }
+
+    /**
+     * @notice Create a private fixed-price listing for your NFT
+     * @param nftContract Address of the NFT contract
+     * @param tokenId ID of the token being listed
+     * @param amount Number of tokens to sell
+     * @param price Total price for the listing in payment tokens
+     * @param privateBuyer Address of the only buyer allowed to purchase
+     */
+    function createListing(address nftContract, uint256 tokenId, uint256 amount, uint256 price, address privateBuyer) external {
+        _createListing(nftContract, tokenId, amount, price, privateBuyer);
+    }
+
+    function _createListing(address nftContract, uint256 tokenId, uint256 amount, uint256 price, address privateBuyer) internal {
         require(price > 0, "Price must be greater than 0");
         require(amount > 0, "Amount must be greater than 0");
 
@@ -310,10 +327,11 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
         listings[nftContract][tokenId][msg.sender] = Listing({
             seller: msg.sender,
             price: price,
-            amount: amount
+            amount: amount,
+            privateBuyer: privateBuyer
         });
 
-        emit ListingCreated(nftContract, tokenId, msg.sender, price, amount);
+        emit ListingCreated(nftContract, tokenId, msg.sender, price, amount, privateBuyer);
     }
 
     /**
@@ -323,6 +341,31 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
         require(listings[nftContract][tokenId][msg.sender].price > 0, "Listing does not exist");
         delete listings[nftContract][tokenId][msg.sender];
         emit ListingCanceled(nftContract, tokenId, msg.sender);
+    }
+
+    /**
+     * @notice Batch create multiple fixed-price listings
+     */
+    function batchCreateListings(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256[] calldata amounts, uint256[] calldata prices) external {
+        require(nftContracts.length == tokenIds.length && tokenIds.length == amounts.length && amounts.length == prices.length, "Mismatched arrays");
+        for (uint256 i = 0; i < nftContracts.length; ) {
+            _createListing(nftContracts[i], tokenIds[i], amounts[i], prices[i], address(0));
+            unchecked { i++; }
+        }
+    }
+
+    /**
+     * @notice Batch cancel multiple listings
+     */
+    function batchCancelListings(address[] calldata nftContracts, uint256[] calldata tokenIds) external {
+        require(nftContracts.length == tokenIds.length, "Mismatched arrays");
+        for (uint256 i = 0; i < nftContracts.length; ) {
+            if (listings[nftContracts[i]][tokenIds[i]][msg.sender].price > 0) {
+                delete listings[nftContracts[i]][tokenIds[i]][msg.sender];
+                emit ListingCanceled(nftContracts[i], tokenIds[i], msg.sender);
+            }
+            unchecked { i++; }
+        }
     }
 
     /**
@@ -349,6 +392,7 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
     function _buyFromListing(address nftContract, uint256 tokenId, address seller) internal {
         Listing memory listing = listings[nftContract][tokenId][seller];
         require(listing.price > 0, "Listing does not exist");
+        require(listing.privateBuyer == address(0) || listing.privateBuyer == msg.sender, "Listing is private");
 
         // Transfer payment from buyer to contract
         paymentToken.safeTransferFrom(msg.sender, address(this), listing.price);
@@ -405,6 +449,21 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
      * @param buyer The address of the buyer whose offer is being rejected
      */
     function rejectOffer(address nftContract, uint256 tokenId, address buyer) external nonReentrant {
+        _rejectOffer(nftContract, tokenId, buyer);
+    }
+
+    /**
+     * @notice Batch reject multiple offers
+     */
+    function batchRejectOffers(address[] calldata nftContracts, uint256[] calldata tokenIds, address[] calldata buyers) external nonReentrant {
+        require(nftContracts.length == tokenIds.length && tokenIds.length == buyers.length, "Mismatched arrays");
+        for (uint256 i = 0; i < nftContracts.length; ) {
+            _rejectOffer(nftContracts[i], tokenIds[i], buyers[i]);
+            unchecked { i++; }
+        }
+    }
+
+    function _rejectOffer(address nftContract, uint256 tokenId, address buyer) internal {
         Offer memory offer = offers[nftContract][tokenId][buyer];
         require(offer.price > 0, "No valid offer exists");
 

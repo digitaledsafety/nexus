@@ -157,38 +157,145 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     }
 
     /**
+     * @dev Manually update the recorded USD value of a donation record.
+     * Useful for correcting errors if the price feed failed during minting.
+     */
+    function updateUsdValue(uint256 tokenId, uint256 usdValue) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _requireOwned(tokenId);
+        taxRegistry[tokenId].usdValue = usdValue;
+    }
+
+    /**
+     * @dev Batch top up multiple NFTs to keep them glowing.
+     */
+    function batchTopUp(uint256[] calldata tokenIds) external payable nonReentrant {
+        uint256 count = tokenIds.length;
+        require(count > 0, "No token IDs provided");
+
+        uint256 usdValuePerNft = _getUsdValue(msg.value / count);
+        require(usdValuePerNft >= 1e8, "Each top-up requires $1.00 USD");
+
+        for (uint256 i = 0; i < count; i++) {
+            _requireOwned(tokenIds[i]);
+            lastTopUpTimestamp[tokenIds[i]] = block.timestamp;
+        }
+
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Transfer to treasury failed");
+
+        emit TopUp(0, msg.sender, msg.value); // Use 0 as placeholder for batch
+    }
+
+    /**
+     * @dev Batch top up multiple NFTs using BRAG tokens.
+     */
+    function batchTopUpWithBrag(uint256[] calldata tokenIds) external nonReentrant {
+        uint256 count = tokenIds.length;
+        require(count > 0, "No token IDs provided");
+        require(address(bragToken) != address(0), "BRAG token not set");
+
+        uint256 bragAmountPerNft = 1_000_000 * 10**18;
+        uint256 totalBrag = bragAmountPerNft * count;
+
+        require(bragToken.transferFrom(msg.sender, treasury, totalBrag), "BRAG transfer failed");
+
+        for (uint256 i = 0; i < count; i++) {
+            _requireOwned(tokenIds[i]);
+            lastTopUpTimestamp[tokenIds[i]] = block.timestamp;
+        }
+
+        emit TopUp(0, msg.sender, totalBrag); // Use 0 as placeholder for batch
+    }
+
+    /**
      * @dev Mint a new BragNFT by donating ETH.
      */
     function donate(string calldata message, string calldata tokenURI_) external payable nonReentrant {
-        _donate(msg.sender, message, tokenURI_, false);
+        _donateInternal(msg.sender, message, tokenURI_, false, msg.value);
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Transfer to treasury failed");
+    }
+
+    /**
+     * @dev Mint multiple BragNFTs for specific recipients in a single transaction.
+     */
+    function batchDonateTo(address[] calldata recipients, string[] calldata messages, string[] calldata medias, bool[] calldata onChains) external payable nonReentrant {
+        uint256 count = recipients.length;
+        require(count > 0, "No donations provided");
+        require(count == messages.length && count == medias.length && count == onChains.length, "Mismatched arrays");
+
+        uint256 perNftDonation = msg.value / count;
+        uint256 remainder = msg.value % count;
+
+        for (uint256 i = 0; i < count; i++) {
+            uint256 donationValue = perNftDonation;
+            if (i == count - 1) {
+                donationValue += remainder;
+            }
+            _donateInternal(recipients[i], messages[i], medias[i], onChains[i], donationValue);
+        }
+
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Transfer to treasury failed");
+    }
+
+    /**
+     * @dev Mint multiple BragNFTs in a single transaction.
+     */
+    function batchDonate(string[] calldata messages, string[] calldata medias, bool[] calldata onChains) external payable nonReentrant {
+        uint256 count = messages.length;
+        require(count > 0, "No donations provided");
+        require(count == medias.length && count == onChains.length, "Mismatched arrays");
+
+        uint256 perNftDonation = msg.value / count;
+        uint256 remainder = msg.value % count;
+
+        for (uint256 i = 0; i < count; i++) {
+            uint256 donationValue = perNftDonation;
+            if (i == count - 1) {
+                donationValue += remainder;
+            }
+            _donateInternal(msg.sender, messages[i], medias[i], onChains[i], donationValue);
+        }
+
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Transfer to treasury failed");
     }
 
     /**
      * @dev Mint a new BragNFT by donating ETH with optional on-chain media.
      */
     function donate(string calldata message, string calldata media, bool onChain) external payable nonReentrant {
-        _donate(msg.sender, message, media, onChain);
+        _donateInternal(msg.sender, message, media, onChain, msg.value);
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Transfer to treasury failed");
     }
 
     /**
      * @dev Mint a new BragNFT by donating ETH to a specific recipient.
      */
     function donateTo(address recipient, string calldata message, string calldata tokenURI_) external payable nonReentrant {
-        _donate(recipient, message, tokenURI_, false);
+        _donateInternal(recipient, message, tokenURI_, false, msg.value);
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Transfer to treasury failed");
     }
 
     /**
      * @dev Mint a new BragNFT by donating ETH to a recipient with optional on-chain media.
      */
     function donateTo(address recipient, string calldata message, string calldata media, bool onChain) external payable nonReentrant {
-        _donate(recipient, message, media, onChain);
+        _donateInternal(recipient, message, media, onChain, msg.value);
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Transfer to treasury failed");
     }
 
     /**
      * @dev Fallback to handle raw ETH transfers.
      */
     receive() external payable nonReentrant {
-        _donate(msg.sender, "Direct donation", "", false);
+        _donateInternal(msg.sender, "Direct donation", "", false, msg.value);
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Transfer to treasury failed");
     }
 
     function _getUsdValue(uint256 ethAmount) internal returns (uint256) {
@@ -208,14 +315,14 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     /**
      * @dev Internal donation logic. Records a permanent tax record and mints the NFT.
      */
-    function _donate(address recipient, string memory message, string memory media, bool onChain) internal {
-        require(msg.value >= minimumDonation, "Donation below minimum");
+    function _donateInternal(address recipient, string memory message, string memory media, bool onChain, uint256 donationValue) internal {
+        require(donationValue >= minimumDonation, "Donation below minimum");
         require(nextTokenId < maxSupply, "Max supply reached");
 
         uint256 nftTokenId = nextTokenId++;
 
         // 1. Get USD Value from Chainlink
-        uint256 usdValue = _getUsdValue(msg.value);
+        uint256 usdValue = _getUsdValue(donationValue);
 
         // 2. Create Permanent Record (Effect)
         taxRegistry[nftTokenId] = PermanentRecord({
@@ -233,7 +340,8 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             _setTokenURI(nftTokenId, media);
         }
 
-        // 4. Mint the transferable BragNFT
+        // 4. Mint the transferable BragNFT and initialize glowing state
+        lastTopUpTimestamp[nftTokenId] = block.timestamp;
         _safeMint(recipient, nftTokenId);
 
         // 5. Mint Brag Tokens (1,000,000 per USD)
@@ -241,11 +349,9 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             bragToken.mint(msg.sender, usdValue * 10**16);
         }
 
-        // 6. Transfer to treasury
-        (bool success, ) = treasury.call{value: msg.value}("");
-        require(success, "Transfer to treasury failed");
+        // 6. Transfer to treasury handled by caller or separately for batch
 
-        emit Donated(msg.sender, msg.value, usdValue, nftTokenId, message);
+        emit Donated(msg.sender, donationValue, usdValue, nftTokenId, message);
     }
 
     /**

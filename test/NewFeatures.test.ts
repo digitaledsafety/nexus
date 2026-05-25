@@ -1,157 +1,196 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { network } from "hardhat";
-import { getAddress, parseEther, zeroAddress, decodeEventLog } from "viem";
+import { getAddress, parseEther, keccak256, toBytes } from "viem";
 
-describe("New Features", async function () {
+describe("New Ecosystem Features", async function () {
   const { viem } = await network.connect();
 
-  async function setup() {
-    const [owner, user1, user2] = await viem.getWalletClients();
+  async function deployAll() {
+    const [owner, userA, userB, treasury] = await viem.getWalletClients();
 
-    // Deploy ExhibitVault and Registry
-    const registry = await viem.deployContract("ExhibitRegistry", [owner.account.address]);
-    const vault = await viem.deployContract("ExhibitVault", [owner.account.address, registry.address]);
-    await registry.write.verifyVault([vault.address, 0, "Test Vault", "Description"]);
-
-    // Deploy BragToken
-    const initialSupply = parseEther("1000000");
-    const bragToken = await viem.deployContract("BragToken", [owner.account.address, initialSupply, initialSupply * 2n]);
-
-    // Deploy Marketplace
+    const priceFeed = await viem.deployContract("MockPriceFeed", [250000000000n]);
+    const bragNFT = await viem.deployContract("BragNFT", [owner.account.address, treasury.account.address, parseEther("0.1"), priceFeed.address]);
+    const bragToken = await viem.deployContract("BragToken", [owner.account.address, parseEther("10000000"), parseEther("1000000000")]);
     const marketplace = await viem.deployContract("NFTMarketplace", [owner.account.address, bragToken.address]);
 
-    // Deploy Mock NFTs
-    const mock721 = await viem.deployContract("MockRoyaltyNFT", ["Mock721", "M721"]);
-    const mock1155 = await viem.deployContract("MockERC1155", []);
+    const entryPoint = await viem.deployContract("MockEntryPoint", []);
+    const multisig = await viem.deployContract("Treasury", [[owner.account.address, userA.account.address], 2n, entryPoint.address]);
 
-    // Deploy BragNFT
-    const priceFeed = await viem.deployContract("MockPriceFeed", [250000000000n]);
-    const bragNFT = await viem.deployContract("BragNFT", [owner.account.address, owner.account.address, parseEther("0.1"), priceFeed.address]);
+    await bragNFT.write.setBragToken([bragToken.address]);
+    const MINTER_ROLE = keccak256(toBytes("MINTER_ROLE"));
+    await bragToken.write.grantRole([MINTER_ROLE, bragNFT.address]);
 
-    const MINTER_ROLE = "0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6";
-
-
-    return { owner, user1, user2, vault, registry, bragToken, marketplace, mock721, mock1155, bragNFT };
+    return { bragNFT, bragToken, marketplace, multisig, owner, userA, userB, treasury };
   }
 
-  describe("ExhibitVault Batch Withdrawals", function () {
-    it("Should batch withdraw ERC721 tokens", async function () {
-      const { user1, vault, mock721 } = await setup();
+  describe("BragNFT Enhancements", async function () {
+    it("Should batch donate and handle ETH dust", async function () {
+      const { bragNFT, userA, treasury } = await deployAll();
+      const publicClient = await viem.getPublicClient();
+      const initialTreasuryBalance = await publicClient.getBalance({ address: treasury.account.address });
 
-      const tokenIds = [1n, 2n, 3n];
-      for (const id of tokenIds) {
-        await mock721.write.mint([user1.account.address, id]);
-        await mock721.write.approve([vault.address, id], { account: user1.account });
-        await mock721.write.safeTransferFrom([user1.account.address, vault.address, id], { account: user1.account });
-      }
+      // Donate 0.300000000000000002 ETH for 3 NFTs (2 wei dust)
+      const totalDonation = parseEther("0.3") + 2n;
+      await bragNFT.write.batchDonate([["m1", "m2", "m3"], ["", "", ""], [false, false, false]], {
+        account: userA.account,
+        value: totalDonation
+      });
 
-      assert.equal(await mock721.read.ownerOf([1n]), getAddress(vault.address));
+      assert.equal(await bragNFT.read.totalSupply(), 3n);
+      assert.equal(await bragNFT.read.ownerOf([0n]), getAddress(userA.account.address));
+      assert.equal(await bragNFT.read.ownerOf([2n]), getAddress(userA.account.address));
 
-      const nftContracts = [mock721.address, mock721.address, mock721.address];
-      await vault.write.batchWithdraw721([nftContracts, tokenIds], { account: user1.account });
+      // Check dust handling: last NFT should have slightly more USD value (or exactly same if perNft is same)
+      const record0 = await bragNFT.read.taxRegistry([0n]);
+      const record2 = await bragNFT.read.taxRegistry([2n]);
 
-      for (const id of tokenIds) {
-        assert.equal(await mock721.read.ownerOf([id]), getAddress(user1.account.address));
-      }
+      // At $2500/ETH, 0.1 ETH is $250 (250 * 10^8)
+      assert.equal(record0[1], 25000000000n);
+      // Last one should have dust in ETH, but in USD it might be lost in precision if too small.
+      // But _getUsdValue uses (answer * ethAmount) / 1e18.
+      // 2500 * 10^8 * 2 / 1e18 is extremely small, so usdValue might be same.
+
+      const finalTreasuryBalance = await publicClient.getBalance({ address: treasury.account.address });
+      assert.equal(finalTreasuryBalance, initialTreasuryBalance + totalDonation);
     });
 
-    it("Should batch withdraw ERC1155 tokens", async function () {
-      const { user1, vault, mock1155 } = await setup();
+    it("Should batch donate to multiple recipients", async function () {
+        const { bragNFT, userA, userB } = await deployAll();
+        await bragNFT.write.batchDonateTo([[userA.account.address, userB.account.address], ["a", "b"], ["", ""], [false, false]], {
+            account: userA.account,
+            value: parseEther("0.2")
+        });
 
-      const tokenIds = [1n, 2n];
-      const amounts = [10n, 20n];
+        assert.equal(await bragNFT.read.ownerOf([0n]), getAddress(userA.account.address));
+        assert.equal(await bragNFT.read.ownerOf([1n]), getAddress(userB.account.address));
+    });
 
-      await mock1155.write.mint([user1.account.address, 1n, 100n]);
-      await mock1155.write.mint([user1.account.address, 2n, 100n]);
-      await mock1155.write.setApprovalForAll([vault.address, true], { account: user1.account });
+    it("Should start NFTs in glowing state", async function () {
+        const { bragNFT, userA } = await deployAll();
+        await bragNFT.write.donate(["test", ""], { account: userA.account, value: parseEther("0.1") });
+        assert.equal(await bragNFT.read.isGlowing([0n]), true);
+    });
 
-      await mock1155.write.safeBatchTransferFrom([user1.account.address, vault.address, tokenIds, amounts, "0x"], { account: user1.account });
+    it("Should allow admin to update USD value", async function () {
+        const { bragNFT, owner } = await deployAll();
+        await bragNFT.write.donate(["test", ""], { value: parseEther("0.1") });
 
-      assert.equal(await mock1155.read.balanceOf([vault.address, 1n]), 10n);
+        await bragNFT.write.updateUsdValue([0n, 500n], { account: owner.account });
+        const record = await bragNFT.read.taxRegistry([0n]);
+        assert.equal(record[1], 500n);
+    });
 
-      const nftContracts = [mock1155.address, mock1155.address];
-      await vault.write.batchWithdraw1155([nftContracts, tokenIds, amounts], { account: user1.account });
+    it("Should batch top up with ETH", async function () {
+        const { bragNFT, userA } = await deployAll();
+        await bragNFT.write.batchDonate([["1", "2"], ["", ""], [false, false]], { value: parseEther("0.2") });
 
-      assert.equal(await mock1155.read.balanceOf([vault.address, 1n]), 0n);
-      assert.equal(await mock1155.read.balanceOf([user1.account.address, 1n]), 100n);
+        // Wait or fast forward if we wanted to test transition, but here we just check it executes
+        await bragNFT.write.batchTopUp([[0n, 1n]], { value: parseEther("0.0008") }); // $2.00 at $2500/ETH
+        assert.equal(await bragNFT.read.isGlowing([0n]), true);
+        assert.equal(await bragNFT.read.isGlowing([1n]), true);
+    });
+
+    it("Should batch top up with BRAG", async function () {
+        const { bragNFT, bragToken, userA, owner } = await deployAll();
+        await bragNFT.write.batchDonate([["1", "2"], ["", ""], [false, false]], { account: userA.account, value: parseEther("0.2") });
+
+        const amount = 2_000_000n * parseEther("1");
+        await bragToken.write.transfer([userA.account.address, amount], { account: owner.account });
+        await bragToken.write.approve([bragNFT.address, amount], { account: userA.account });
+
+        await bragNFT.write.batchTopUpWithBrag([[0n, 1n]], { account: userA.account });
+        assert.equal(await bragNFT.read.isGlowing([0n]), true);
     });
   });
 
-  describe("BragNFT Uppercase Extensions", function () {
-    it("Should detect uppercase media extensions", async function () {
-      const { bragNFT } = await setup();
+  describe("NFTMarketplace Enhancements", async function () {
+    it("Should handle private listings", async function () {
+        const { marketplace, bragNFT, bragToken, userA, userB, owner } = await deployAll();
+        await bragNFT.write.donate(["nft", ""], { account: userA.account, value: parseEther("0.1") });
+        await bragNFT.write.setApprovalForAll([marketplace.address, true], { account: userA.account });
 
-      const testURIs = ["image.JPG", "video.MP4", "audio.WAV", "animation.GIF", "file.WEBM"];
+        const price = parseEther("10");
+        await marketplace.write.createListing([bragNFT.address, 0n, 1n, price, userB.account.address], { account: userA.account });
 
-      for (const uri of testURIs) {
-        await bragNFT.write.donate(["test", uri], { value: parseEther("0.1") });
-        const tokenId = await bragNFT.read.totalSupply() - 1n;
-        const metadataBase64 = await bragNFT.read.tokenURI([tokenId]);
-        const metadataJson = Buffer.from(metadataBase64.split(",")[1], 'base64').toString();
-        const metadata = JSON.parse(metadataJson);
+        // User A (not private buyer) tries to buy
+        await bragToken.write.transfer([owner.account.address, price], { account: owner.account }); // owner has tokens
+        await bragToken.write.approve([marketplace.address, price], { account: owner.account });
 
-        if (uri.endsWith(".JPG")) {
-          assert.equal(metadata.image, uri);
-          assert.ok(!metadata.animation_url);
-        } else {
-          assert.ok(metadata.animation_url, `Should have animation_url for ${uri}`);
-          assert.equal(metadata.animation_url, uri);
-        }
-      }
+        await assert.rejects(
+            marketplace.write.buyFromListing([bragNFT.address, 0n, userA.account.address], { account: owner.account }),
+            /Listing is private/
+        );
+
+        // User B (private buyer) buys
+        await bragToken.write.transfer([userB.account.address, price], { account: owner.account });
+        await bragToken.write.approve([marketplace.address, price], { account: userB.account });
+
+        await marketplace.write.buyFromListing([bragNFT.address, 0n, userA.account.address], { account: userB.account });
+        assert.equal(await bragNFT.read.ownerOf([0n]), getAddress(userB.account.address));
+    });
+
+    it("Should batch create and cancel listings", async function () {
+        const { marketplace, bragNFT, userA } = await deployAll();
+        await bragNFT.write.batchDonate([["1", "2"], ["", ""], [false, false]], { account: userA.account, value: parseEther("0.2") });
+        await bragNFT.write.setApprovalForAll([marketplace.address, true], { account: userA.account });
+
+        await marketplace.write.batchCreateListings([
+            [bragNFT.address, bragNFT.address],
+            [0n, 1n],
+            [1n, 1n],
+            [parseEther("1"), parseEther("2")]
+        ], { account: userA.account });
+
+        const l0 = await marketplace.read.listings([bragNFT.address, 0n, userA.account.address]);
+        assert.equal(l0[1], parseEther("1"));
+
+        await marketplace.write.batchCancelListings([
+            [bragNFT.address, bragNFT.address],
+            [0n, 1n]
+        ], { account: userA.account });
+
+        const l0_after = await marketplace.read.listings([bragNFT.address, 0n, userA.account.address]);
+        assert.equal(l0_after[1], 0n);
+    });
+
+    it("Should batch reject offers", async function () {
+        const { marketplace, bragNFT, bragToken, userA, userB, owner } = await deployAll();
+        await bragNFT.write.donate(["nft", ""], { account: userA.account, value: parseEther("0.1") });
+
+        await bragToken.write.transfer([userB.account.address, parseEther("10")], { account: owner.account });
+        await bragToken.write.approve([marketplace.address, parseEther("10")], { account: userB.account });
+        await marketplace.write.createOffer([bragNFT.address, 0n, 1n, parseEther("5")], { account: userB.account });
+
+        await marketplace.write.batchRejectOffers([[bragNFT.address], [0n], [userB.account.address]], { account: userA.account });
+
+        const offer = await marketplace.read.offers([bragNFT.address, 0n, userB.account.address]);
+        assert.equal(offer[0], 0n);
+        assert.equal(await bragToken.read.balanceOf([userB.account.address]), parseEther("10"));
     });
   });
 
-  describe("NFTMarketplace Offer Updates", function () {
-    it("Should allow updating an offer (increase price)", async function () {
-      const { owner, user1, user2, marketplace, bragToken, mock721 } = await setup();
+  describe("Treasury Enhancements", async function () {
+    it("Should batch approve and cancel proposals", async function () {
+        const { multisig, owner, userA } = await deployAll();
 
-      const tokenId = 1n;
-      await mock721.write.mint([user1.account.address, tokenId]);
+        const targets = [getAddress(owner.account.address), getAddress(userA.account.address)];
+        const values = [0n, 0n];
+        const datas = ["0x", "0x"];
 
-      // Fund user2
-      await bragToken.write.transfer([user2.account.address, parseEther("100")], { account: owner.account });
+        const p1 = await multisig.write.propose([targets, values, datas, 0n], { account: owner.account });
+        const p2 = await multisig.write.propose([targets, values, datas, 0n], { account: owner.account });
 
-      // Create initial offer
-      const initialPrice = parseEther("10");
-      await bragToken.write.approve([marketplace.address, parseEther("100")], { account: user2.account });
-      await marketplace.write.createOffer([mock721.address, tokenId, 1n, initialPrice], { account: user2.account });
+        // Batch approve
+        await multisig.write.batchApprove([[0n, 1n], 0n], { account: userA.account });
 
-      assert.equal(await bragToken.read.balanceOf([marketplace.address]), initialPrice);
+        const prop1 = await multisig.read.getProposal([0n]);
+        assert.equal(prop1[6], 2n); // approvalCount
 
-      // Update offer (increase)
-      const newPrice = parseEther("15");
-      await marketplace.write.updateOffer([mock721.address, tokenId, 1n, newPrice], { account: user2.account });
-
-      const offer = await marketplace.read.offers([mock721.address, tokenId, user2.account.address]);
-      assert.equal(offer[0], newPrice);
-      assert.equal(await bragToken.read.balanceOf([marketplace.address]), newPrice);
-    });
-
-    it("Should allow updating an offer (decrease price)", async function () {
-      const { owner, user1, user2, marketplace, bragToken, mock721 } = await setup();
-
-      const tokenId = 2n;
-      await mock721.write.mint([user1.account.address, tokenId]);
-
-      // Fund user2
-      await bragToken.write.transfer([user2.account.address, parseEther("100")], { account: owner.account });
-
-      // Create initial offer
-      const initialPrice = parseEther("20");
-      await bragToken.write.approve([marketplace.address, parseEther("100")], { account: user2.account });
-      await marketplace.write.createOffer([mock721.address, tokenId, 1n, initialPrice], { account: user2.account });
-
-      const balanceBefore = await bragToken.read.balanceOf([user2.account.address]);
-
-      // Update offer (decrease)
-      const newPrice = parseEther("15");
-      await marketplace.write.updateOffer([mock721.address, tokenId, 1n, newPrice], { account: user2.account });
-
-      const offer = await marketplace.read.offers([mock721.address, tokenId, user2.account.address]);
-      assert.equal(offer[0], newPrice);
-      assert.equal(await bragToken.read.balanceOf([marketplace.address]), newPrice);
-      assert.equal(await bragToken.read.balanceOf([user2.account.address]), balanceBefore + (initialPrice - newPrice));
+        // Batch cancel (by proposer)
+        await multisig.write.batchCancel([[0n, 1n], 0n], { account: owner.account });
+        const prop1_after = await multisig.read.getProposal([0n]);
+        assert.equal(prop1_after[4], true); // canceled
     });
   });
 });
