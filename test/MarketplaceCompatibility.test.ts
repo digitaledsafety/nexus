@@ -97,7 +97,7 @@ describe("Marketplace Compatibility (ERC721 & ERC1155)", async function () {
     await bragNFT.write.approve([marketplace.address, tokenId], { account: seller.account });
     await assert.rejects(
         marketplace.write.acceptOffer([bragNFT.address, tokenId, buyer.account.address], { account: seller.account }),
-        /ERC721 offer must have amount 1/
+        /ERC721 transfer amount must be 1/
     );
   });
 
