@@ -63,7 +63,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
 
     // Dual-State Registry
     mapping(uint256 => PermanentRecord) public taxRegistry;
-    mapping(uint256 => uint256) public lastTopUpTimestamp;
+    mapping(uint256 => uint256) public glowExpiry;
 
     // Optional on-chain media storage
     mapping(uint256 => string) public onChainMedia;
@@ -154,6 +154,14 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
 
     function setBragToken(address _bragToken) external onlyRole(DEFAULT_ADMIN_ROLE) {
         bragToken = IBragToken(_bragToken);
+    }
+
+    /**
+     * @dev Update on-chain media for a token. Restricted to DEFAULT_ADMIN_ROLE.
+     */
+    function updateOnChainMedia(uint256 tokenId, string calldata media) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _requireOwned(tokenId);
+        onChainMedia[tokenId] = media;
     }
 
     /**
@@ -259,7 +267,11 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
 
         require(usdValue >= 1e8, "Top-up requires $1.00 USD");
 
-        lastTopUpTimestamp[tokenId] = block.timestamp;
+        if (glowExpiry[tokenId] < block.timestamp) {
+            glowExpiry[tokenId] = block.timestamp + 30 days;
+        } else {
+            glowExpiry[tokenId] += 30 days;
+        }
 
         (bool success, ) = treasury.call{value: msg.value}("");
         require(success, "Transfer to treasury failed");
@@ -278,15 +290,20 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         require(address(bragToken) != address(0), "BRAG token not set");
         require(bragToken.transferFrom(msg.sender, treasury, bragAmount), "BRAG transfer failed");
 
-        lastTopUpTimestamp[tokenId] = block.timestamp;
+        if (glowExpiry[tokenId] < block.timestamp) {
+            glowExpiry[tokenId] = block.timestamp + 30 days;
+        } else {
+            glowExpiry[tokenId] += 30 days;
+        }
+
         emit TopUp(tokenId, msg.sender, bragAmount);
     }
 
     /**
-     * @dev Checks if the collectible is currently "glowing" (topped up in last 30 days).
+     * @dev Checks if the collectible is currently "glowing".
      */
     function isGlowing(uint256 tokenId) public view returns (bool) {
-        return block.timestamp <= lastTopUpTimestamp[tokenId] + 30 days;
+        return glowExpiry[tokenId] > 0 && block.timestamp <= glowExpiry[tokenId];
     }
 
     /**
@@ -464,15 +481,12 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             }
             // 'len' is now at the start byte of the truncated character.
             // We should not include this start byte.
-        } else {
-            // The byte at 'maxLen' is a start byte or a single-byte character.
-            // So we can safely include everything from 0 to maxLen - 1.
-            // 'len' is already maxLen.
         }
 
         bytes memory result = new bytes(len);
-        for (uint256 i = 0; i < len; i++) {
+        for (uint256 i = 0; i < len; ) {
             result[i] = strBytes[i];
+            unchecked { i++; }
         }
         return string(result);
     }
@@ -485,19 +499,20 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         uint256 length = inputBytes.length;
         uint256 extraLength = 0;
 
-        for (uint256 i = 0; i < length; i++) {
+        for (uint256 i = 0; i < length; ) {
             if (inputBytes[i] == '&') extraLength += 4; // &amp;
             else if (inputBytes[i] == '<') extraLength += 3; // &lt;
             else if (inputBytes[i] == '>') extraLength += 3; // &gt;
             else if (inputBytes[i] == '"') extraLength += 5; // &quot;
             else if (inputBytes[i] == '\'') extraLength += 5; // &apos;
+            unchecked { i++; }
         }
 
         if (extraLength == 0) return input;
 
         bytes memory outputBytes = new bytes(length + extraLength);
         uint256 j = 0;
-        for (uint256 i = 0; i < length; i++) {
+        for (uint256 i = 0; i < length; ) {
             bytes1 b = inputBytes[i];
             if (b == '&') {
                 outputBytes[j++] = '&'; outputBytes[j++] = 'a'; outputBytes[j++] = 'm'; outputBytes[j++] = 'p'; outputBytes[j++] = ';';
@@ -512,6 +527,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             } else {
                 outputBytes[j++] = b;
             }
+            unchecked { i++; }
         }
         return string(outputBytes);
     }
@@ -524,19 +540,21 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         uint256 length = inputBytes.length;
         uint256 extraLength = 0;
 
-        for (uint256 i = 0; i < length; i++) {
+        for (uint256 i = 0; i < length; ) {
             if (inputBytes[i] == '"' || inputBytes[i] == '\\') {
                 extraLength++;
             } else if (uint8(inputBytes[i]) < 0x20) {
                 extraLength += 5; // \uXXXX
             }
+            unchecked { i++; }
         }
 
         if (extraLength == 0) return input;
 
         bytes memory outputBytes = new bytes(length + extraLength);
         uint256 j = 0;
-        for (uint256 i = 0; i < length; i++) {
+        bytes memory hexAlphabet = "0123456789abcdef";
+        for (uint256 i = 0; i < length; ) {
             uint8 b = uint8(inputBytes[i]);
             if (b == 0x22 || b == 0x5C) { // " or \
                 outputBytes[j++] = '\\';
@@ -546,12 +564,12 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
                 outputBytes[j++] = 'u';
                 outputBytes[j++] = '0';
                 outputBytes[j++] = '0';
-                bytes memory hexAlphabet = "0123456789abcdef";
                 outputBytes[j++] = hexAlphabet[b >> 4];
                 outputBytes[j++] = hexAlphabet[b & 0x0f];
             } else {
                 outputBytes[j++] = bytes1(b);
             }
+            unchecked { i++; }
         }
         return string(outputBytes);
     }
