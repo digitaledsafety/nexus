@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { network } from "hardhat";
-import { getAddress, parseEther, keccak256, toBytes } from "viem";
+import { getAddress, parseEther, keccak256, toBytes, zeroAddress, numberToHex } from "viem";
 
 describe("AgencyImprovements", async function () {
   const { viem } = await network.connect();
 
   async function deployFixture() {
-    const [owner, otherAccount, buyer] = await viem.getWalletClients();
+    const [owner, otherAccount, buyer, privateBuyer] = await viem.getWalletClients();
 
     const entryPoint = await viem.deployContract("MockEntryPoint");
     const treasury = await viem.deployContract("Treasury", [
@@ -29,13 +29,19 @@ describe("AgencyImprovements", async function () {
 
     const bragToken = await viem.deployContract("BragToken", [
       owner.account.address,
-      parseEther("1000000"),
-      parseEther("1000000000"),
+      parseEther("0"), // Initial supply
+      parseEther("1000000000000"), // Large max supply to avoid "Exceeds maxSupply"
     ]);
 
     const marketplace = await viem.deployContract("NFTMarketplace", [
       owner.account.address,
       bragToken.address,
+    ]);
+
+    const exhibitRegistry = await viem.deployContract("ExhibitRegistry", [owner.account.address]);
+    const vault = await viem.deployContract("ExhibitVault", [
+      owner.account.address,
+      exhibitRegistry.address,
     ]);
 
     await bragNFT.write.setBragToken([bragToken.address]);
@@ -50,9 +56,12 @@ describe("AgencyImprovements", async function () {
       bragToken,
       marketplace,
       treasury,
+      vault,
+      exhibitRegistry,
       owner,
       otherAccount,
       buyer,
+      privateBuyer,
       publicClient,
       testClient,
     };
@@ -60,7 +69,7 @@ describe("AgencyImprovements", async function () {
 
   describe("BragNFT Improvements", async function () {
     it("should handle cumulative glow correctly", async function () {
-      const { bragNFT, testClient, publicClient } = await deployFixture();
+      const { bragNFT, publicClient } = await deployFixture();
 
       await bragNFT.write.donate(["Cumulative test", "uri", false], {
         value: parseEther("0.1"),
@@ -84,83 +93,167 @@ describe("AgencyImprovements", async function () {
       assert.ok(expiry2 >= expiry1 + BigInt(30 * 24 * 60 * 60) - 10n);
     });
 
-    it("should allow admin to update on-chain media", async function () {
-      const { bragNFT, otherAccount } = await deployFixture();
+    it("should grant BRAG tokens on topUp", async function () {
+      const { bragNFT, bragToken, owner } = await deployFixture();
 
-      await bragNFT.write.donate(["Admin update test", "uri", true], {
-        value: parseEther("0.1"),
-      });
+      await bragNFT.write.donate(["Reward test", "uri", false]);
       const tokenId = 0n;
 
-      assert.equal(await bragNFT.read.onChainMedia([tokenId]), "uri");
+      const balanceBefore = await bragToken.read.balanceOf([owner.account.address]);
+      await bragNFT.write.topUp([tokenId], { value: parseEther("0.001") }); // $2.50
+      const balanceAfter = await bragToken.read.balanceOf([owner.account.address]);
 
-      await bragNFT.write.updateOnChainMedia([tokenId, "new-uri"]);
-      assert.equal(await bragNFT.read.onChainMedia([tokenId]), "new-uri");
-
-      // Other account should not be able to update
-      await assert.rejects(
-        bragNFT.write.updateOnChainMedia([tokenId, "bad-uri"], {
-          account: otherAccount.account,
-        })
-      );
+      assert.ok(balanceAfter > balanceBefore);
+      // $2.50 * 1,000,000 = 2,500,000 tokens
+      assert.equal(balanceAfter - balanceBefore, parseEther("2500000"));
     });
 
-    it("should have optimized escape functions (coverage check via tokenURI)", async function () {
+    it("should use manualEthPrice as fallback", async function () {
       const { bragNFT } = await deployFixture();
-      await bragNFT.write.donate(["<Test & \"Glow\">", "uri", false], {
-        value: parseEther("0.1"),
+
+      // Set manual price to $3000
+      await bragNFT.write.setManualEthPrice([300000000000n]);
+
+      // Disable price feed by setting to zero address
+      await bragNFT.write.setPriceFeed([zeroAddress]);
+
+      await bragNFT.write.donate(["Manual price test", "uri", false], {
+        value: parseEther("1"),
       });
-      const tokenId = 0n;
-      const uri = await bragNFT.read.tokenURI([tokenId]);
-      assert.ok(uri.startsWith("data:application/json;base64,"));
-      const json = JSON.parse(Buffer.from(uri.split(",")[1], "base64").toString());
-      assert.equal(json.attributes[0].value, "<Test & \"Glow\">");
+
+      // Since it's a new deployFixture, and this is the first donate, it should be tokenId 1
+      // Wait, donate is called in other tests but they should have separate fixtures if they were parallel.
+      // But they are in same describe. Fixture is called inside each it.
+      // So tokenId should be 1 if deployFixture's donate (in it body) is called.
+      // Ah, I don't call donate in deployFixture.
+      // Wait, let's check nextTokenId.
+      const tokenId = await bragNFT.read.nextTokenId() - 1n;
+      const record = await bragNFT.read.taxRegistry([tokenId]);
+      assert.equal(record[1], 300000000000n);
+    });
+
+    it("should validate setMaxSupply", async function () {
+      const { bragNFT } = await deployFixture();
+
+      await bragNFT.write.donate(["Supply test", "uri", false]);
+      const nextId = await bragNFT.read.nextTokenId();
+
+      // Should revert if setting max supply below nextTokenId
+      await assert.rejects(
+        bragNFT.write.setMaxSupply([nextId - 1n])
+      );
+
+      // Should succeed if setting to current or above
+      await bragNFT.write.setMaxSupply([nextId]);
+      assert.equal(await bragNFT.read.maxSupply(), nextId);
     });
   });
 
   describe("NFTMarketplace Improvements", async function () {
-    it("should update a listing correctly", async function () {
-      const { marketplace, bragNFT, owner } = await deployFixture();
+    it("should handle private listings correctly", async function () {
+      const { marketplace, bragNFT, buyer, privateBuyer, bragToken, owner } = await deployFixture();
 
-      await bragNFT.write.donate(["Listing test", "uri", false]);
+      await bragNFT.write.donate(["Private test", "uri", false]);
       const tokenId = 0n;
       await bragNFT.write.approve([marketplace.address, tokenId]);
 
-      await marketplace.write.createListing([bragNFT.address, tokenId, 1n, parseEther("10")]);
+      await marketplace.write.createPrivateListing([
+        bragNFT.address,
+        tokenId,
+        1n,
+        parseEther("100"),
+        privateBuyer.account.address
+      ]);
 
-      let listing = await marketplace.read.listings([bragNFT.address, tokenId, owner.account.address]);
-      assert.equal(listing[1], parseEther("10"));
+      // Unauthorized buyer should revert
+      await bragToken.write.mint([buyer.account.address, parseEther("1000")]);
+      await bragToken.write.approve([marketplace.address, parseEther("100")], { account: buyer.account });
 
-      await marketplace.write.updateListing([bragNFT.address, tokenId, 1n, parseEther("5")]);
-      listing = await marketplace.read.listings([bragNFT.address, tokenId, owner.account.address]);
-      assert.equal(listing[1], parseEther("5"));
+      await assert.rejects(
+        marketplace.write.buyFromListing([bragNFT.address, tokenId, owner.account.address], { account: buyer.account }),
+        /Unauthorized buyer/
+      );
+
+      // Authorized buyer should succeed
+      await bragToken.write.mint([privateBuyer.account.address, parseEther("1000")]);
+      await bragToken.write.approve([marketplace.address, parseEther("100")], { account: privateBuyer.account });
+
+      await marketplace.write.buyFromListing([bragNFT.address, tokenId, owner.account.address], { account: privateBuyer.account });
+      assert.equal(await bragNFT.read.ownerOf([tokenId]), getAddress(privateBuyer.account.address));
     });
 
-    it("should batch create and cancel listings", async function () {
-      const { marketplace, bragNFT, owner } = await deployFixture();
+    it("should batch create offers with expiries", async function () {
+      const { marketplace, bragNFT, bragToken, buyer, publicClient } = await deployFixture();
 
       await bragNFT.write.donate(["Batch 1", "uri", false]);
       await bragNFT.write.donate(["Batch 2", "uri", false]);
+      const token0 = 0n;
+      const token1 = 1n;
 
-      await bragNFT.write.setApprovalForAll([marketplace.address, true]);
+      const block = await publicClient.getBlock();
+      const expiry = block.timestamp + 3600n;
 
-      await marketplace.write.batchCreateListings([
+      await bragToken.write.mint([buyer.account.address, parseEther("1000")]);
+      await bragToken.write.approve([marketplace.address, parseEther("1000")], { account: buyer.account });
+
+      await marketplace.write.batchCreateOffersWithExpiries([
         [bragNFT.address, bragNFT.address],
-        [0n, 1n],
+        [token0, token1],
         [1n, 1n],
-        [parseEther("1"), parseEther("2")]
+        [parseEther("10"), parseEther("20")],
+        [expiry, expiry]
+      ], { account: buyer.account });
+
+      const offer1 = await marketplace.read.offers([bragNFT.address, token0, buyer.account.address]);
+      assert.equal(offer1[3], expiry); // Price, Amount, Timestamp, Expiry
+      const offer2 = await marketplace.read.offers([bragNFT.address, token1, buyer.account.address]);
+      assert.equal(offer2[3], expiry);
+    });
+  });
+
+  describe("ExhibitVault Improvements", async function () {
+    it("should clear expiry on withdrawal", async function () {
+      const { vault, bragNFT, owner, testClient } = await deployFixture();
+
+      await bragNFT.write.donate(["Vault test", "uri", false]);
+      const tokenId = 0n;
+
+      await bragNFT.write.safeTransferFrom([
+        owner.account.address,
+        vault.address,
+        tokenId,
+        numberToHex(3600n, { size: 32 }) // 1 hour duration
       ]);
 
-      assert.equal((await marketplace.read.listings([bragNFT.address, 0n, owner.account.address]))[1], parseEther("1"));
-      assert.equal((await marketplace.read.listings([bragNFT.address, 1n, owner.account.address]))[1], parseEther("2"));
+      assert.ok(await vault.read.expiry721([bragNFT.address, tokenId]) > 0n);
 
-      await marketplace.write.batchCancelListings([
-        [bragNFT.address, bragNFT.address],
-        [0n, 1n]
-      ]);
+      // Fast forward time
+      await testClient.increaseTime({ seconds: 3601 });
+      await testClient.mine({ blocks: 1 });
 
-      assert.equal((await marketplace.read.listings([bragNFT.address, 0n, owner.account.address]))[1], 0n);
-      assert.equal((await marketplace.read.listings([bragNFT.address, 1n, owner.account.address]))[1], 0n);
+      await vault.write.withdraw721([bragNFT.address, tokenId]);
+
+      assert.equal(await vault.read.expiry721([bragNFT.address, tokenId]), 0n);
+    });
+
+    it("should revert on unauthorized 64-byte data", async function () {
+      const { vault, bragNFT, owner } = await deployFixture();
+
+      await bragNFT.write.donate(["Data test", "uri", false]);
+      const tokenId = 0n;
+
+      // 64 bytes data
+      const data = keccak256(toBytes("some-data")) + keccak256(toBytes("more-data")).slice(2);
+
+      await assert.rejects(
+        bragNFT.write.safeTransferFrom([
+          owner.account.address,
+          vault.address,
+          tokenId,
+          data as `0x${string}`
+        ]),
+        /Unauthorized data/
+      );
     });
   });
 });

@@ -52,6 +52,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
 
     uint256 public nextTokenId;
     uint256 public maxSupply;
+    uint256 public manualEthPrice; // 8 decimals
     address public treasury;
     address public royaltyRecipient;
     uint256 public minimumDonation;
@@ -71,6 +72,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     event Donated(address indexed donor, uint256 amount, uint256 usdValue, uint256 tokenId, string message);
     event TopUp(uint256 indexed tokenId, address indexed donor, uint256 amount);
     event PriceFeedFailed();
+    event ManualEthPriceUpdated(uint256 newPrice);
 
     constructor(address _initialOwner, address _treasury, uint256 _minimumDonation, address _priceFeed)
         ERC721("BragNFT", "BRAGNFT")
@@ -88,6 +90,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     }
 
     function setMaxSupply(uint256 _maxSupply) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_maxSupply >= nextTokenId, "Cannot set max supply below total supply");
         maxSupply = _maxSupply;
     }
 
@@ -145,6 +148,11 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
 
     function setPriceFeed(address _priceFeed) external onlyRole(DEFAULT_ADMIN_ROLE) {
         priceFeed = AggregatorV3Interface(_priceFeed);
+    }
+
+    function setManualEthPrice(uint256 _price) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        manualEthPrice = _price;
+        emit ManualEthPriceUpdated(_price);
     }
 
     function setTaxStatus(uint256 tokenId, TaxStatus status) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -210,6 +218,12 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
                 emit PriceFeedFailed();
             }
         }
+
+        // Fallback to manual price if oracle fails or is not set
+        if (usdValue == 0 && manualEthPrice > 0) {
+            usdValue = (manualEthPrice * ethAmount) / 1e18;
+        }
+
         return usdValue;
     }
 
@@ -271,6 +285,11 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             glowExpiry[tokenId] = block.timestamp + 30 days;
         } else {
             glowExpiry[tokenId] += 30 days;
+        }
+
+        // Grant Brag Tokens (1,000,000 per USD)
+        if (address(bragToken) != address(0) && usdValue > 0) {
+            bragToken.mint(msg.sender, usdValue * 10**16);
         }
 
         (bool success, ) = treasury.call{value: msg.value}("");
