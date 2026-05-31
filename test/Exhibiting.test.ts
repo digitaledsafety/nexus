@@ -216,8 +216,8 @@ describe("Exhibiting System", async function () {
     await bragNFT.write.safeTransferFrom([user.account.address, vault1.address, tokenId, "0x"], { account: user.account });
 
     const expiry2 = await vault1.read.expiry721([bragNFT.address, tokenId]);
-    // Should still be original expiry1 because 0 < expiry1
-    assert.equal(expiry2, expiry1);
+    // Should be 0 because we now clear expiry on withdrawal
+    assert.equal(expiry2, 0n);
 
     // Deposit again with a NEW, longer duration
     const duration3 = 7200n;
