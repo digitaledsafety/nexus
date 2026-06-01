@@ -202,12 +202,21 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     function _getUsdValue(uint256 ethAmount) internal returns (uint256) {
         uint256 usdValue = 0;
         if (address(priceFeed) != address(0)) {
-            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
-                if (answer > 0) {
-                    usdValue = (uint256(answer) * ethAmount) / 1e18;
-                }
+            int256 answer;
+            uint256 updatedAt;
+            bool success = false;
+            try priceFeed.latestRoundData() returns (uint80, int256 _answer, uint256, uint256 _updatedAt, uint80) {
+                answer = _answer;
+                updatedAt = _updatedAt;
+                success = true;
             } catch {
                 emit PriceFeedFailed();
+            }
+
+            if (success) {
+                require(answer > 0, "Invalid price");
+                require(block.timestamp <= updatedAt + 25 hours, "Stale price feed");
+                usdValue = (uint256(answer) * ethAmount) / 1e18;
             }
         }
         return usdValue;
