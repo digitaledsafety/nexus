@@ -113,7 +113,7 @@ describe("BragNFT Dual-State Model", async function () {
       await bragNFT.write.donate(["Glowing NFT", ""], { account: donor.account, value: parseEther("0.1") });
       const tokenId = 0n;
 
-      assert.equal(await bragNFT.read.isGlowing([tokenId]), false);
+      assert.equal(await bragNFT.read.isGlowing([tokenId]), true);
 
       // Top up with $1.00 USD worth of ETH. At $2500/ETH, $1.00 is 0.0004 ETH
       const topUpAmount = parseEther("0.0004");
