@@ -52,6 +52,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
 
     uint256 public nextTokenId;
     uint256 public maxSupply;
+    uint256 public manualEthPrice; // 8 decimals, Chainlink standard
     address public treasury;
     address public royaltyRecipient;
     uint256 public minimumDonation;
@@ -147,6 +148,10 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         priceFeed = AggregatorV3Interface(_priceFeed);
     }
 
+    function setManualEthPrice(uint256 _manualEthPrice) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        manualEthPrice = _manualEthPrice;
+    }
+
     function setTaxStatus(uint256 tokenId, TaxStatus status) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _requireOwned(tokenId);
         taxRegistry[tokenId].status = status;
@@ -201,15 +206,22 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
 
     function _getUsdValue(uint256 ethAmount) internal returns (uint256) {
         uint256 usdValue = 0;
+        bool feedSuccess = false;
         if (address(priceFeed) != address(0)) {
             try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
                 if (answer > 0) {
                     usdValue = (uint256(answer) * ethAmount) / 1e18;
+                    feedSuccess = true;
                 }
             } catch {
                 emit PriceFeedFailed();
             }
         }
+
+        if (!feedSuccess && manualEthPrice > 0) {
+            usdValue = (manualEthPrice * ethAmount) / 1e18;
+        }
+
         return usdValue;
     }
 
@@ -271,6 +283,11 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             glowExpiry[tokenId] = block.timestamp + 30 days;
         } else {
             glowExpiry[tokenId] += 30 days;
+        }
+
+        // Mint Brag Tokens (1,000,000 per USD)
+        if (address(bragToken) != address(0) && usdValue > 0) {
+            bragToken.mint(msg.sender, usdValue * 10**16);
         }
 
         (bool success, ) = treasury.call{value: msg.value}("");
