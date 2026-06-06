@@ -201,7 +201,7 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
         require(block.timestamp >= expiry721[nftContract][tokenId], "Exhibition not yet expired");
 
         owner721[nftContract][tokenId] = address(0);
-        // Do NOT clear expiry721 here, as it may be used by future deposits
+        expiry721[nftContract][tokenId] = 0;
         IERC721(nftContract).safeTransferFrom(address(this), msg.sender, tokenId);
 
         emit Withdrawn721(nftContract, tokenId, msg.sender);
@@ -284,7 +284,7 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
         require(block.timestamp >= expiry721[nftContract][tokenId], "Exhibition not yet expired");
 
         owner721[nftContract][tokenId] = address(0);
-        // Do NOT clear expiry721 here
+        expiry721[nftContract][tokenId] = 0;
 
         bytes memory data;
         if (duration > 0) {
