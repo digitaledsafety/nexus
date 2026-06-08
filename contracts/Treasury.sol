@@ -10,8 +10,6 @@ import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
  * @title Treasury
@@ -21,7 +19,6 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
  */
 contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessControl {
     using EnumerableSet for EnumerableSet.AddressSet;
-    using SafeERC20 for IERC20;
 
     EnumerableSet.AddressSet private _owners;
     uint256 public threshold;
@@ -352,22 +349,6 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
 
     function isOwner(address account) public view returns (bool) {
         return _owners.contains(account);
-    }
-
-    /**
-     * @dev Withdraw ETH from the contract. Restricted to DEFAULT_ADMIN_ROLE.
-     */
-    function withdrawETH() external onlyRole(DEFAULT_ADMIN_ROLE) {
-        (bool success, ) = msg.sender.call{value: address(this).balance}("");
-        require(success, "ETH transfer failed");
-    }
-
-    /**
-     * @dev Withdraw ERC20 tokens from the contract. Restricted to DEFAULT_ADMIN_ROLE.
-     */
-    function withdrawERC20(address token) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        uint256 balance = IERC20(token).balanceOf(address(this));
-        IERC20(token).safeTransfer(msg.sender, balance);
     }
 
     function getOwners() external view returns (address[] memory) {
