@@ -226,16 +226,48 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     }
 
     /**
+     * @notice Batch mint multiple BragNFTs.
+     */
+    function batchDonate(string[] calldata messages, string[] calldata medias, bool[] calldata onChains, uint256[] calldata amounts) external payable nonReentrant {
+        require(messages.length == medias.length && medias.length == onChains.length && onChains.length == amounts.length, "Mismatched arrays");
+        uint256 total = 0;
+        for (uint256 i = 0; i < messages.length; ) {
+            _donate(msg.sender, messages[i], medias[i], onChains[i], amounts[i]);
+            total += amounts[i];
+            unchecked { i++; }
+        }
+        require(msg.value == total, "Incorrect ETH amount sent");
+    }
+
+    /**
+     * @notice Batch mint multiple BragNFTs to a specific recipient.
+     */
+    function batchDonateTo(address recipient, string[] calldata messages, string[] calldata medias, bool[] calldata onChains, uint256[] calldata amounts) external payable nonReentrant {
+        require(messages.length == medias.length && medias.length == onChains.length && onChains.length == amounts.length, "Mismatched arrays");
+        uint256 total = 0;
+        for (uint256 i = 0; i < messages.length; ) {
+            _donate(recipient, messages[i], medias[i], onChains[i], amounts[i]);
+            total += amounts[i];
+            unchecked { i++; }
+        }
+        require(msg.value == total, "Incorrect ETH amount sent");
+    }
+
+    /**
      * @dev Internal donation logic. Records a permanent tax record and mints the NFT.
      */
     function _donate(address recipient, string memory message, string memory media, bool onChain) internal {
-        require(msg.value >= minimumDonation, "Donation below minimum");
+        _donate(recipient, message, media, onChain, msg.value);
+    }
+
+    function _donate(address recipient, string memory message, string memory media, bool onChain, uint256 amount) internal {
+        require(amount >= minimumDonation, "Donation below minimum");
         require(nextTokenId < maxSupply, "Max supply reached");
 
         uint256 nftTokenId = nextTokenId++;
 
         // 1. Get USD Value from Chainlink
-        uint256 usdValue = _getUsdValue(msg.value);
+        uint256 usdValue = _getUsdValue(amount);
 
         // 2. Create Permanent Record (Effect)
         taxRegistry[nftTokenId] = PermanentRecord({
@@ -262,10 +294,24 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         }
 
         // 6. Transfer to treasury
-        (bool success, ) = treasury.call{value: msg.value}("");
+        (bool success, ) = treasury.call{value: amount}("");
         require(success, "Transfer to treasury failed");
 
-        emit Donated(msg.sender, msg.value, usdValue, nftTokenId, message);
+        emit Donated(msg.sender, amount, usdValue, nftTokenId, message);
+    }
+
+    /**
+     * @notice Batch top up multiple BragNFTs.
+     */
+    function batchTopUp(uint256[] calldata tokenIds, uint256[] calldata amounts) external payable nonReentrant {
+        require(tokenIds.length == amounts.length, "Mismatched arrays");
+        uint256 total = 0;
+        for (uint256 i = 0; i < tokenIds.length; ) {
+            _topUp(tokenIds[i], amounts[i]);
+            total += amounts[i];
+            unchecked { i++; }
+        }
+        require(msg.value == total, "Incorrect ETH amount sent");
     }
 
     /**
@@ -273,9 +319,13 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
      * Required amount is $1.00 USD worth of ETH.
      */
     function topUp(uint256 tokenId) external payable nonReentrant {
+        _topUp(tokenId, msg.value);
+    }
+
+    function _topUp(uint256 tokenId, uint256 amount) internal {
         _requireOwned(tokenId);
 
-        uint256 usdValue = _getUsdValue(msg.value);
+        uint256 usdValue = _getUsdValue(amount);
 
         require(usdValue >= 1e8, "Top-up requires $1.00 USD");
 
@@ -290,10 +340,10 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             bragToken.mint(msg.sender, usdValue * 10**16);
         }
 
-        (bool success, ) = treasury.call{value: msg.value}("");
+        (bool success, ) = treasury.call{value: amount}("");
         require(success, "Transfer to treasury failed");
 
-        emit TopUp(tokenId, msg.sender, msg.value);
+        emit TopUp(tokenId, msg.sender, amount);
     }
 
     /**
