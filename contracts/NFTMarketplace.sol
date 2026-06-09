@@ -183,10 +183,7 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
         require(offer.price > 0, "No valid offer exists");
         require(offer.expiry == 0 || block.timestamp <= offer.expiry, "Offer expired");
 
-        // Transfer the NFT to the buyer
-        _transferNFT(nftContract, tokenId, msg.sender, buyer, offer.amount);
-
-        // CEI: Clear the offer after ownership check but before token transfers
+        // CEI: Update state before external calls
         delete offers[nftContract][tokenId][buyer];
 
         // Automatically cancel any listing by the seller for this token
@@ -194,6 +191,9 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
             delete listings[nftContract][tokenId][msg.sender];
             emit ListingCanceled(nftContract, tokenId, msg.sender);
         }
+
+        // Transfer the NFT to the buyer
+        _transferNFT(nftContract, tokenId, msg.sender, buyer, offer.amount);
 
         // Pay the seller and handle fees/royalties
         _distributeProceedsFromContract(nftContract, tokenId, msg.sender, offer.price);
@@ -423,14 +423,14 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
         require(listing.price > 0, "Listing does not exist");
         require(listing.privateBuyer == address(0) || listing.privateBuyer == msg.sender, "Private listing: only the specified buyer can purchase");
 
+        // CEI: Update state before external calls
+        delete listings[nftContract][tokenId][seller];
+
         // Transfer payment from buyer to contract
         paymentToken.safeTransferFrom(msg.sender, address(this), listing.price);
 
         // Transfer NFT from seller to buyer
         _transferNFT(nftContract, tokenId, seller, msg.sender, listing.amount);
-
-        // CEI: Clear listing
-        delete listings[nftContract][tokenId][seller];
 
         // Distribute proceeds
         _distributeProceedsFromContract(nftContract, tokenId, seller, listing.price);
@@ -492,6 +492,24 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
      * @param buyer The address of the buyer whose offer is being rejected
      */
     function rejectOffer(address nftContract, uint256 tokenId, address buyer) external nonReentrant {
+        _rejectOffer(nftContract, tokenId, buyer);
+    }
+
+    /**
+     * @notice Batch reject multiple offers
+     * @param nftContracts Array of NFT contract addresses
+     * @param tokenIds Array of token IDs
+     * @param buyers Array of buyer addresses
+     */
+    function batchRejectOffers(address[] calldata nftContracts, uint256[] calldata tokenIds, address[] calldata buyers) external nonReentrant {
+        require(nftContracts.length == tokenIds.length && tokenIds.length == buyers.length, "Mismatched arrays");
+        for (uint256 i = 0; i < nftContracts.length; ) {
+            _rejectOffer(nftContracts[i], tokenIds[i], buyers[i]);
+            unchecked { i++; }
+        }
+    }
+
+    function _rejectOffer(address nftContract, uint256 tokenId, address buyer) internal {
         Offer memory offer = offers[nftContract][tokenId][buyer];
         require(offer.price > 0, "No valid offer exists");
 

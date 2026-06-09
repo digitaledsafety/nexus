@@ -173,35 +173,35 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
      * @dev Mint a new BragNFT by donating ETH.
      */
     function donate(string calldata message, string calldata tokenURI_) external payable nonReentrant {
-        _donate(msg.sender, message, tokenURI_, false);
+        _donate(msg.sender, msg.value, message, tokenURI_, false);
     }
 
     /**
      * @dev Mint a new BragNFT by donating ETH with optional on-chain media.
      */
     function donate(string calldata message, string calldata media, bool onChain) external payable nonReentrant {
-        _donate(msg.sender, message, media, onChain);
+        _donate(msg.sender, msg.value, message, media, onChain);
     }
 
     /**
      * @dev Mint a new BragNFT by donating ETH to a specific recipient.
      */
     function donateTo(address recipient, string calldata message, string calldata tokenURI_) external payable nonReentrant {
-        _donate(recipient, message, tokenURI_, false);
+        _donate(recipient, msg.value, message, tokenURI_, false);
     }
 
     /**
      * @dev Mint a new BragNFT by donating ETH to a recipient with optional on-chain media.
      */
     function donateTo(address recipient, string calldata message, string calldata media, bool onChain) external payable nonReentrant {
-        _donate(recipient, message, media, onChain);
+        _donate(recipient, msg.value, message, media, onChain);
     }
 
     /**
      * @dev Fallback to handle raw ETH transfers.
      */
     receive() external payable nonReentrant {
-        _donate(msg.sender, "Direct donation", "", false);
+        _donate(msg.sender, msg.value, "Direct donation", "", false);
     }
 
     function _getUsdValue(uint256 ethAmount) internal returns (uint256) {
@@ -228,14 +228,14 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     /**
      * @dev Internal donation logic. Records a permanent tax record and mints the NFT.
      */
-    function _donate(address recipient, string memory message, string memory media, bool onChain) internal {
-        require(msg.value >= minimumDonation, "Donation below minimum");
+    function _donate(address recipient, uint256 amount, string memory message, string memory media, bool onChain) internal {
+        require(amount >= minimumDonation, "Donation below minimum");
         require(nextTokenId < maxSupply, "Max supply reached");
 
         uint256 nftTokenId = nextTokenId++;
 
         // 1. Get USD Value from Chainlink
-        uint256 usdValue = _getUsdValue(msg.value);
+        uint256 usdValue = _getUsdValue(amount);
 
         // 2. Create Permanent Record (Effect)
         taxRegistry[nftTokenId] = PermanentRecord({
@@ -262,10 +262,74 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         }
 
         // 6. Transfer to treasury
-        (bool success, ) = treasury.call{value: msg.value}("");
+        (bool success, ) = treasury.call{value: amount}("");
         require(success, "Transfer to treasury failed");
 
-        emit Donated(msg.sender, msg.value, usdValue, nftTokenId, message);
+        emit Donated(msg.sender, amount, usdValue, nftTokenId, message);
+    }
+
+    /**
+     * @dev Batch donate to mint multiple NFTs.
+     */
+    function batchDonate(string[] calldata messages, string[] calldata medias, bool onChain) external payable nonReentrant {
+        uint256 count = messages.length;
+        require(count > 0 && count == medias.length, "Mismatched arrays");
+
+        address[] memory recipients = new address[](count);
+        for (uint256 i = 0; i < count; i++) {
+            recipients[i] = msg.sender;
+        }
+
+        _batchDonate(recipients, messages, medias, onChain);
+    }
+
+    /**
+     * @dev Batch donate to specific recipients.
+     */
+    function batchDonateTo(address[] calldata recipients, string[] calldata messages, string[] calldata medias, bool onChain) external payable nonReentrant {
+        _batchDonate(recipients, messages, medias, onChain);
+    }
+
+    function _batchDonate(address[] memory recipients, string[] calldata messages, string[] calldata medias, bool onChain) internal {
+        uint256 count = recipients.length;
+        require(count > 0 && count == messages.length && messages.length == medias.length, "Mismatched arrays");
+        require(msg.value >= minimumDonation * count, "Total donation below minimum");
+        require(nextTokenId + count <= maxSupply, "Max supply reached");
+
+        uint256 perNftAmount = msg.value / count;
+        uint256 usdValueTotal = _getUsdValue(msg.value);
+        uint256 usdValuePerNft = usdValueTotal / count;
+
+        for (uint256 i = 0; i < count; ) {
+            uint256 nftTokenId = nextTokenId++;
+            uint256 currentEthAmount = (i == count - 1) ? (msg.value - perNftAmount * (count - 1)) : perNftAmount;
+            uint256 currentUsdValue = (i == count - 1) ? (usdValueTotal - usdValuePerNft * (count - 1)) : usdValuePerNft;
+
+            taxRegistry[nftTokenId] = PermanentRecord({
+                originalDonor: msg.sender,
+                usdValue: currentUsdValue,
+                timestamp: block.timestamp,
+                status: TaxStatus.Pending,
+                message: messages[i]
+            });
+
+            if (onChain) {
+                onChainMedia[nftTokenId] = medias[i];
+            } else if (bytes(medias[i]).length > 0) {
+                _setTokenURI(nftTokenId, medias[i]);
+            }
+
+            _safeMint(recipients[i], nftTokenId);
+            emit Donated(msg.sender, currentEthAmount, currentUsdValue, nftTokenId, messages[i]);
+            unchecked { i++; }
+        }
+
+        if (address(bragToken) != address(0) && usdValueTotal > 0) {
+            bragToken.mint(msg.sender, usdValueTotal * 10**16);
+        }
+
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Transfer to treasury failed");
     }
 
     /**
@@ -273,9 +337,13 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
      * Required amount is $1.00 USD worth of ETH.
      */
     function topUp(uint256 tokenId) external payable nonReentrant {
+        _topUp(tokenId, msg.value);
+    }
+
+    function _topUp(uint256 tokenId, uint256 amount) internal {
         _requireOwned(tokenId);
 
-        uint256 usdValue = _getUsdValue(msg.value);
+        uint256 usdValue = _getUsdValue(amount);
 
         require(usdValue >= 1e8, "Top-up requires $1.00 USD");
 
@@ -290,10 +358,42 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             bragToken.mint(msg.sender, usdValue * 10**16);
         }
 
+        (bool success, ) = treasury.call{value: amount}("");
+        require(success, "Transfer to treasury failed");
+
+        emit TopUp(tokenId, msg.sender, amount);
+    }
+
+    /**
+     * @dev Batch top up multiple NFTs.
+     */
+    function batchTopUp(uint256[] calldata tokenIds) external payable nonReentrant {
+        uint256 count = tokenIds.length;
+        require(count > 0, "Empty array");
+
+        uint256 usdValueTotal = _getUsdValue(msg.value);
+        require(usdValueTotal >= 1e8 * count, "Total top-up requires $1.00 USD per NFT");
+
+        for (uint256 i = 0; i < count; ) {
+            uint256 tokenId = tokenIds[i];
+            _requireOwned(tokenId);
+
+            if (glowExpiry[tokenId] < block.timestamp) {
+                glowExpiry[tokenId] = block.timestamp + 30 days;
+            } else {
+                glowExpiry[tokenId] += 30 days;
+            }
+            unchecked { i++; }
+        }
+
+        if (address(bragToken) != address(0) && usdValueTotal > 0) {
+            bragToken.mint(msg.sender, usdValueTotal * 10**16);
+        }
+
         (bool success, ) = treasury.call{value: msg.value}("");
         require(success, "Transfer to treasury failed");
 
-        emit TopUp(tokenId, msg.sender, msg.value);
+        emit TopUp(0, msg.sender, msg.value); // Use 0 to indicate batch
     }
 
     /**
@@ -301,6 +401,10 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
      * Requires 1,000,000 BRAG tokens (fixed at $1 value).
      */
     function topUpWithBrag(uint256 tokenId) external nonReentrant {
+        _topUpWithBrag(tokenId);
+    }
+
+    function _topUpWithBrag(uint256 tokenId) internal {
         _requireOwned(tokenId);
         uint256 bragAmount = 1_000_000 * 10**18; // 1,000,000 BRAG tokens
 
@@ -314,6 +418,31 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         }
 
         emit TopUp(tokenId, msg.sender, bragAmount);
+    }
+
+    /**
+     * @dev Batch recharge the "glow" of multiple NFTs using BRAG tokens.
+     */
+    function batchTopUpWithBrag(uint256[] calldata tokenIds) external nonReentrant {
+        uint256 count = tokenIds.length;
+        require(count > 0, "Empty array");
+        for (uint256 i = 0; i < count; ) {
+            _topUpWithBrag(tokenIds[i]);
+            unchecked { i++; }
+        }
+    }
+
+    /**
+     * @dev Batch update on-chain media for multiple tokens. Restricted to DEFAULT_ADMIN_ROLE.
+     */
+    function batchUpdateOnChainMedia(uint256[] calldata tokenIds, string[] calldata medias) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(tokenIds.length == medias.length, "Mismatched arrays");
+        for (uint256 i = 0; i < tokenIds.length; ) {
+            uint256 tokenId = tokenIds[i];
+            _requireOwned(tokenId);
+            onChainMedia[tokenId] = medias[i];
+            unchecked { i++; }
+        }
     }
 
     /**
