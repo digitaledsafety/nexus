@@ -492,6 +492,24 @@ contract NFTMarketplace is ReentrancyGuard, AccessControl {
      * @param buyer The address of the buyer whose offer is being rejected
      */
     function rejectOffer(address nftContract, uint256 tokenId, address buyer) external nonReentrant {
+        _rejectOffer(nftContract, tokenId, buyer);
+    }
+
+    /**
+     * @notice Batch reject multiple specific offers
+     * @param nftContract Address of the NFT contract
+     * @param tokenIds Array of token IDs
+     * @param buyers Array of buyer addresses
+     */
+    function batchRejectOffers(address nftContract, uint256[] calldata tokenIds, address[] calldata buyers) external nonReentrant {
+        require(tokenIds.length == buyers.length, "Mismatched arrays");
+        for (uint256 i = 0; i < tokenIds.length; ) {
+            _rejectOffer(nftContract, tokenIds[i], buyers[i]);
+            unchecked { i++; }
+        }
+    }
+
+    function _rejectOffer(address nftContract, uint256 tokenId, address buyer) internal {
         Offer memory offer = offers[nftContract][tokenId][buyer];
         require(offer.price > 0, "No valid offer exists");
 
