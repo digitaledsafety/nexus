@@ -170,6 +170,22 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     }
 
     /**
+     * @dev Update media for a token. Restricted to the current owner.
+     * Can be either on-chain media or a URI.
+     */
+    function updateMedia(uint256 tokenId, string calldata media, bool onChain) external {
+        address owner = _requireOwned(tokenId);
+        require(msg.sender == owner, "Not the owner");
+        if (onChain) {
+            onChainMedia[tokenId] = media;
+            _setTokenURI(tokenId, "");
+        } else {
+            onChainMedia[tokenId] = "";
+            _setTokenURI(tokenId, media);
+        }
+    }
+
+    /**
      * @dev Mint a new BragNFT by donating ETH.
      */
     function donate(string calldata message, string calldata tokenURI_) external payable nonReentrant {
@@ -208,8 +224,8 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         uint256 usdValue = 0;
         bool feedSuccess = false;
         if (address(priceFeed) != address(0)) {
-            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
-                if (answer > 0) {
+            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256 updatedAt, uint80) {
+                if (answer > 0 && block.timestamp <= updatedAt + 25 hours) {
                     usdValue = (uint256(answer) * ethAmount) / 1e18;
                     feedSuccess = true;
                 }
@@ -470,11 +486,17 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
 
         string memory gStart = glowing ? '<g filter="url(#glow)">' : '<g>';
 
+        TaxStatus status = taxRegistry[tokenId].status;
+        string memory bgColor = "#6366f1"; // Indigo (Pending)
+        if (status == TaxStatus.Verified) bgColor = "#22c55e"; // Green
+        else if (status == TaxStatus.Claimed) bgColor = "#eab308"; // Gold
+        else if (status == TaxStatus.Flagged) bgColor = "#ef4444"; // Red
+
         return string(abi.encodePacked(
             '<svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet" viewBox="0 0 350 350">',
             filterDef,
             '<style>.base { ', textStyle, ' }</style>',
-            '<rect width="100%" height="100%" fill="#6366f1" />',
+            '<rect width="100%" height="100%" fill="', bgColor, '" />',
             gStart,
             '<text x="50%" y="50%" class="base" dominant-baseline="middle" text-anchor="middle">',
             displayText,
