@@ -180,6 +180,32 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
     }
 
     /**
+     * @notice Exhibit multiple ERC721 tokens in one transaction.
+     * @dev Requires the contract to be approved to transfer the tokens.
+     */
+    function batchExhibit721(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256 duration) external {
+        require(nftContracts.length == tokenIds.length, "Mismatched arrays");
+        bytes memory data = duration > 0 ? abi.encode(duration) : bytes("");
+        for (uint256 i = 0; i < nftContracts.length; ) {
+            IERC721(nftContracts[i]).safeTransferFrom(msg.sender, address(this), tokenIds[i], data);
+            unchecked { i++; }
+        }
+    }
+
+    /**
+     * @notice Exhibit multiple ERC1155 tokens in one transaction.
+     * @dev Requires the contract to be approved to transfer the tokens.
+     */
+    function batchExhibit1155(address[] calldata nftContracts, uint256[] calldata ids, uint256[] calldata amounts, uint256 duration) external {
+        require(nftContracts.length == ids.length && ids.length == amounts.length, "Mismatched arrays");
+        bytes memory data = duration > 0 ? abi.encode(duration) : bytes("");
+        for (uint256 i = 0; i < nftContracts.length; ) {
+            IERC1155(nftContracts[i]).safeTransferFrom(msg.sender, address(this), ids[i], amounts[i], data);
+            unchecked { i++; }
+        }
+    }
+
+    /**
      * @dev Withdraw an ERC721 token back to the owner's wallet.
      */
     function withdraw721(address nftContract, uint256 tokenId) external nonReentrant {
