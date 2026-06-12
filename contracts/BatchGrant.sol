@@ -29,9 +29,18 @@ contract BatchGrant is AccessControl {
      */
     function distribute(IERC20 token, address[] calldata recipients, uint256[] calldata amounts) external {
         require(recipients.length == amounts.length, "Mismatched arrays");
-        for (uint256 i = 0; i < recipients.length; ) {
-            token.safeTransferFrom(msg.sender, recipients[i], amounts[i]);
+        uint256 total = 0;
+        for (uint256 i = 0; i < amounts.length; ) {
+            total += amounts[i];
             unchecked { i++; }
+        }
+
+        if (total > 0) {
+            token.safeTransferFrom(msg.sender, address(this), total);
+            for (uint256 i = 0; i < recipients.length; ) {
+                token.safeTransfer(recipients[i], amounts[i]);
+                unchecked { i++; }
+            }
         }
     }
 
