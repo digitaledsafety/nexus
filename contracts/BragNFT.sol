@@ -204,25 +204,22 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         _donate(msg.sender, "Direct donation", "", false);
     }
 
-    function _getUsdValue(uint256 ethAmount) internal returns (uint256) {
-        uint256 usdValue = 0;
-        bool feedSuccess = false;
+    function _getEthPrice() internal returns (uint256) {
         if (address(priceFeed) != address(0)) {
             try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
                 if (answer > 0) {
-                    usdValue = (uint256(answer) * ethAmount) / 1e18;
-                    feedSuccess = true;
+                    return uint256(answer);
                 }
             } catch {
                 emit PriceFeedFailed();
             }
         }
+        return manualEthPrice;
+    }
 
-        if (!feedSuccess && manualEthPrice > 0) {
-            usdValue = (manualEthPrice * ethAmount) / 1e18;
-        }
-
-        return usdValue;
+    function _getUsdValue(uint256 ethAmount) internal returns (uint256) {
+        uint256 price = _getEthPrice();
+        return (price * ethAmount) / 1e18;
     }
 
     /**
@@ -230,42 +227,104 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
      */
     function _donate(address recipient, string memory message, string memory media, bool onChain) internal {
         require(msg.value >= minimumDonation, "Donation below minimum");
+        uint256 price = _getEthPrice();
+        _donateInternal(msg.sender, recipient, message, media, onChain, msg.value, price);
+
+        // Transfer to treasury
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Transfer to treasury failed");
+    }
+
+    function _donateInternal(
+        address donor,
+        address recipient,
+        string memory message,
+        string memory media,
+        bool onChain,
+        uint256 amount,
+        uint256 ethPrice
+    ) internal {
         require(nextTokenId < maxSupply, "Max supply reached");
 
         uint256 nftTokenId = nextTokenId++;
+        uint256 usdValue = (ethPrice * amount) / 1e18;
 
-        // 1. Get USD Value from Chainlink
-        uint256 usdValue = _getUsdValue(msg.value);
-
-        // 2. Create Permanent Record (Effect)
+        // 1. Create Permanent Record (Effect)
         taxRegistry[nftTokenId] = PermanentRecord({
-            originalDonor: msg.sender,
+            originalDonor: donor,
             usdValue: usdValue,
             timestamp: block.timestamp,
             status: TaxStatus.Pending,
             message: message
         });
 
-        // 3. Set metadata
+        // 2. Set metadata
         if (onChain) {
             onChainMedia[nftTokenId] = media;
         } else if (bytes(media).length > 0) {
             _setTokenURI(nftTokenId, media);
         }
 
-        // 4. Mint the transferable BragNFT
+        // 3. Mint the transferable BragNFT
         _safeMint(recipient, nftTokenId);
 
-        // 5. Mint Brag Tokens (1,000,000 per USD)
+        // 4. Mint Brag Tokens (1,000,000 per USD)
         if (address(bragToken) != address(0) && usdValue > 0) {
-            bragToken.mint(msg.sender, usdValue * 10**16);
+            bragToken.mint(donor, usdValue * 10**16);
         }
 
-        // 6. Transfer to treasury
+        emit Donated(donor, amount, usdValue, nftTokenId, message);
+    }
+
+    /**
+     * @dev Mint multiple BragNFTs to the caller by donating ETH.
+     */
+    function batchDonate(
+        string[] calldata messages,
+        string[] calldata media,
+        bool[] calldata onChain
+    ) external payable nonReentrant {
+        uint256 count = messages.length;
+        require(count > 0 && count == media.length && count == onChain.length, "Mismatched arrays");
+        require(msg.value >= minimumDonation * count, "Donation below minimum");
+        require(nextTokenId + count <= maxSupply, "Exceeds max supply");
+
+        uint256 price = _getEthPrice();
+        uint256 amountPerNft = msg.value / count;
+
+        for (uint256 i = 0; i < count; ) {
+            _donateInternal(msg.sender, msg.sender, messages[i], media[i], onChain[i], amountPerNft, price);
+            unchecked { i++; }
+        }
+
         (bool success, ) = treasury.call{value: msg.value}("");
         require(success, "Transfer to treasury failed");
+    }
 
-        emit Donated(msg.sender, msg.value, usdValue, nftTokenId, message);
+    /**
+     * @dev Mint multiple BragNFTs to specified recipients by donating ETH.
+     */
+    function batchDonateTo(
+        address[] calldata recipients,
+        string[] calldata messages,
+        string[] calldata media,
+        bool[] calldata onChain
+    ) external payable nonReentrant {
+        uint256 count = recipients.length;
+        require(count > 0 && count == messages.length && count == media.length && count == onChain.length, "Mismatched arrays");
+        require(msg.value >= minimumDonation * count, "Donation below minimum");
+        require(nextTokenId + count <= maxSupply, "Exceeds max supply");
+
+        uint256 price = _getEthPrice();
+        uint256 amountPerNft = msg.value / count;
+
+        for (uint256 i = 0; i < count; ) {
+            _donateInternal(msg.sender, recipients[i], messages[i], media[i], onChain[i], amountPerNft, price);
+            unchecked { i++; }
+        }
+
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Transfer to treasury failed");
     }
 
     /**
@@ -275,7 +334,8 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     function topUp(uint256 tokenId) external payable nonReentrant {
         _requireOwned(tokenId);
 
-        uint256 usdValue = _getUsdValue(msg.value);
+        uint256 price = _getEthPrice();
+        uint256 usdValue = (price * msg.value) / 1e18;
 
         require(usdValue >= 1e8, "Top-up requires $1.00 USD");
 
@@ -294,6 +354,42 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         require(success, "Transfer to treasury failed");
 
         emit TopUp(tokenId, msg.sender, msg.value);
+    }
+
+    /**
+     * @dev Top up multiple BragNFTs to keep them glowing.
+     */
+    function batchTopUp(uint256[] calldata tokenIds) external payable nonReentrant {
+        uint256 count = tokenIds.length;
+        require(count > 0, "Empty array");
+
+        uint256 price = _getEthPrice();
+        uint256 totalUsdValue = (price * msg.value) / 1e18;
+        require(totalUsdValue >= 1e8 * count, "Top-up requires $1.00 USD per NFT");
+
+        uint256 amountPerNft = msg.value / count;
+        uint256 usdValuePerNft = totalUsdValue / count;
+
+        for (uint256 i = 0; i < count; ) {
+            uint256 tokenId = tokenIds[i];
+            _requireOwned(tokenId);
+
+            if (glowExpiry[tokenId] < block.timestamp) {
+                glowExpiry[tokenId] = block.timestamp + 30 days;
+            } else {
+                glowExpiry[tokenId] += 30 days;
+            }
+
+            if (address(bragToken) != address(0) && usdValuePerNft > 0) {
+                bragToken.mint(msg.sender, usdValuePerNft * 10**16);
+            }
+
+            emit TopUp(tokenId, msg.sender, amountPerNft);
+            unchecked { i++; }
+        }
+
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Transfer to treasury failed");
     }
 
     /**
