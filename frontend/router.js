@@ -9,6 +9,7 @@ const router = {
         'manager': { view: 'views/manager.html', title: 'Manager | brag.charity', init: typeof initManager !== 'undefined' ? initManager : null, protected: true },
         'product': { view: 'views/product.html', title: 'Product Detail | brag.charity', init: typeof initProduct !== 'undefined' ? initProduct : null },
         'login': { view: 'views/login.html', title: 'Login | brag.charity', init: typeof initLogin !== 'undefined' ? initLogin : null },
+        'drm': { view: 'views/drm-demo.html', title: 'DRM License Demo | brag.charity', init: typeof initDrmDemo !== 'undefined' ? initDrmDemo : null },
         'privacy': { view: 'views/privacy.html', title: 'Privacy Policy | brag.charity' },
         'terms': { view: 'views/terms.html', title: 'Terms of Service | brag.charity' }
     },
@@ -68,6 +69,8 @@ const router = {
             initProduct();
         } else if (path === 'login' && typeof initLogin === 'function') {
             initLogin();
+        } else if (path === 'drm' && typeof initDrmDemo === 'function') {
+            initDrmDemo();
         }
     },
 

@@ -1,0 +1,91 @@
+<div class="max-w-4xl mx-auto px-4 py-12">
+    <div class="text-center mb-12">
+        <h1 class="text-4xl font-black mb-4 brag-gradient bg-clip-text text-transparent uppercase tracking-tight">DRM License Demo</h1>
+        <p class="text-slate-400 max-w-2xl mx-auto">
+            This demo showcases how an NFT acts as a "License Key". The video player will only authorized playback if you own the required NFT in your connected wallet.
+        </p>
+    </div>
+
+    <!-- Status Cards -->
+    <div class="grid md:grid-cols-2 gap-6 mb-8">
+        <div class="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-sm">
+            <h3 class="text-xs font-black uppercase tracking-widest text-indigo-400 mb-4">Step 1: Identity</h3>
+            <div id="drmAuthStatus" class="flex items-center space-x-3 text-sm">
+                <div class="h-3 w-3 rounded-full bg-red-500 animate-pulse"></div>
+                <span class="text-slate-300">Wallet Not Linked for DRM</span>
+            </div>
+            <button id="btnDrmSiwe" class="mt-4 w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50">
+                Sign Authorization Message
+            </button>
+        </div>
+
+        <div class="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-sm">
+            <h3 class="text-xs font-black uppercase tracking-widest text-indigo-400 mb-4">Step 2: Ownership</h3>
+            <div id="nftOwnershipStatus" class="space-y-2">
+                <div class="flex justify-between text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+                    <span>License NFT ID</span>
+                    <span id="displayTokenId">#0</span>
+                </div>
+                <div id="ownershipBadge" class="inline-flex items-center px-2 py-1 rounded bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-bold uppercase">
+                    Not Owned
+                </div>
+            </div>
+            <div class="mt-4 flex space-x-2">
+                <input id="inputTokenId" type="number" value="0" class="w-20 bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-xs focus:ring-1 focus:ring-indigo-500 outline-none">
+                <button id="btnCheckOwnership" class="flex-grow py-2 border border-white/10 hover:bg-white/5 text-white rounded-xl text-xs font-bold transition-all">
+                    Verify Ownership
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Video Player Area -->
+    <div class="relative group">
+        <div class="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-3xl blur opacity-25 group-hover:opacity-40 transition duration-1000"></div>
+        <div class="relative bg-slate-950 rounded-3xl overflow-hidden border border-white/10 aspect-video flex flex-col items-center justify-center">
+
+            <!-- Shaka Player Video Element -->
+            <video id="videoPlayer" class="w-full h-full hidden" controls autoplay></video>
+
+            <!-- Locked UI Overlay -->
+            <div id="playerLockedOverlay" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 z-10 p-8 text-center">
+                <div class="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-6 border border-white/10">
+                    <i class="fas fa-lock text-slate-500 text-2xl"></i>
+                </div>
+                <h4 class="text-xl font-bold mb-2">Content Locked</h4>
+                <p class="text-slate-500 text-sm max-w-xs mb-8">
+                    An authorized NFT license is required to decrypt and play this media.
+                </p>
+                <button id="btnPlayWithDrm" class="px-8 py-3 bg-white text-slate-950 rounded-full font-black uppercase tracking-widest text-xs hover:bg-indigo-400 hover:text-white transition-all">
+                    Attempt Authorized Playback
+                </button>
+            </div>
+
+            <!-- Loading Spinner (initially hidden) -->
+            <div id="playerLoading" class="hidden absolute inset-0 flex items-center justify-center bg-slate-950/50 z-20">
+                <div class="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent"></div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Error Console -->
+    <div id="drmErrorLog" class="mt-8 bg-black/40 rounded-2xl p-4 font-mono text-[10px] text-red-400 hidden border border-red-500/20">
+        <div class="flex items-center space-x-2 mb-2">
+            <i class="fas fa-terminal"></i>
+            <span class="font-bold uppercase">DRM Proxy Logs</span>
+        </div>
+        <div id="logContent"></div>
+    </div>
+
+    <!-- Integration details -->
+    <div class="mt-12 prose prose-invert prose-sm max-w-none">
+        <h2 class="text-indigo-400">How it works</h2>
+        <p>
+            When you click "Attempt Authorized Playback", the <strong>Shaka Player</strong> networking engine is configured with a <code>requestFilter</code>. This filter intercepts the license request and appends your <strong>SIWE signature</strong> and the <strong>NFT Token ID</strong> to the HTTP headers.
+        </p>
+        <p>
+            Our <strong>DRM Proxy</strong> server receives the request, recovers your address from the signature, and verifies on-chain that you are the current owner of the NFT. Only then does it return the decryption keys (or in this PoC, a successful mock response).
+        </p>
+    </div>
+</div>
