@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 
 const SRC_DIR = 'frontend';
 const DIST_DIR = 'dist/frontend';
@@ -24,6 +25,16 @@ function copyRecursiveSync(src, dest) {
 }
 
 function main() {
+  // Automatically sync ABIs and deployment addresses to frontend/contracts.js
+  // This allows the build process to incorporate addresses passed via environment variables
+  try {
+    console.log('Synchronizing ABIs and deployment addresses...');
+    execSync('node scripts/export-abis.cjs', { stdio: 'inherit' });
+  } catch (error) {
+    console.error('Failed to export ABIs:', error.message);
+    // Continue build anyway, as contracts.js might already be up to date or manually managed
+  }
+
   if (!fs.existsSync(DIST_DIR)) {
     fs.mkdirSync(DIST_DIR, { recursive: true });
   }

@@ -211,6 +211,30 @@ This project uses GitHub Actions for continuous testing and automated deployment
 *   **Manual Deployment:** Trigger a "Deploy to Sepolia" workflow from the Actions tab. This will deploy the `BragNFT`, `Treasury`, and `NFTMarketplace` contracts using deterministic addresses.
 *   **Auto-Updating ABIs:** Pushing to `main` automatically updates the frontend with the latest contract ABIs and addresses.
 
+### 7. Production (Mainnet) Deployment
+
+When you are ready to point the production site to Mainnet contracts, you can use environment variables during the build process to inject the correct addresses into the frontend bundle.
+
+#### 1. Deploy Contracts
+Deploy your contracts to Mainnet using your preferred tool (Hardhat Ignition, `scripts/deploy.ts`, etc.).
+
+#### 2. Build with Overrides
+Run the build script while providing the `DEPLOY_NETWORK_ID` (1 for Mainnet) and the contract addresses:
+
+```shell
+export DEPLOY_NETWORK_ID=1
+export CONTRACT_ADDRESS_BRAGNFT="0x..."
+export CONTRACT_ADDRESS_NFTMARKETPLACE="0x..."
+export CONTRACT_ADDRESS_TREASURY="0x..."
+export CONTRACT_ADDRESS_BRAGTOKEN="0x..."
+export CONTRACT_ADDRESS_DONATIONRECEIPT="0x..."
+export CONTRACT_ADDRESS_EXHIBITREGISTRY="0x..."
+
+npm run build:frontend
+```
+
+This will automatically trigger `scripts/export-abis.cjs`, which merges these addresses into `dist/frontend/contracts.js` for the production build.
+
 ---
 
 Have fun building with brag.charity!
