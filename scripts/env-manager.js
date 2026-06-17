@@ -210,11 +210,19 @@ async function initEnvironment() {
 
         // 5. Inject Addon
         console.log('Injecting addon into local manager...');
-        await fetch(`${getManagerApiUrl()}/api/inject`, {
+        const injectRes = await fetch(`${getManagerApiUrl()}/api/inject`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ path: addonPath })
         });
+
+        if (injectRes.ok) {
+            const data = await injectRes.json();
+            console.log(`Addon injected: ${data.message || 'Success'}`);
+        } else {
+            const errorText = await injectRes.text();
+            console.error(`Addon injection failed: ${errorText}`);
+        }
 
         console.log('Environment initialized successfully.');
         services.hardhat.status = 'running';
@@ -333,14 +341,22 @@ const server = http.createServer((req, res) => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ path: addonPath })
-        }).then(r => r.json())
-          .then(data => {
-              res.writeHead(200);
-              res.end(JSON.stringify(data));
-          }).catch(err => {
-              res.writeHead(500);
-              res.end(JSON.stringify({ error: err.message }));
-          });
+        }).then(async (r) => {
+            const data = await r.json();
+            if (r.ok) {
+                console.log(`[PROXY] Addon injection successful: ${data.message}`);
+                res.writeHead(200);
+                res.end(JSON.stringify(data));
+            } else {
+                console.error(`[PROXY] Addon injection failed: ${data.message}`);
+                res.writeHead(r.status);
+                res.end(JSON.stringify(data));
+            }
+        }).catch(err => {
+            console.error(`[PROXY] Addon injection error: ${err.message}`);
+            res.writeHead(500);
+            res.end(JSON.stringify({ error: err.message }));
+        });
     } else {
         res.writeHead(404);
         res.end();
