@@ -181,7 +181,13 @@ You can also target specific areas:
 
 ---
 
-## 5. Core Features & Possibilities
+## 5. Troubleshooting
+
+If you encounter environment-specific errors like "not a valid Win32 application" on Windows or port conflicts, refer to our [Troubleshooting Guide](./TROUBLESHOOTING.md).
+
+---
+
+## 6. Core Features & Possibilities
 
 ### The Verification Handshake (SIWE)
 brag.charity demonstrates how to verify wallet ownership across platforms where the user doesn't have a private key (like a game console or a chat bot).
@@ -203,7 +209,7 @@ brag.charity utilizes a Dual-State NFT model (Nexus Architecture) that satisfies
 
 ---
 
-## 6. Deployment Workflow (CI/CD)
+## 7. Deployment Workflow (CI/CD)
 
 This project uses GitHub Actions for continuous testing and automated deployments to Sepolia.
 
