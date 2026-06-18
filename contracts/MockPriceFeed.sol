@@ -7,14 +7,20 @@ pragma solidity ^0.8.20;
  */
 contract MockPriceFeed {
     int256 private _price;
+    uint256 private _updatedAt;
     bool private _shouldRevert;
 
     constructor(int256 initialPrice) {
         _price = initialPrice;
+        _updatedAt = block.timestamp;
     }
 
     function setPrice(int256 newPrice) external {
         _price = newPrice;
+    }
+
+    function setUpdatedAt(uint256 updatedAt) external {
+        _updatedAt = updatedAt;
     }
 
     function setRevert(bool shouldRevert) external {
@@ -35,6 +41,6 @@ contract MockPriceFeed {
         if (_shouldRevert) {
             revert("Price feed failure");
         }
-        return (0, _price, 0, block.timestamp, 0);
+        return (0, _price, 0, _updatedAt, 0);
     }
 }

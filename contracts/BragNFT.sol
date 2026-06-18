@@ -208,13 +208,22 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         uint256 usdValue = 0;
         bool feedSuccess = false;
         if (address(priceFeed) != address(0)) {
-            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
-                if (answer > 0) {
-                    usdValue = (uint256(answer) * ethAmount) / 1e18;
-                    feedSuccess = true;
-                }
+            int256 answer;
+            uint256 updatedAt;
+            bool success = false;
+            try priceFeed.latestRoundData() returns (uint80, int256 _answer, uint256, uint256 _updatedAt, uint80) {
+                answer = _answer;
+                updatedAt = _updatedAt;
+                success = true;
             } catch {
                 emit PriceFeedFailed();
+            }
+
+            if (success) {
+                require(answer > 0, "Invalid price");
+                require(block.timestamp <= updatedAt + 25 hours, "Stale price feed");
+                usdValue = (uint256(answer) * ethAmount) / 1e18;
+                feedSuccess = true;
             }
         }
 
@@ -469,17 +478,25 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         }
 
         string memory gStart = glowing ? '<g filter="url(#glow)">' : '<g>';
+        string memory bgColor = _getTaxColor(taxRegistry[tokenId].status);
 
         return string(abi.encodePacked(
             '<svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet" viewBox="0 0 350 350">',
             filterDef,
             '<style>.base { ', textStyle, ' }</style>',
-            '<rect width="100%" height="100%" fill="#6366f1" />',
+            '<rect width="100%" height="100%" fill="', bgColor, '" />',
             gStart,
             '<text x="50%" y="50%" class="base" dominant-baseline="middle" text-anchor="middle">',
             displayText,
             '</text></g></svg>'
         ));
+    }
+
+    function _getTaxColor(TaxStatus status) internal pure returns (string memory) {
+        if (status == TaxStatus.Pending) return "#6366f1"; // Indigo
+        if (status == TaxStatus.Verified) return "#22c55e"; // Green
+        if (status == TaxStatus.Claimed) return "#eab308"; // Gold
+        return "#ef4444"; // Red for Flagged
     }
 
     /**
