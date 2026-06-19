@@ -162,6 +162,14 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     }
 
     /**
+     * @dev Update the recorded USD value for a tax record. Restricted to DEFAULT_ADMIN_ROLE.
+     */
+    function updateUsdValue(uint256 tokenId, uint256 usdValue) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _requireOwned(tokenId);
+        taxRegistry[tokenId].usdValue = usdValue;
+    }
+
+    /**
      * @dev Update on-chain media for a token. Restricted to DEFAULT_ADMIN_ROLE.
      */
     function updateOnChainMedia(uint256 tokenId, string calldata media) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -198,6 +206,37 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     }
 
     /**
+     * @notice Mint multiple BragNFTs by donating ETH.
+     */
+    function batchDonate(string[] calldata messages, string[] calldata media, bool onChain) external payable nonReentrant {
+        _batchDonate(msg.sender, messages, media, onChain);
+    }
+
+    /**
+     * @notice Mint multiple BragNFTs for a specific recipient by donating ETH.
+     */
+    function batchDonateTo(address recipient, string[] calldata messages, string[] calldata media, bool onChain) external payable nonReentrant {
+        _batchDonate(recipient, messages, media, onChain);
+    }
+
+    function _batchDonate(address recipient, string[] calldata messages, string[] calldata media, bool onChain) internal {
+        uint256 count = messages.length;
+        require(count > 0 && count == media.length, "Mismatched arrays");
+
+        uint256 perNftEth = msg.value / count;
+        require(perNftEth >= minimumDonation, "Batch donation below minimum per NFT");
+
+        for (uint256 i = 0; i < count; i++) {
+            // Distribute dust to the last NFT
+            uint256 amount = (i == count - 1) ? perNftEth + (msg.value % count) : perNftEth;
+            _donateInternal(recipient, messages[i], media[i], onChain, amount);
+        }
+
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Transfer to treasury failed");
+    }
+
+    /**
      * @dev Fallback to handle raw ETH transfers.
      */
     receive() external payable nonReentrant {
@@ -229,13 +268,23 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
      * @dev Internal donation logic. Records a permanent tax record and mints the NFT.
      */
     function _donate(address recipient, string memory message, string memory media, bool onChain) internal {
-        require(msg.value >= minimumDonation, "Donation below minimum");
+        _donateInternal(recipient, message, media, onChain, msg.value);
+
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Transfer to treasury failed");
+    }
+
+    /**
+     * @dev Internal helper for donation logic shared between single and batch donations.
+     */
+    function _donateInternal(address recipient, string memory message, string memory media, bool onChain, uint256 ethAmount) internal {
+        require(ethAmount >= minimumDonation, "Donation below minimum");
         require(nextTokenId < maxSupply, "Max supply reached");
 
         uint256 nftTokenId = nextTokenId++;
 
         // 1. Get USD Value from Chainlink
-        uint256 usdValue = _getUsdValue(msg.value);
+        uint256 usdValue = _getUsdValue(ethAmount);
 
         // 2. Create Permanent Record (Effect)
         taxRegistry[nftTokenId] = PermanentRecord({
@@ -246,26 +295,25 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
             message: message
         });
 
-        // 3. Set metadata
+        // 3. Initialize glow for 30 days
+        glowExpiry[nftTokenId] = block.timestamp + 30 days;
+
+        // 4. Set metadata
         if (onChain) {
             onChainMedia[nftTokenId] = media;
         } else if (bytes(media).length > 0) {
             _setTokenURI(nftTokenId, media);
         }
 
-        // 4. Mint the transferable BragNFT
+        // 5. Mint the transferable BragNFT
         _safeMint(recipient, nftTokenId);
 
-        // 5. Mint Brag Tokens (1,000,000 per USD)
+        // 6. Mint Brag Tokens (1,000,000 per USD)
         if (address(bragToken) != address(0) && usdValue > 0) {
             bragToken.mint(msg.sender, usdValue * 10**16);
         }
 
-        // 6. Transfer to treasury
-        (bool success, ) = treasury.call{value: msg.value}("");
-        require(success, "Transfer to treasury failed");
-
-        emit Donated(msg.sender, msg.value, usdValue, nftTokenId, message);
+        emit Donated(msg.sender, ethAmount, usdValue, nftTokenId, message);
     }
 
     /**
@@ -297,6 +345,38 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     }
 
     /**
+     * @notice Recharge multiple NFTs with ETH.
+     */
+    function batchTopUp(uint256[] calldata tokenIds) external payable nonReentrant {
+        uint256 count = tokenIds.length;
+        require(count > 0, "No tokens provided");
+        uint256 perNftEth = msg.value / count;
+
+        uint256 usdValue = _getUsdValue(perNftEth);
+        require(usdValue >= 1e8, "Batch top-up requires $1.00 USD per NFT");
+
+        for (uint256 i = 0; i < count; i++) {
+            uint256 tokenId = tokenIds[i];
+            _requireOwned(tokenId);
+
+            if (glowExpiry[tokenId] < block.timestamp) {
+                glowExpiry[tokenId] = block.timestamp + 30 days;
+            } else {
+                glowExpiry[tokenId] += 30 days;
+            }
+
+            // Mint Brag Tokens (1,000,000 per USD)
+            if (address(bragToken) != address(0) && usdValue > 0) {
+                bragToken.mint(msg.sender, usdValue * 10**16);
+            }
+            emit TopUp(tokenId, msg.sender, perNftEth);
+        }
+
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Transfer to treasury failed");
+    }
+
+    /**
      * @dev Recharge the "glow" of an NFT using BRAG tokens.
      * Requires 1,000,000 BRAG tokens (fixed at $1 value).
      */
@@ -314,6 +394,31 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         }
 
         emit TopUp(tokenId, msg.sender, bragAmount);
+    }
+
+    /**
+     * @notice Recharge multiple NFTs using BRAG tokens.
+     */
+    function batchTopUpWithBrag(uint256[] calldata tokenIds) external nonReentrant {
+        uint256 count = tokenIds.length;
+        require(count > 0, "No tokens provided");
+        uint256 bragAmount = 1_000_000 * 10**18; // 1,000,000 BRAG per NFT
+        uint256 totalBrag = bragAmount * count;
+
+        require(address(bragToken) != address(0), "BRAG token not set");
+        require(bragToken.transferFrom(msg.sender, treasury, totalBrag), "BRAG transfer failed");
+
+        for (uint256 i = 0; i < count; i++) {
+            uint256 tokenId = tokenIds[i];
+            _requireOwned(tokenId);
+
+            if (glowExpiry[tokenId] < block.timestamp) {
+                glowExpiry[tokenId] = block.timestamp + 30 days;
+            } else {
+                glowExpiry[tokenId] += 30 days;
+            }
+            emit TopUp(tokenId, msg.sender, bragAmount);
+        }
     }
 
     /**
