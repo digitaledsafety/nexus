@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { network } from "hardhat";
-import { parseEther, keccak256, toBytes } from "viem";
+import { parseEther, keccak256, toBytes, encodeFunctionData } from "viem";
 
 describe("BragToken Integration", async function () {
   const { viem } = await network.connect();
@@ -15,8 +15,17 @@ describe("BragToken Integration", async function () {
     const treasury = await viem.deployContract("Treasury", [[owner.account.address], 1n, entryPointAddress]);
 
     const priceFeed = await viem.deployContract("MockPriceFeed", [250000000000n]);
-    const bragNFT = await viem.deployContract("BragNFT", [owner.account.address, treasury.address, 1n // 1 wei minimum
-    , priceFeed.address]);
+
+    // Deploy BragNFT via proxy
+    const bragNFTLogic = await viem.deployContract("BragNFT");
+    const nftInitData = encodeFunctionData({
+        abi: bragNFTLogic.abi,
+        functionName: 'initialize',
+        args: [owner.account.address, treasury.address, 1n, priceFeed.address]
+    });
+    const nftProxy = await viem.deployContract("MockProxy", [bragNFTLogic.address, nftInitData]);
+    const bragNFT = await viem.getContractAt("BragNFT", nftProxy.address);
+
     const bragToken = await viem.deployContract("BragToken", [
       owner.account.address,
       initialSupply,
@@ -45,7 +54,7 @@ describe("BragToken Integration", async function () {
     const { donor, bragNFT, bragToken } = await deploySystem();
 
     const donationAmount = parseEther("1"); // 1 ETH ($2500)
-    await bragNFT.write.donate(["praise be", ""], {
+    await bragNFT.write.donate(["praise be", "", false], {
       account: donor.account,
       value: donationAmount
     });
@@ -61,7 +70,7 @@ describe("BragToken Integration", async function () {
 
     // This should fail because it exceeds maxSupply ($2500 * 100,000 = 250M > 10M BRAG)
     await assert.rejects(
-      bragNFT.write.donate(["too much", ""], {
+      bragNFT.write.donate(["too much", "", false], {
         account: donor.account,
         value: parseEther("1")
       }),
@@ -73,7 +82,7 @@ describe("BragToken Integration", async function () {
     const { donor, bragNFT, bragToken } = await deploySystem();
 
     const donationAmount = parseEther("1"); // 1 ETH ($2500)
-    await bragNFT.write.donate(["big donor", ""], {
+    await bragNFT.write.donate(["big donor", "", false], {
       account: donor.account,
       value: donationAmount
     });

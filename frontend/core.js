@@ -531,10 +531,7 @@ async function processBatchOffers() {
 
     try {
         const inputs = document.querySelectorAll('.offer-price-input');
-        const prices = [];
-        const nftContracts = [];
-        const tokenIds = [];
-        const amounts = [];
+        const tasks = [];
         let totalRequired = ethers.BigNumber.from(0);
 
         inputs.forEach(input => {
@@ -543,15 +540,17 @@ async function processBatchOffers() {
             const price = ethers.utils.parseEther(input.value || "0");
 
             if (price.gt(0)) {
-                prices.push(price);
-                nftContracts.push(item.address);
-                tokenIds.push(item.id);
-                amounts.push(1); // Standardizing on 1 for now
+                tasks.push({
+                    price,
+                    nftContract: item.address,
+                    tokenId: item.id,
+                    amount: 1
+                });
                 totalRequired = totalRequired.add(price);
             }
         });
 
-        if (prices.length === 0) return alert("Please enter valid prices for your offers.");
+        if (tasks.length === 0) return alert("Please enter valid prices for your offers.");
 
         submitBtn.disabled = true;
         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Processing...';
@@ -571,19 +570,22 @@ async function processBatchOffers() {
             if (appTx.wait) await appTx.wait();
         }
 
-        // 2. Submit Batch Offer
-        const tx = await txHandler(marketplace, 'batchCreateOffers', [nftContracts, tokenIds, amounts, prices], 'Batch offers submitted!');
-        if (tx) {
-            alert('Batch offers successfully submitted!');
-            cart = [];
-            saveCart();
-            document.getElementById('checkoutModal')?.classList.add('hidden');
-            window.location.reload();
+        // 2. Submit Offers Sequentially (Batch logic removed from contract)
+        log(`Processing ${tasks.length} offers sequentially...`);
+        for (const task of tasks) {
+            const tx = await txHandler(marketplace, 'createOffer', [task.nftContract, task.tokenId, task.amount, task.price], `Offer for #${task.tokenId} submitted!`);
+            if (tx && tx.wait) await tx.wait();
         }
+
+        alert('All offers successfully submitted!');
+        cart = [];
+        saveCart();
+        document.getElementById('checkoutModal')?.classList.add('hidden');
+        window.location.reload();
 
     } catch (e) {
         console.error(e);
-        alert(`Failed to submit batch offers: ${e.message}`);
+        alert(`Failed to submit offers: ${e.message}`);
     } finally {
         submitBtn.disabled = false;
         submitBtn.innerText = originalText;

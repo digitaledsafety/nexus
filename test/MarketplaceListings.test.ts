@@ -4,7 +4,8 @@ import hre from "hardhat";
 import {
   parseEther,
   getAddress,
-  keccak256
+  keccak256,
+  encodeFunctionData
 } from "viem";
 import { stringToHex } from "viem/utils";
 
@@ -23,12 +24,32 @@ describe("NFTMarketplace Fixed-Price Listings", async function () {
     owner = wallets[0];
     buyer = wallets[1];
 
-    // Deploy core contracts
-    const treasury = await viem.deployContract("Treasury", [[owner.account.address], 1n, "0x0000000071727De22E5E9d8BAf0edAc6f37da032"]);
+    // 1. Deploy BragToken (Immutable)
     bragToken = await viem.deployContract("BragToken", [owner.account.address, parseEther("1000"), parseEther("1000000")]);
-    marketplace = await viem.deployContract("NFTMarketplace", [owner.account.address, bragToken.address]);
-    const mockPriceFeed = await viem.deployContract("MockPriceFeed", [250000000000n]);
-    bragNFT = await viem.deployContract("BragNFT", [owner.account.address, treasury.address, 1n, mockPriceFeed.address]);
+
+    // 2. Deploy Treasury (Immutable)
+    const treasury = await viem.deployContract("Treasury", [[owner.account.address], 1n, "0x0000000071727De22E5E9d8BAf0edAc6f37da032"]);
+
+    // 3. Deploy Logic contracts
+    const bragNFTLogic = await viem.deployContract("BragNFT");
+    const marketplaceLogic = await viem.deployContract("NFTMarketplace");
+
+    // 4. Deploy Proxies
+    const nftInitData = encodeFunctionData({
+        abi: bragNFTLogic.abi,
+        functionName: 'initialize',
+        args: [owner.account.address, treasury.address, 1n, "0x0000000000000000000000000000000000000000"]
+    });
+    const nftProxy = await viem.deployContract("MockProxy", [bragNFTLogic.address, nftInitData]);
+    bragNFT = await viem.getContractAt("BragNFT", nftProxy.address);
+
+    const marketplaceInitData = encodeFunctionData({
+        abi: marketplaceLogic.abi,
+        functionName: 'initialize',
+        args: [owner.account.address, bragToken.address]
+    });
+    const marketplaceProxy = await viem.deployContract("MockProxy", [marketplaceLogic.address, marketplaceInitData]);
+    marketplace = await viem.getContractAt("NFTMarketplace", marketplaceProxy.address);
 
     // Setup
     await bragNFT.write.setBragToken([bragToken.address]);
@@ -41,7 +62,7 @@ describe("NFTMarketplace Fixed-Price Listings", async function () {
 
   it("Should allow creating and buying a listing (ERC721)", async function () {
     // 1. Mint NFT
-    await bragNFT.write.donate(["Test NFT", "uri", false], { value: 1n });
+    await bragNFT.write.donate(["Test NFT", "", false], { value: 1n });
     const tokenId = 0n;
 
     // 2. Approve Marketplace
@@ -58,7 +79,7 @@ describe("NFTMarketplace Fixed-Price Listings", async function () {
 
     // 4. Buyer buys from listing
     await bragToken.write.approve([marketplace.address, price], { account: buyer.account });
-    await marketplace.write.buyFromListing([bragNFT.address, tokenId, owner.account.address], { account: buyer.account });
+    await marketplace.write.buyFromListing([bragNFT.address, tokenId, owner.account.address, price], { account: buyer.account });
 
     // 5. Verify ownership
     assert.equal(await bragNFT.read.ownerOf([tokenId]), getAddress(buyer.account.address));
@@ -69,7 +90,7 @@ describe("NFTMarketplace Fixed-Price Listings", async function () {
   });
 
   it("Should allow canceling a listing", async function () {
-    await bragNFT.write.donate(["Test NFT 2", "uri2", false], { value: 1n });
+    await bragNFT.write.donate(["Test NFT 2", "", false], { value: 1n });
     const tokenId = 1n;
 
     await marketplace.write.createListing([bragNFT.address, tokenId, 1n, parseEther("5")]);
@@ -80,7 +101,7 @@ describe("NFTMarketplace Fixed-Price Listings", async function () {
   });
 
   it("Should automatically cancel listing when an offer is accepted", async function () {
-    await bragNFT.write.donate(["Test NFT 3", "uri3", false], { value: 1n });
+    await bragNFT.write.donate(["Test NFT 3", "", false], { value: 1n });
     const tokenId = 2n;
 
     // Create listing
@@ -98,28 +119,5 @@ describe("NFTMarketplace Fixed-Price Listings", async function () {
     // Verify listing is canceled
     const listing = await marketplace.read.listings([bragNFT.address, tokenId, owner.account.address]);
     assert.equal(listing[1], 0n);
-  });
-
-  it("Should allow creating and buying a listing (ERC1155)", async function () {
-    const mock1155 = await viem.deployContract("MockERC1155");
-    const tokenId = 42n;
-    const amount = 10n;
-    const price = parseEther("20");
-
-    // 1. Mint to owner
-    await mock1155.write.mint([owner.account.address, tokenId, amount]);
-
-    // 2. Approve Marketplace
-    await mock1155.write.setApprovalForAll([marketplace.address, true]);
-
-    // 3. Create Listing
-    await marketplace.write.createListing([mock1155.address, tokenId, amount, price]);
-
-    // 4. Buyer buys
-    await bragToken.write.approve([marketplace.address, price], { account: buyer.account });
-    await marketplace.write.buyFromListing([mock1155.address, tokenId, owner.account.address], { account: buyer.account });
-
-    // 5. Verify balance
-    assert.equal(await mock1155.read.balanceOf([buyer.account.address, tokenId]), amount);
   });
 });

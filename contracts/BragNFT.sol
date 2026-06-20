@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721URIStorageUpgradeable.sol";
 import "@openzeppelin/contracts/interfaces/IERC2981.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 interface IBragToken {
     function mint(address to, uint256 amount) external;
@@ -35,8 +38,18 @@ interface AggregatorV3Interface {
  * @title BragNFT
  * @dev A Dual-State NFT that combines tradable art with a soulbound tax receipt.
  * Implements EIP-2981 for royalties and EIP-6454 for transferability signaling.
+ * Now upgradeable via UUPS.
  */
-contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, IERC6454 {
+contract BragNFT is
+    Initializable,
+    ERC721URIStorageUpgradeable,
+    AccessControlUpgradeable,
+    PausableUpgradeable,
+    ReentrancyGuard,
+    UUPSUpgradeable,
+    IERC2981,
+    IERC6454
+{
     using Strings for uint256;
     using SafeERC20 for IERC20;
 
@@ -53,6 +66,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     uint256 public nextTokenId;
     uint256 public maxSupply;
     uint256 public manualEthPrice; // 8 decimals, Chainlink standard
+    uint256 public priceStalenessThreshold;
     address public treasury;
     address public royaltyRecipient;
     uint256 public minimumDonation;
@@ -73,16 +87,27 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     event TopUp(uint256 indexed tokenId, address indexed donor, uint256 amount);
     event PriceFeedFailed();
 
-    constructor(address _initialOwner, address _treasury, uint256 _minimumDonation, address _priceFeed)
-        ERC721("BragNFT", "BRAGNFT")
-    {
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address _initialOwner, address _treasury, uint256 _minimumDonation, address _priceFeed) public initializer {
+        __ERC721_init("BragNFT", "BRAGNFT");
+        __ERC721URIStorage_init();
+        __AccessControl_init();
+        __Pausable_init();
+
         _grantRole(DEFAULT_ADMIN_ROLE, _initialOwner);
         treasury = _treasury;
         royaltyRecipient = _treasury;
         minimumDonation = _minimumDonation;
         priceFeed = AggregatorV3Interface(_priceFeed);
         maxSupply = 100; // Default max supply
+        priceStalenessThreshold = 4 hours;
     }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
 
     function totalSupply() public view returns (uint256) {
         return nextTokenId;
@@ -92,7 +117,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         maxSupply = _maxSupply;
     }
 
-    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC721URIStorage, AccessControl, IERC165) returns (bool) {
+    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC721URIStorageUpgradeable, AccessControlUpgradeable, IERC165) returns (bool) {
         return interfaceId == type(IERC2981).interfaceId ||
                interfaceId == type(IERC6454).interfaceId ||
                super.supportsInterface(interfaceId);
@@ -152,6 +177,18 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         manualEthPrice = _manualEthPrice;
     }
 
+    function setPriceStalenessThreshold(uint256 _threshold) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        priceStalenessThreshold = _threshold;
+    }
+
+    function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _pause();
+    }
+
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _unpause();
+    }
+
     function setTaxStatus(uint256 tokenId, TaxStatus status) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _requireOwned(tokenId);
         taxRegistry[tokenId].status = status;
@@ -172,35 +209,21 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     /**
      * @dev Mint a new BragNFT by donating ETH.
      */
-    function donate(string calldata message, string calldata tokenURI_) external payable nonReentrant {
-        _donate(msg.sender, message, tokenURI_, false);
-    }
-
-    /**
-     * @dev Mint a new BragNFT by donating ETH with optional on-chain media.
-     */
-    function donate(string calldata message, string calldata media, bool onChain) external payable nonReentrant {
+    function donate(string calldata message, string calldata media, bool onChain) external payable whenNotPaused nonReentrant {
         _donate(msg.sender, message, media, onChain);
     }
 
     /**
      * @dev Mint a new BragNFT by donating ETH to a specific recipient.
      */
-    function donateTo(address recipient, string calldata message, string calldata tokenURI_) external payable nonReentrant {
-        _donate(recipient, message, tokenURI_, false);
-    }
-
-    /**
-     * @dev Mint a new BragNFT by donating ETH to a recipient with optional on-chain media.
-     */
-    function donateTo(address recipient, string calldata message, string calldata media, bool onChain) external payable nonReentrant {
+    function donateTo(address recipient, string calldata message, string calldata media, bool onChain) external payable whenNotPaused nonReentrant {
         _donate(recipient, message, media, onChain);
     }
 
     /**
      * @dev Fallback to handle raw ETH transfers.
      */
-    receive() external payable nonReentrant {
+    receive() external payable whenNotPaused nonReentrant {
         _donate(msg.sender, "Direct donation", "", false);
     }
 
@@ -208,8 +231,8 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         uint256 usdValue = 0;
         bool feedSuccess = false;
         if (address(priceFeed) != address(0)) {
-            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
-                if (answer > 0) {
+            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256 updatedAt, uint80) {
+                if (answer > 0 && block.timestamp - updatedAt <= priceStalenessThreshold) {
                     usdValue = (uint256(answer) * ethAmount) / 1e18;
                     feedSuccess = true;
                 }
@@ -272,7 +295,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
      * @dev Top up the impact to keep the collectible glowing.
      * Required amount is $1.00 USD worth of ETH.
      */
-    function topUp(uint256 tokenId) external payable nonReentrant {
+    function topUp(uint256 tokenId) external payable whenNotPaused nonReentrant {
         _requireOwned(tokenId);
 
         uint256 usdValue = _getUsdValue(msg.value);
@@ -300,7 +323,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
      * @dev Recharge the "glow" of an NFT using BRAG tokens.
      * Requires 1,000,000 BRAG tokens (fixed at $1 value).
      */
-    function topUpWithBrag(uint256 tokenId) external nonReentrant {
+    function topUpWithBrag(uint256 tokenId) external whenNotPaused nonReentrant {
         _requireOwned(tokenId);
         uint256 bragAmount = 1_000_000 * 10**18; // 1,000,000 BRAG tokens
 
@@ -590,4 +613,6 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         }
         return string(outputBytes);
     }
+
+    uint256[50] private __gap;
 }
