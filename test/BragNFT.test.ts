@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { network } from "hardhat";
-import { getAddress, parseEther, keccak256, toBytes } from "viem";
+import { getAddress, parseEther, keccak256, toBytes, encodeFunctionData } from "viem";
 
 describe("BragNFT Dual-State Model", async function () {
   const { viem } = await network.connect();
@@ -10,19 +10,31 @@ describe("BragNFT Dual-State Model", async function () {
     const [owner, donor, treasury, recipient] = await viem.getWalletClients();
 
     const registry = await viem.deployContract("ExhibitRegistry", [owner.account.address]);
-    const vault = await viem.deployContract("ExhibitVault", [owner.account.address, registry.address]);
+
+    // Deploy ExhibitVault logic and proxy
+    const vaultLogic = await viem.deployContract("ExhibitVault");
+    const vaultInitData = encodeFunctionData({
+        abi: vaultLogic.abi,
+        functionName: 'initialize',
+        args: [owner.account.address, registry.address]
+    });
+    const vaultProxy = await viem.deployContract("MockProxy", [vaultLogic.address, vaultInitData]);
+    const vault = await viem.getContractAt("ExhibitVault", vaultProxy.address);
 
     // Verify vault in registry
     await registry.write.verifyVault([vault.address, 3, "Art Gallery", "Main gallery"]);
 
-    const priceFeed = await viem.deployContract("MockPriceFeed", [250000000000n]); // 500/ETH (8 decimals)
+    const priceFeed = await viem.deployContract("MockPriceFeed", [250000000000n]); // 2500/ETH (8 decimals)
 
-    const bragNFT = await viem.deployContract("BragNFT", [
-        owner.account.address,
-        treasury.account.address,
-        parseEther("0.1"),
-        priceFeed.address
-    ]);
+    // Deploy BragNFT logic and proxy
+    const bragNFTLogic = await viem.deployContract("BragNFT");
+    const nftInitData = encodeFunctionData({
+        abi: bragNFTLogic.abi,
+        functionName: 'initialize',
+        args: [owner.account.address, treasury.account.address, parseEther("0.1"), priceFeed.address]
+    });
+    const nftProxy = await viem.deployContract("MockProxy", [bragNFTLogic.address, nftInitData]);
+    const bragNFT = await viem.getContractAt("BragNFT", nftProxy.address);
 
     // Optional: Setup BragToken for rewards testing
     const MINTER_ROLE = keccak256(toBytes("MINTER_ROLE"));
@@ -44,7 +56,7 @@ describe("BragNFT Dual-State Model", async function () {
     const publicClient = await viem.getPublicClient();
     const initialTreasuryBalance = await publicClient.getBalance({ address: treasury.account.address });
 
-    await bragNFT.write.donate([message, tokenURI], {
+    await bragNFT.write.donate([message, tokenURI, false], {
         account: donor.account,
         value: donationAmount
     });
@@ -78,7 +90,7 @@ describe("BragNFT Dual-State Model", async function () {
 
   it("Should allow BragNFT to be transferred while keeping tax record for donor", async function () {
     const { bragNFT, donor, recipient } = await deployContracts();
-    await bragNFT.write.donate(["Transferable NFT", "ipfs://uri1"], {
+    await bragNFT.write.donate(["Transferable NFT", "ipfs://uri1", false], {
         account: donor.account,
         value: parseEther("0.1")
     });
@@ -110,7 +122,7 @@ describe("BragNFT Dual-State Model", async function () {
       const publicClient = await viem.getPublicClient();
       const initialTreasuryBalance = await publicClient.getBalance({ address: treasury.account.address });
 
-      await bragNFT.write.donate(["Glowing NFT", ""], { account: donor.account, value: parseEther("0.1") });
+      await bragNFT.write.donate(["Glowing NFT", "", false], { account: donor.account, value: parseEther("0.1") });
       const tokenId = 0n;
 
       assert.equal(await bragNFT.read.isGlowing([tokenId]), false);
@@ -135,7 +147,7 @@ describe("BragNFT Dual-State Model", async function () {
   it("Should allow BragNFT to be exhibited", async function () {
     const { bragNFT, vault, donor } = await deployContracts();
 
-    await bragNFT.write.donate(["Exhibition piece", "ipfs://uri3"], {
+    await bragNFT.write.donate(["Exhibition piece", "ipfs://uri3", false], {
         account: donor.account,
         value: parseEther("0.1")
     });
@@ -150,7 +162,7 @@ describe("BragNFT Dual-State Model", async function () {
   it("Should allow withdrawal of BragNFT from exhibit", async function () {
     const { bragNFT, vault, donor } = await deployContracts();
 
-    await bragNFT.write.donate(["Withdrawal test", "ipfs://uri4"], {
+    await bragNFT.write.donate(["Withdrawal test", "ipfs://uri4", false], {
         account: donor.account,
         value: parseEther("0.1")
     });
@@ -183,7 +195,7 @@ describe("BragNFT Dual-State Model", async function () {
     const { bragNFT, donor } = await deployContracts();
     const message = "No URI here";
 
-    await bragNFT.write.donate([message, ""], {
+    await bragNFT.write.donate([message, "", false], {
         account: donor.account,
         value: parseEther("0.1")
     });
@@ -209,7 +221,7 @@ describe("BragNFT Dual-State Model", async function () {
     assert.equal(await bragNFT.read.maxSupply(), 100n);
     assert.equal(await bragNFT.read.totalSupply(), 0n);
 
-    await bragNFT.write.donate(["Supply test", "ipfs://uri"], {
+    await bragNFT.write.donate(["Supply test", "ipfs://uri", false], {
         account: donor.account,
         value: parseEther("0.1")
     });
@@ -221,7 +233,7 @@ describe("BragNFT Dual-State Model", async function () {
 
     // Should fail to donate when supply is full
     await assert.rejects(
-        bragNFT.write.donate(["Fail test", "ipfs://uri"], {
+        bragNFT.write.donate(["Fail test", "ipfs://uri", false], {
             account: donor.account,
             value: parseEther("0.1")
         }),

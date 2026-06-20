@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { network } from "hardhat";
-import { getAddress, parseEther, keccak256, toBytes, zeroAddress } from "viem";
+import { getAddress, parseEther, keccak256, toBytes, zeroAddress, encodeFunctionData } from "viem";
 
 describe("AccessControl Security Tests", async function () {
   const { viem } = await network.connect();
@@ -18,8 +18,17 @@ describe("AccessControl Security Tests", async function () {
     const registry = await viem.deployContract("ExhibitRegistry", [owner.account.address]);
 
     const priceFeed = await viem.deployContract("MockPriceFeed", [250000000000n]);
-    const bragNFT = await viem.deployContract("BragNFT", [owner.account.address, treasury.address, parseEther("0.1")
-    , priceFeed.address]);
+
+    // Deploy BragNFT via proxy
+    const bragNFTLogic = await viem.deployContract("BragNFT");
+    const nftInitData = encodeFunctionData({
+        abi: bragNFTLogic.abi,
+        functionName: 'initialize',
+        args: [owner.account.address, treasury.address, parseEther("0.1"), priceFeed.address]
+    });
+    const nftProxy = await viem.deployContract("MockProxy", [bragNFTLogic.address, nftInitData]);
+    const bragNFT = await viem.getContractAt("BragNFT", nftProxy.address);
+
     const bragToken = await viem.deployContract("BragToken", [
       owner.account.address,
       0n,
@@ -38,9 +47,6 @@ describe("AccessControl Security Tests", async function () {
       );
     });
   });
-
-
-
 
   describe("BragNFT Access", () => {
     it("Should fail to setTreasury without ADMIN_ROLE", async function () {

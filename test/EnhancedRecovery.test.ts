@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { network } from "hardhat";
-import { parseEther, getAddress } from "viem";
+import { parseEther, getAddress, encodeFunctionData } from "viem";
 
 describe("Recovery & Truncation Tests", async function () {
   const { viem } = await network.connect();
@@ -12,13 +12,40 @@ describe("Recovery & Truncation Tests", async function () {
 
     const bragToken = await viem.deployContract("BragToken", [owner.account.address, parseEther("1000"), parseEther("2000")]);
     const priceFeed = await viem.deployContract("MockPriceFeed", [250000000000n]);
-    const bragNFT = await viem.deployContract("BragNFT", [owner.account.address, owner.account.address, parseEther("0.1"), priceFeed.address]);
-    const registry = await viem.deployContract("ExhibitRegistry", [owner.account.address]);
-    const vault = await viem.deployContract("ExhibitVault", [owner.account.address, registry.address]);
-    const marketplace = await viem.deployContract("NFTMarketplace", [owner.account.address, bragToken.address]);
-    const batchGrant = await viem.deployContract("BatchGrant", [owner.account.address]);
 
-    return { viem, publicClient, bragToken, bragNFT, vault, marketplace, batchGrant, owner, other };
+    // Deploy BragNFT via proxy
+    const bragNFTLogic = await viem.deployContract("BragNFT");
+    const nftInitData = encodeFunctionData({
+        abi: bragNFTLogic.abi,
+        functionName: 'initialize',
+        args: [owner.account.address, owner.account.address, parseEther("0.1"), priceFeed.address]
+    });
+    const nftProxy = await viem.deployContract("MockProxy", [bragNFTLogic.address, nftInitData]);
+    const bragNFT = await viem.getContractAt("BragNFT", nftProxy.address);
+
+    const registry = await viem.deployContract("ExhibitRegistry", [owner.account.address]);
+
+    // Deploy ExhibitVault via proxy
+    const vaultLogic = await viem.deployContract("ExhibitVault");
+    const vaultInitData = encodeFunctionData({
+        abi: vaultLogic.abi,
+        functionName: 'initialize',
+        args: [owner.account.address, registry.address]
+    });
+    const vaultProxy = await viem.deployContract("MockProxy", [vaultLogic.address, vaultInitData]);
+    const vault = await viem.getContractAt("ExhibitVault", vaultProxy.address);
+
+    // Deploy Marketplace via proxy
+    const marketplaceLogic = await viem.deployContract("NFTMarketplace");
+    const marketplaceInitData = encodeFunctionData({
+        abi: marketplaceLogic.abi,
+        functionName: 'initialize',
+        args: [owner.account.address, bragToken.address]
+    });
+    const marketplaceProxy = await viem.deployContract("MockProxy", [marketplaceLogic.address, marketplaceInitData]);
+    const marketplace = await viem.getContractAt("NFTMarketplace", marketplaceProxy.address);
+
+    return { viem, publicClient, bragToken, bragNFT, vault, marketplace, owner, other };
   }
 
   describe("Administrative Recovery", function () {
@@ -70,28 +97,20 @@ describe("Recovery & Truncation Tests", async function () {
     it("Should truncate message without splitting multi-byte characters", async function () {
       const { bragNFT, owner } = await deployContracts();
 
-      // An emoji like 🚀 is 4 bytes in UTF-8
-      // 'A' is 1 byte.
-      // "AAAA... (28 times) 🚀" would be 28 + 4 = 32 bytes.
-      // If we truncate to 32 bytes, it should be fine.
-      // If we have "AAAA... (30 times) 🚀" and truncate to 32, it should exclude 🚀.
-
       const message = "A".repeat(30) + "🚀"; // 30 + 4 = 34 bytes
-      await bragNFT.write.donate([message, ""], { account: owner.account, value: parseEther("0.1") });
+      await bragNFT.write.donate([message, "", false], { account: owner.account, value: parseEther("0.1") });
       const tokenId = 0n;
 
       const uri = await bragNFT.read.tokenURI([tokenId]);
       const json = JSON.parse(Buffer.from(uri.split(",")[1], "base64").toString());
       const svg = Buffer.from(json.image.split(",")[1], "base64").toString();
 
-      // The message in SVG should be 30 'A's and NO partial emoji
-      // 30 'A's fits in 32 bytes.
       assert.ok(svg.includes("A".repeat(30)));
       assert.ok(!svg.includes("🚀"));
 
       // If message is exactly 32 bytes
       const message32 = "A".repeat(28) + "🚀";
-      await bragNFT.write.donate([message32, ""], { account: owner.account, value: parseEther("0.1") });
+      await bragNFT.write.donate([message32, "", false], { account: owner.account, value: parseEther("0.1") });
       const tokenId2 = 1n;
       const uri2 = await bragNFT.read.tokenURI([tokenId2]);
       const json2 = JSON.parse(Buffer.from(uri2.split(",")[1], "base64").toString());

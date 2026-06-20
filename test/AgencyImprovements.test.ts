@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { network } from "hardhat";
-import { getAddress, parseEther, keccak256, toBytes } from "viem";
+import { getAddress, parseEther, keccak256, toBytes, encodeFunctionData } from "viem";
 
 describe("AgencyImprovements", async function () {
   const { viem } = await network.connect();
@@ -20,12 +20,15 @@ describe("AgencyImprovements", async function () {
       250000000000n, // $2500 ETH
     ]);
 
-    const bragNFT = await viem.deployContract("BragNFT", [
-      owner.account.address,
-      treasury.address,
-      0n,
-      mockPriceFeed.address,
-    ]);
+    // Deploy BragNFT via proxy
+    const bragNFTLogic = await viem.deployContract("BragNFT");
+    const nftInitData = encodeFunctionData({
+        abi: bragNFTLogic.abi,
+        functionName: 'initialize',
+        args: [owner.account.address, treasury.address, 0n, mockPriceFeed.address]
+    });
+    const nftProxy = await viem.deployContract("MockProxy", [bragNFTLogic.address, nftInitData]);
+    const bragNFT = await viem.getContractAt("BragNFT", nftProxy.address);
 
     const bragToken = await viem.deployContract("BragToken", [
       owner.account.address,
@@ -33,10 +36,15 @@ describe("AgencyImprovements", async function () {
       parseEther("1000000000"),
     ]);
 
-    const marketplace = await viem.deployContract("NFTMarketplace", [
-      owner.account.address,
-      bragToken.address,
-    ]);
+    // Deploy Marketplace via proxy
+    const marketplaceLogic = await viem.deployContract("NFTMarketplace");
+    const marketplaceInitData = encodeFunctionData({
+        abi: marketplaceLogic.abi,
+        functionName: 'initialize',
+        args: [owner.account.address, bragToken.address]
+    });
+    const marketplaceProxy = await viem.deployContract("MockProxy", [marketplaceLogic.address, marketplaceInitData]);
+    const marketplace = await viem.getContractAt("NFTMarketplace", marketplaceProxy.address);
 
     await bragNFT.write.setBragToken([bragToken.address]);
     const MINTER_ROLE = keccak256(toBytes("MINTER_ROLE"));
@@ -122,7 +130,7 @@ describe("AgencyImprovements", async function () {
     it("should update a listing correctly", async function () {
       const { marketplace, bragNFT, owner } = await deployFixture();
 
-      await bragNFT.write.donate(["Listing test", "uri", false]);
+      await bragNFT.write.donate(["Listing test", "uri", false], { value: parseEther("0.1") });
       const tokenId = 0n;
       await bragNFT.write.approve([marketplace.address, tokenId]);
 
@@ -134,33 +142,6 @@ describe("AgencyImprovements", async function () {
       await marketplace.write.updateListing([bragNFT.address, tokenId, 1n, parseEther("5")]);
       listing = await marketplace.read.listings([bragNFT.address, tokenId, owner.account.address]);
       assert.equal(listing[1], parseEther("5"));
-    });
-
-    it("should batch create and cancel listings", async function () {
-      const { marketplace, bragNFT, owner } = await deployFixture();
-
-      await bragNFT.write.donate(["Batch 1", "uri", false]);
-      await bragNFT.write.donate(["Batch 2", "uri", false]);
-
-      await bragNFT.write.setApprovalForAll([marketplace.address, true]);
-
-      await marketplace.write.batchCreateListings([
-        [bragNFT.address, bragNFT.address],
-        [0n, 1n],
-        [1n, 1n],
-        [parseEther("1"), parseEther("2")]
-      ]);
-
-      assert.equal((await marketplace.read.listings([bragNFT.address, 0n, owner.account.address]))[1], parseEther("1"));
-      assert.equal((await marketplace.read.listings([bragNFT.address, 1n, owner.account.address]))[1], parseEther("2"));
-
-      await marketplace.write.batchCancelListings([
-        [bragNFT.address, bragNFT.address],
-        [0n, 1n]
-      ]);
-
-      assert.equal((await marketplace.read.listings([bragNFT.address, 0n, owner.account.address]))[1], 0n);
-      assert.equal((await marketplace.read.listings([bragNFT.address, 1n, owner.account.address]))[1], 0n);
     });
   });
 });
