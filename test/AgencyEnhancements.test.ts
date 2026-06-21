@@ -49,14 +49,14 @@ describe("Agency Enhancements", async function () {
       // Owner tries to buy - should fail
       await bragToken.write.approve([marketplace.address, price], { account: owner.account });
       await assert.rejects(
-        marketplace.write.buyFromListing([bragNFT.address, tokenId, user1.account.address], { account: owner.account }),
+        marketplace.write.buyFromListing([bragNFT.address, tokenId, user1.account.address, price], { account: owner.account }),
         /Private listing: only the specified buyer can purchase/
       );
 
       // User2 buys - should succeed
       await bragToken.write.transfer([user2.account.address, price], { account: owner.account });
       await bragToken.write.approve([marketplace.address, price], { account: user2.account });
-      await marketplace.write.buyFromListing([bragNFT.address, tokenId, user1.account.address], { account: user2.account });
+      await marketplace.write.buyFromListing([bragNFT.address, tokenId, user1.account.address, price], { account: user2.account });
 
       assert.equal(await bragNFT.read.ownerOf([tokenId]), getAddress(user2.account.address));
     });

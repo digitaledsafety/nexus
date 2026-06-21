@@ -67,8 +67,9 @@ describe("Marketplace Batch Operations", async function () {
     const nftContracts = [bragNFT.address, bragNFT.address];
     const tokenIds = [0n, 1n];
     const sellers = [seller.account.address, seller.account.address];
+    const expectedPrices = [parseEther("1"), parseEther("2")];
 
-    await marketplace.write.batchBuyFromListings([nftContracts, tokenIds, sellers], { account: buyer.account });
+    await marketplace.write.batchBuyFromListings([nftContracts, tokenIds, sellers, expectedPrices], { account: buyer.account });
 
     // Verify ownership
     assert.equal(await bragNFT.read.ownerOf([0n]), getAddress(buyer.account.address));
@@ -94,7 +95,7 @@ describe("Marketplace Batch Operations", async function () {
   it("Should revert batch buy from listings if array lengths mismatch", async function () {
     const { marketplace, bragNFT, buyer, seller } = await deployAll();
     await assert.rejects(
-      marketplace.write.batchBuyFromListings([[bragNFT.address], [0n, 1n], [seller.account.address]], { account: buyer.account }),
+      marketplace.write.batchBuyFromListings([[bragNFT.address], [0n, 1n], [seller.account.address], [parseEther("1")]], { account: buyer.account }),
       /Mismatched arrays/
     );
   });

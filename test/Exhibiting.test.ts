@@ -152,6 +152,29 @@ describe("Exhibiting System", async function () {
     );
   });
 
+    it("Should prevent ownership spoofing with 64-byte data from unverified source", async function () {
+        const { bragNFT, vault1: vault, user, user2 } = await deployContracts();
+
+        await bragNFT.write.donate(["Spoof test", ""], { account: user.account, value: parseEther("0.1") });
+        const tokenId = 0n;
+
+        // "user2" is not a verified vault/operator.
+        // They try to send the NFT and specify a different "actualOwner" in 64-byte data.
+        const fakeData = encodeAbiParameters(
+            [{ type: 'address' }, { type: 'uint256' }],
+            [user2.account.address, 0n]
+        );
+
+        // First transfer to user2
+        await bragNFT.write.transferFrom([user.account.address, user2.account.address, tokenId], { account: user.account });
+
+        // User2 tries to deposit to vault with 64-byte spoof data
+        await assert.rejects(
+            bragNFT.write.safeTransferFrom([user2.account.address, vault.address, tokenId, fakeData], { account: user2.account }),
+            /Unauthorized data/
+        );
+    });
+
   it("Should handle ERC1155 atomicity (unit level)", async function () {
     const { mock1155, vault1, vault2, user, owner } = await deployContracts();
 

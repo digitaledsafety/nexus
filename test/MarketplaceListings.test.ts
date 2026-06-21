@@ -58,7 +58,7 @@ describe("NFTMarketplace Fixed-Price Listings", async function () {
 
     // 4. Buyer buys from listing
     await bragToken.write.approve([marketplace.address, price], { account: buyer.account });
-    await marketplace.write.buyFromListing([bragNFT.address, tokenId, owner.account.address], { account: buyer.account });
+    await marketplace.write.buyFromListing([bragNFT.address, tokenId, owner.account.address, price], { account: buyer.account });
 
     // 5. Verify ownership
     assert.equal(await bragNFT.read.ownerOf([tokenId]), getAddress(buyer.account.address));
@@ -117,9 +117,33 @@ describe("NFTMarketplace Fixed-Price Listings", async function () {
 
     // 4. Buyer buys
     await bragToken.write.approve([marketplace.address, price], { account: buyer.account });
-    await marketplace.write.buyFromListing([mock1155.address, tokenId, owner.account.address], { account: buyer.account });
+    await marketplace.write.buyFromListing([mock1155.address, tokenId, owner.account.address, price], { account: buyer.account });
 
     // 5. Verify balance
     assert.equal(await mock1155.read.balanceOf([buyer.account.address, tokenId]), amount);
+  });
+
+  it("Should respect Pausable state", async function () {
+    await marketplace.write.pause();
+
+    await assert.rejects(
+      marketplace.write.createListing([bragNFT.address, 0n, 1n, parseEther("1")], { account: owner.account }),
+      /EnforcedPause/
+    );
+
+    await marketplace.write.unpause();
+  });
+
+  it("Should revert if price mismatch", async function () {
+    await bragNFT.write.donate(["Price mismatch test", "uri"], { value: 1n });
+    const tokenId = 3n; // Previous tests used 0, 1, 2
+    await bragNFT.write.approve([marketplace.address, tokenId]);
+    await marketplace.write.createListing([bragNFT.address, tokenId, 1n, parseEther("10")]);
+
+    await bragToken.write.approve([marketplace.address, parseEther("10")], { account: buyer.account });
+    await assert.rejects(
+      marketplace.write.buyFromListing([bragNFT.address, tokenId, owner.account.address, parseEther("9")], { account: buyer.account }),
+      /Price mismatch/
+    );
   });
 });
