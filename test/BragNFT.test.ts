@@ -35,6 +35,60 @@ describe("BragNFT Dual-State Model", async function () {
     return { registry, vault, bragNFT, priceFeed, bragToken, mock1155, owner, donor, treasury, recipient };
   }
 
+  it("Should respect Pausable state", async function () {
+    const { bragNFT, owner, donor } = await deployContracts();
+
+    await bragNFT.write.pause({ account: owner.account });
+
+    await assert.rejects(
+      bragNFT.write.donate(["Paused donation", ""], { account: donor.account, value: parseEther("0.1") }),
+      /EnforcedPause/
+    );
+
+    await bragNFT.write.unpause({ account: owner.account });
+    await bragNFT.write.donate(["Unpaused donation", ""], { account: donor.account, value: parseEther("0.1") });
+    assert.equal(await bragNFT.read.totalSupply(), 1n);
+  });
+
+  it("Should handle price feed staleness", async function () {
+    const { bragNFT, priceFeed, donor } = await deployContracts();
+    const publicClient = await viem.getPublicClient();
+
+    // Latest price is $2500/ETH (250000000000n)
+
+    // Set a manual price as backup
+    await bragNFT.write.setManualEthPrice([200000000000n]); // $2000
+
+    // Set stale threshold to 1 hour
+    await bragNFT.write.setPriceFeedStaleThreshold([3600n]);
+
+    // Fast forward 2 hours
+    await publicClient.request({ method: "evm_increaseTime" as any, params: [7200] });
+    await publicClient.request({ method: "evm_mine" as any, params: [] });
+
+    // Note: MockPriceFeed by default returns block.timestamp if _updatedAt is 0 or what was set.
+    // But we want to simulate a STALE price.
+    // block.timestamp is now approx T_start + 7200.
+    // If we set updatedAt to T_start, it will be stale.
+    const now = BigInt(Math.floor(Date.now() / 1000)); // This is local time, not EVM time
+    // Better use block.timestamp from EVM
+    const block = await publicClient.getBlock();
+    const evmNow = block.timestamp;
+
+    await (priceFeed as any).write.setUpdatedAt([evmNow - 7200n]);
+
+    // Force total failure of price feed as a double-check if needed,
+    // but the staleness check should be enough to trigger manual price fallback.
+
+    // Donate. Price feed should be stale, so it should fall back to manual price if available.
+    // $2000 * 0.1 ETH = $200.
+    await bragNFT.write.donate(["Stale feed donation", ""], { account: donor.account, value: parseEther("0.1") });
+
+    const record = await bragNFT.read.taxRegistry([0n]);
+    const usdValue = record[1];
+    assert.equal(usdValue, 20000000000n); // $200 (8 decimals)
+  });
+
   it("Should mint BragNFT and record Tax Receipt on donation", async function () {
     const { bragNFT, bragToken, donor, treasury } = await deployContracts();
     const donationAmount = parseEther("0.5");

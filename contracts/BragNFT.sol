@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -36,7 +37,7 @@ interface AggregatorV3Interface {
  * @dev A Dual-State NFT that combines tradable art with a soulbound tax receipt.
  * Implements EIP-2981 for royalties and EIP-6454 for transferability signaling.
  */
-contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, IERC6454 {
+contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, IERC2981, IERC6454 {
     using Strings for uint256;
     using SafeERC20 for IERC20;
 
@@ -58,6 +59,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     uint256 public minimumDonation;
     IBragToken public bragToken;
     AggregatorV3Interface public priceFeed;
+    uint256 public priceFeedStaleThreshold = 4 hours;
 
     // EIP-2981 Royalty Support (8% hardcoded for 2026 model)
     uint96 public constant ROYALTY_BPS = 800;
@@ -152,6 +154,18 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         manualEthPrice = _manualEthPrice;
     }
 
+    function setPriceFeedStaleThreshold(uint256 _threshold) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        priceFeedStaleThreshold = _threshold;
+    }
+
+    function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _pause();
+    }
+
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _unpause();
+    }
+
     function setTaxStatus(uint256 tokenId, TaxStatus status) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _requireOwned(tokenId);
         taxRegistry[tokenId].status = status;
@@ -172,35 +186,35 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
     /**
      * @dev Mint a new BragNFT by donating ETH.
      */
-    function donate(string calldata message, string calldata tokenURI_) external payable nonReentrant {
+    function donate(string calldata message, string calldata tokenURI_) external payable nonReentrant whenNotPaused {
         _donate(msg.sender, message, tokenURI_, false);
     }
 
     /**
      * @dev Mint a new BragNFT by donating ETH with optional on-chain media.
      */
-    function donate(string calldata message, string calldata media, bool onChain) external payable nonReentrant {
+    function donate(string calldata message, string calldata media, bool onChain) external payable nonReentrant whenNotPaused {
         _donate(msg.sender, message, media, onChain);
     }
 
     /**
      * @dev Mint a new BragNFT by donating ETH to a specific recipient.
      */
-    function donateTo(address recipient, string calldata message, string calldata tokenURI_) external payable nonReentrant {
+    function donateTo(address recipient, string calldata message, string calldata tokenURI_) external payable nonReentrant whenNotPaused {
         _donate(recipient, message, tokenURI_, false);
     }
 
     /**
      * @dev Mint a new BragNFT by donating ETH to a recipient with optional on-chain media.
      */
-    function donateTo(address recipient, string calldata message, string calldata media, bool onChain) external payable nonReentrant {
+    function donateTo(address recipient, string calldata message, string calldata media, bool onChain) external payable nonReentrant whenNotPaused {
         _donate(recipient, message, media, onChain);
     }
 
     /**
      * @dev Fallback to handle raw ETH transfers.
      */
-    receive() external payable nonReentrant {
+    receive() external payable nonReentrant whenNotPaused {
         _donate(msg.sender, "Direct donation", "", false);
     }
 
@@ -208,10 +222,13 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
         uint256 usdValue = 0;
         bool feedSuccess = false;
         if (address(priceFeed) != address(0)) {
-            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256, uint80) {
-                if (answer > 0) {
+            try priceFeed.latestRoundData() returns (uint80, int256 answer, uint256, uint256 updatedAt, uint80) {
+                if (answer > 0 && block.timestamp <= updatedAt + priceFeedStaleThreshold) {
                     usdValue = (uint256(answer) * ethAmount) / 1e18;
                     feedSuccess = true;
+                } else if (answer > 0) {
+                    // It was stale, emit event? (Optional, but explains why manual fallback happened)
+                    emit PriceFeedFailed();
                 }
             } catch {
                 emit PriceFeedFailed();
@@ -272,7 +289,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
      * @dev Top up the impact to keep the collectible glowing.
      * Required amount is $1.00 USD worth of ETH.
      */
-    function topUp(uint256 tokenId) external payable nonReentrant {
+    function topUp(uint256 tokenId) external payable nonReentrant whenNotPaused {
         _requireOwned(tokenId);
 
         uint256 usdValue = _getUsdValue(msg.value);
@@ -300,7 +317,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, IERC2981, 
      * @dev Recharge the "glow" of an NFT using BRAG tokens.
      * Requires 1,000,000 BRAG tokens (fixed at $1 value).
      */
-    function topUpWithBrag(uint256 tokenId) external nonReentrant {
+    function topUpWithBrag(uint256 tokenId) external nonReentrant whenNotPaused {
         _requireOwned(tokenId);
         uint256 bragAmount = 1_000_000 * 10**18; // 1,000,000 BRAG tokens
 

@@ -99,11 +99,8 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
                 duration = abi.decode(data, (uint256));
             }
         } else if (data.length == 64) {
-            if (verifiedFrom || verifiedOperator) {
-                (actualOwner, duration) = abi.decode(data, (address, uint256));
-            } else {
-                duration = abi.decode(data, (uint256));
-            }
+            require(verifiedFrom || verifiedOperator, "Unauthorized data");
+            (actualOwner, duration) = abi.decode(data, (address, uint256));
         }
     }
 
