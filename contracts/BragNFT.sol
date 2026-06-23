@@ -287,7 +287,8 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
 
     /**
      * @dev Top up the impact to keep the collectible glowing.
-     * Required amount is $1.00 USD worth of ETH.
+     * Required amount is at least $1.00 USD worth of ETH.
+     * The glow duration is proportional to the amount sent ($1.00 = 30 days).
      */
     function topUp(uint256 tokenId) external payable nonReentrant whenNotPaused {
         _requireOwned(tokenId);
@@ -296,10 +297,14 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
 
         require(usdValue >= 1e8, "Top-up requires $1.00 USD");
 
+        // $1.00 (1e8) = 30 days (2592000 seconds)
+        // duration = usdValue * 30 days / 1e8
+        uint256 duration = (usdValue * 30 days) / 1e8;
+
         if (glowExpiry[tokenId] < block.timestamp) {
-            glowExpiry[tokenId] = block.timestamp + 30 days;
+            glowExpiry[tokenId] = block.timestamp + duration;
         } else {
-            glowExpiry[tokenId] += 30 days;
+            glowExpiry[tokenId] += duration;
         }
 
         // Mint Brag Tokens (1,000,000 per USD)
