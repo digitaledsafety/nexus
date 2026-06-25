@@ -59,7 +59,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
     uint256 public minimumDonation;
     IBragToken public bragToken;
     AggregatorV3Interface public priceFeed;
-    uint256 public priceFeedStaleThreshold = 4 hours;
+    uint256 public priceFeedStaleThreshold = 25 hours;
 
     // EIP-2981 Royalty Support (8% hardcoded for 2026 model)
     uint96 public constant ROYALTY_BPS = 800;
@@ -487,11 +487,18 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
 
         string memory gStart = glowing ? '<g filter="url(#glow)">' : '<g>';
 
+        // Dynamic background color based on TaxStatus
+        TaxStatus status = taxRegistry[tokenId].status;
+        string memory bgColor = "#6366f1"; // Default (Pending)
+        if (status == TaxStatus.Verified) bgColor = "#22c55e"; // Green
+        else if (status == TaxStatus.Claimed) bgColor = "#eab308"; // Gold
+        else if (status == TaxStatus.Flagged) bgColor = "#ef4444"; // Red
+
         return string(abi.encodePacked(
             '<svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet" viewBox="0 0 350 350">',
             filterDef,
             '<style>.base { ', textStyle, ' }</style>',
-            '<rect width="100%" height="100%" fill="#6366f1" />',
+            '<rect width="100%" height="100%" fill="', bgColor, '" />',
             gStart,
             '<text x="50%" y="50%" class="base" dominant-baseline="middle" text-anchor="middle">',
             displayText,

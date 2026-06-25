@@ -275,6 +275,26 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
         }
     }
 
+    /**
+     * @dev Move multiple ERC721 tokens from the same contract directly to another verified vault.
+     */
+    function moveBatch721(address nftContract, uint256[] calldata tokenIds, address destinationVault) external nonReentrant {
+        for (uint256 i = 0; i < tokenIds.length; ) {
+            _move721(nftContract, tokenIds[i], destinationVault, 0);
+            unchecked { i++; }
+        }
+    }
+
+    /**
+     * @dev Move multiple ERC721 tokens from the same contract directly to another verified vault with a duration.
+     */
+    function moveBatch721WithDuration(address nftContract, uint256[] calldata tokenIds, address destinationVault, uint256 duration) external nonReentrant {
+        for (uint256 i = 0; i < tokenIds.length; ) {
+            _move721(nftContract, tokenIds[i], destinationVault, duration);
+            unchecked { i++; }
+        }
+    }
+
     function _move721(address nftContract, uint256 tokenId, address destinationVault, uint256 duration) internal {
         require(owner721[nftContract][tokenId] == msg.sender, "Not the owner");
         require(registry.isVerified(destinationVault), "Destination not verified");
