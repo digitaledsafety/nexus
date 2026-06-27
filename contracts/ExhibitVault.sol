@@ -112,7 +112,7 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
         address from,
         uint256 tokenId,
         bytes memory data
-    ) public override nonReentrant returns (bytes4) {
+    ) public override returns (bytes4) {
         (address actualOwner, uint256 duration) = _parseDepositData(from, operator, data);
 
         owner721[msg.sender][tokenId] = actualOwner;
@@ -136,7 +136,7 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
         uint256 id,
         uint256 value,
         bytes memory data
-    ) public override nonReentrant returns (bytes4) {
+    ) public override returns (bytes4) {
         (address actualOwner, uint256 duration) = _parseDepositData(from, operator, data);
 
         balances1155[msg.sender][id][actualOwner] += value;
@@ -157,7 +157,7 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
         uint256[] memory ids,
         uint256[] memory values,
         bytes memory data
-    ) public override nonReentrant returns (bytes4) {
+    ) public override returns (bytes4) {
         (address actualOwner, uint256 duration) = _parseDepositData(from, operator, data);
 
         uint256 newExpiry = duration > 0 ? block.timestamp + duration : 0;
@@ -232,6 +232,66 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
         IERC1155(nftContract).safeTransferFrom(address(this), msg.sender, tokenId, amount, "");
 
         emit Withdrawn1155(nftContract, tokenId, msg.sender, amount);
+    }
+
+    /**
+     * @notice Exhibit multiple ERC721 tokens in a single transaction.
+     * Requires the owner to have approved this contract.
+     */
+    function batchExhibit721(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256 duration) external nonReentrant {
+        require(nftContracts.length == tokenIds.length, "Mismatched arrays");
+        bytes memory data = duration > 0 ? abi.encode(msg.sender, duration) : abi.encode(msg.sender);
+        for (uint256 i = 0; i < nftContracts.length; ) {
+            IERC721(nftContracts[i]).safeTransferFrom(msg.sender, address(this), tokenIds[i], data);
+            unchecked { i++; }
+        }
+    }
+
+    /**
+     * @notice Exhibit multiple ERC1155 tokens in a single transaction.
+     * Requires the owner to have approved this contract.
+     */
+    function batchExhibit1155(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256[] calldata amounts, uint256 duration) external nonReentrant {
+        require(nftContracts.length == tokenIds.length && tokenIds.length == amounts.length, "Mismatched arrays");
+        bytes memory data = duration > 0 ? abi.encode(msg.sender, duration) : abi.encode(msg.sender);
+        for (uint256 i = 0; i < nftContracts.length; ) {
+            IERC1155(nftContracts[i]).safeTransferFrom(msg.sender, address(this), tokenIds[i], amounts[i], data);
+            unchecked { i++; }
+        }
+    }
+
+    /**
+     * @notice Extend the exhibition duration for an ERC721 token.
+     */
+    function extendExhibition721(address nftContract, uint256 tokenId, uint256 duration) external nonReentrant {
+        require(owner721[nftContract][tokenId] == msg.sender, "Not the owner");
+        require(duration > 0, "Invalid duration");
+
+        if (expiry721[nftContract][tokenId] < block.timestamp) {
+            expiry721[nftContract][tokenId] = block.timestamp + duration;
+        } else {
+            expiry721[nftContract][tokenId] += duration;
+        }
+
+        string memory location = registry.getVaultInfo(address(this)).name;
+        emit Exhibited721(nftContract, tokenId, msg.sender, location, expiry721[nftContract][tokenId]);
+    }
+
+    /**
+     * @notice Extend the exhibition duration for an ERC1155 token.
+     */
+    function extendExhibition1155(address nftContract, uint256 tokenId, uint256 duration) external nonReentrant {
+        require(balances1155[nftContract][tokenId][msg.sender] > 0, "No balance");
+        require(duration > 0, "Invalid duration");
+
+        if (expiry1155[nftContract][tokenId][msg.sender] < block.timestamp) {
+            expiry1155[nftContract][tokenId][msg.sender] = block.timestamp + duration;
+        } else {
+            expiry1155[nftContract][tokenId][msg.sender] += duration;
+        }
+
+        string memory location = registry.getVaultInfo(address(this)).name;
+        emit Exhibited1155(nftContract, tokenId, msg.sender, 0, location, expiry1155[nftContract][tokenId][msg.sender]);
     }
 
     /**

@@ -503,6 +503,21 @@ contract NFTMarketplace is ReentrancyGuard, Pausable, AccessControl {
      * @param buyer The address of the buyer whose offer is being rejected
      */
     function rejectOffer(address nftContract, uint256 tokenId, address buyer) external nonReentrant whenNotPaused {
+        _rejectOffer(nftContract, tokenId, buyer);
+    }
+
+    /**
+     * @notice Batch reject multiple offers
+     */
+    function batchRejectOffers(address[] calldata nftContracts, uint256[] calldata tokenIds, address[] calldata buyers) external nonReentrant whenNotPaused {
+        require(nftContracts.length == tokenIds.length && tokenIds.length == buyers.length, "Mismatched arrays");
+        for (uint256 i = 0; i < nftContracts.length; ) {
+            _rejectOffer(nftContracts[i], tokenIds[i], buyers[i]);
+            unchecked { i++; }
+        }
+    }
+
+    function _rejectOffer(address nftContract, uint256 tokenId, address buyer) internal {
         Offer memory offer = offers[nftContract][tokenId][buyer];
         require(offer.price > 0, "No valid offer exists");
 
@@ -522,6 +537,17 @@ contract NFTMarketplace is ReentrancyGuard, Pausable, AccessControl {
         paymentToken.safeTransfer(buyer, offer.price);
 
         emit OfferRejected(nftContract, tokenId, buyer, msg.sender);
+    }
+
+    /**
+     * @notice Batch update multiple existing offers
+     */
+    function batchUpdateOffers(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256[] calldata newAmounts, uint256[] calldata newPrices, uint256[] calldata newExpiries) external nonReentrant whenNotPaused {
+        require(nftContracts.length == tokenIds.length && tokenIds.length == newAmounts.length && newAmounts.length == newPrices.length && newPrices.length == newExpiries.length, "Mismatched arrays");
+        for (uint256 i = 0; i < nftContracts.length; ) {
+            _updateOffer(nftContracts[i], tokenIds[i], newAmounts[i], newPrices[i], newExpiries[i]);
+            unchecked { i++; }
+        }
     }
 
     function setProtocolFee(uint256 _feeBps) external onlyRole(DEFAULT_ADMIN_ROLE) {

@@ -119,6 +119,7 @@ describe("BragNFT Dual-State Model", async function () {
     assert.equal(json.attributes[0].value, recordMessage);
     assert.equal(json.attributes[1].value, donor.account.address.toLowerCase());
     assert.equal(json.attributes[2].value, "Pending");
+    assert.equal(json.attributes[3].value, "$1250.00");
 
     // 2.5 Check BragToken reward
     const balance = await bragToken.read.balanceOf([donor.account.address]);
@@ -180,7 +181,7 @@ describe("BragNFT Dual-State Model", async function () {
 
       const uri = await bragNFT.read.tokenURI([tokenId]);
       const json = JSON.parse(Buffer.from(uri.split(",")[1], "base64").toString());
-      assert.equal(json.attributes[3].value, "Yes");
+      assert.equal(json.attributes[4].value, "Yes");
 
       const svg = Buffer.from(json.image.split(",")[1], "base64").toString();
       assert.ok(svg.includes('filter="url(#glow)"'), "SVG should include glow filter");
