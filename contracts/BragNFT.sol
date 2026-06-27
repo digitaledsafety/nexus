@@ -363,13 +363,13 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
             if (_isMultimedia(media)) {
                 animationURL = media;
                 // For multimedia, we use the generated SVG as the thumbnail/image
-                imageURI = string(abi.encodePacked("data:image/svg+xml;base64,", Base64.encode(bytes(_generateSVG(tokenId, record.message)))));
+                imageURI = string(abi.encodePacked("data:image/svg+xml;base64,", Base64.encode(bytes(_generateSVG(tokenId, record.message, record.status)))));
             } else {
                 imageURI = media;
             }
         } else {
             // SVG Fallback using the message
-            imageURI = string(abi.encodePacked("data:image/svg+xml;base64,", Base64.encode(bytes(_generateSVG(tokenId, record.message)))));
+            imageURI = string(abi.encodePacked("data:image/svg+xml;base64,", Base64.encode(bytes(_generateSVG(tokenId, record.message, record.status)))));
         }
 
         string memory animationPart = "";
@@ -381,6 +381,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
             '{"trait_type": "Message", "value": "', _escapeJSON(record.message), '"},',
             '{"trait_type": "Original Donor", "value": "', Strings.toHexString(record.originalDonor), '"},',
             '{"trait_type": "Tax Status", "value": "', _getStatusString(record.status), '"},',
+            '{"trait_type": "Donation Value", "value": "$', _formatUSD(record.usdValue), '"},',
             '{"trait_type": "Glowing", "value": "', glowing ? "Yes" : "No", '"}'
         );
 
@@ -473,8 +474,14 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
     /**
      * @dev Generates a simple SVG image with the donation message and optional glow.
      */
-    function _generateSVG(uint256 tokenId, string memory message) internal view returns (string memory) {
+    function _generateSVG(uint256 tokenId, string memory message, TaxStatus status) internal view returns (string memory) {
         bool glowing = isGlowing(tokenId);
+        string memory backgroundColor = "#6366f1"; // Default Pending (Indigo)
+
+        if (status == TaxStatus.Verified) backgroundColor = "#22c55e"; // Green
+        else if (status == TaxStatus.Claimed) backgroundColor = "#eab308"; // Gold
+        else if (status == TaxStatus.Flagged) backgroundColor = "#ef4444"; // Red
+
         string memory truncatedMessage = _substring(message, 32);
         string memory displayText = bytes(truncatedMessage).length > 0 ? _escapeSVG(truncatedMessage) : string(abi.encodePacked("BragNFT #", tokenId.toString()));
 
@@ -491,12 +498,27 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
             '<svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet" viewBox="0 0 350 350">',
             filterDef,
             '<style>.base { ', textStyle, ' }</style>',
-            '<rect width="100%" height="100%" fill="#6366f1" />',
+            '<rect width="100%" height="100%" fill="', backgroundColor, '" />',
             gStart,
             '<text x="50%" y="50%" class="base" dominant-baseline="middle" text-anchor="middle">',
             displayText,
             '</text></g></svg>'
         ));
+    }
+
+    /**
+     * @dev Format an 8-decimal USD value into a string with 2 decimals (e.g. 100000000 -> "1.00").
+     */
+    function _formatUSD(uint256 value) internal pure returns (string memory) {
+        uint256 integerPart = value / 1e8;
+        uint256 fractionalPart = (value % 1e8) / 1e6;
+
+        string memory fractionalStr = fractionalPart.toString();
+        if (fractionalPart < 10) {
+            fractionalStr = string(abi.encodePacked("0", fractionalStr));
+        }
+
+        return string(abi.encodePacked(integerPart.toString(), ".", fractionalStr));
     }
 
     /**
