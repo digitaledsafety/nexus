@@ -188,10 +188,10 @@ describe("Agency Enhancements", async function () {
       await vault.write.withdraw721([bragNFT.address, tokenId], { account: user1.account });
 
       const expiryAfter = await vault.read.expiry721([bragNFT.address, tokenId]);
-      assert.equal(expiryAfter, 0n);
+      assert.equal(expiryAfter, expiryBefore);
     });
 
-    it("Should clear expiry721 on move (take 2)", async function () {
+    it("Should NOT clear expiry721 on move (take 2)", async function () {
         const { bragNFT, vault, registry, owner, user1 } = await deployContracts();
         const testClient = await viem.getTestClient();
 
@@ -210,10 +210,11 @@ describe("Agency Enhancements", async function () {
         await testClient.increaseTime({ seconds: 4000 });
         await testClient.mine({ blocks: 1 });
 
+        const expiryBefore = await vault.read.expiry721([bragNFT.address, tokenId]);
         await vault.write.move721([bragNFT.address, tokenId, vault2.address], { account: user1.account });
 
         const expiryInVault1 = await vault.read.expiry721([bragNFT.address, tokenId]);
-        assert.equal(expiryInVault1, 0n);
+        assert.equal(expiryInVault1, expiryBefore);
 
         const ownerInVault2 = await vault2.read.owner721([bragNFT.address, tokenId]);
         assert.equal(ownerInVault2, getAddress(user1.account.address));
