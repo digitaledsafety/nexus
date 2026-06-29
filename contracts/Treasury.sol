@@ -178,7 +178,20 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
      * @dev Approve an existing proposal.
      */
     function approve(uint256 proposalId, uint256 nonce) public onlyOwner(nonce) {
+        _approve(proposalId, _getMsgSender(nonce));
+    }
+
+    /**
+     * @dev Batch approve multiple proposals.
+     */
+    function batchApprove(uint256[] calldata proposalIds, uint256 nonce) external onlyOwner(nonce) {
         address owner = _getMsgSender(nonce);
+        for (uint256 i = 0; i < proposalIds.length; i++) {
+            _approve(proposalIds[i], owner);
+        }
+    }
+
+    function _approve(uint256 proposalId, address owner) internal {
         if (proposalId >= proposalCount) revert ProposalNotFound();
 
         Proposal storage p = proposals[proposalId];
@@ -251,7 +264,20 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
      * @dev Cancel a proposal (only by proposer or via treasury execution).
      */
     function cancel(uint256 proposalId, uint256 nonce) external {
+        _cancel(proposalId, _getMsgSender(nonce));
+    }
+
+    /**
+     * @dev Batch cancel multiple proposals.
+     */
+    function batchCancel(uint256[] calldata proposalIds, uint256 nonce) external {
         address caller = _getMsgSender(nonce);
+        for (uint256 i = 0; i < proposalIds.length; i++) {
+            _cancel(proposalIds[i], caller);
+        }
+    }
+
+    function _cancel(uint256 proposalId, address caller) internal {
         if (proposalId >= proposalCount) revert ProposalNotFound();
 
         Proposal storage p = proposals[proposalId];
