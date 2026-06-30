@@ -164,7 +164,8 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
         string memory location = registry.getVaultInfo(address(this)).name;
         address nftContract = msg.sender;
 
-        for (uint256 i = 0; i < ids.length; i++) {
+        uint256 length = ids.length;
+        for (uint256 i = 0; i < length; ) {
             uint256 id = ids[i];
             uint256 value = values[i];
             balances1155[nftContract][id][actualOwner] += value;
@@ -172,6 +173,7 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
                 expiry1155[nftContract][id][actualOwner] = newExpiry;
             }
             emit Exhibited1155(nftContract, id, actualOwner, value, location, expiry1155[nftContract][id][actualOwner]);
+            unchecked { i++; }
         }
         return super.onERC1155BatchReceived(operator, from, ids, values, data);
     }
@@ -188,8 +190,10 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
      */
     function batchWithdraw721(address[] calldata nftContracts, uint256[] calldata tokenIds) external nonReentrant {
         require(nftContracts.length == tokenIds.length, "Mismatched arrays");
-        for (uint256 i = 0; i < nftContracts.length; i++) {
+        uint256 length = nftContracts.length;
+        for (uint256 i = 0; i < length; ) {
             _withdraw721(nftContracts[i], tokenIds[i]);
+            unchecked { i++; }
         }
     }
 
@@ -216,8 +220,10 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
      */
     function batchWithdraw1155(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256[] calldata amounts) external nonReentrant {
         require(nftContracts.length == tokenIds.length && tokenIds.length == amounts.length, "Mismatched arrays");
-        for (uint256 i = 0; i < nftContracts.length; i++) {
+        uint256 length = nftContracts.length;
+        for (uint256 i = 0; i < length; ) {
             _withdraw1155(nftContracts[i], tokenIds[i], amounts[i]);
+            unchecked { i++; }
         }
     }
 
@@ -239,7 +245,8 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
      */
     function withdrawBatch1155(address nftContract, uint256[] calldata ids, uint256[] calldata amounts) external nonReentrant {
         require(ids.length == amounts.length, "Mismatched arrays");
-        for (uint256 i = 0; i < ids.length; i++) {
+        uint256 length = ids.length;
+        for (uint256 i = 0; i < length; ) {
             uint256 id = ids[i];
             uint256 amount = amounts[i];
             require(balances1155[nftContract][id][msg.sender] >= amount, "Insufficient balance");
@@ -250,6 +257,7 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
                 expiry1155[nftContract][id][msg.sender] = 0;
             }
             emit Withdrawn1155(nftContract, id, msg.sender, amount);
+            unchecked { i++; }
         }
         IERC1155(nftContract).safeBatchTransferFrom(address(this), msg.sender, ids, amounts, "");
     }
@@ -270,8 +278,19 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
      */
     function batchMove721(address[] calldata nftContracts, uint256[] calldata tokenIds, address destinationVault) external nonReentrant {
         require(nftContracts.length == tokenIds.length, "Mismatched arrays");
-        for (uint256 i = 0; i < nftContracts.length; i++) {
+        uint256 length = nftContracts.length;
+        for (uint256 i = 0; i < length; ) {
             _move721(nftContracts[i], tokenIds[i], destinationVault, 0);
+            unchecked { i++; }
+        }
+    }
+
+    function batchMove721WithDuration(address[] calldata nftContracts, uint256[] calldata tokenIds, address destinationVault, uint256 duration) external nonReentrant {
+        require(nftContracts.length == tokenIds.length, "Mismatched arrays");
+        uint256 length = nftContracts.length;
+        for (uint256 i = 0; i < length; ) {
+            _move721(nftContracts[i], tokenIds[i], destinationVault, duration);
+            unchecked { i++; }
         }
     }
 
@@ -311,8 +330,19 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
      */
     function batchMove1155(address[] calldata nftContracts, uint256[] calldata ids, uint256[] calldata amounts, address destinationVault) external nonReentrant {
         require(nftContracts.length == ids.length && ids.length == amounts.length, "Mismatched arrays");
-        for (uint256 i = 0; i < nftContracts.length; i++) {
+        uint256 length = nftContracts.length;
+        for (uint256 i = 0; i < length; ) {
             _move1155(nftContracts[i], ids[i], amounts[i], destinationVault, 0);
+            unchecked { i++; }
+        }
+    }
+
+    function batchMove1155WithDuration(address[] calldata nftContracts, uint256[] calldata ids, uint256[] calldata amounts, address destinationVault, uint256 duration) external nonReentrant {
+        require(nftContracts.length == ids.length && ids.length == amounts.length, "Mismatched arrays");
+        uint256 length = nftContracts.length;
+        for (uint256 i = 0; i < length; ) {
+            _move1155(nftContracts[i], ids[i], amounts[i], destinationVault, duration);
+            unchecked { i++; }
         }
     }
 
@@ -353,7 +383,8 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
         require(ids.length == amounts.length, "Mismatched arrays");
         require(registry.isVerified(destinationVault), "Destination not verified");
 
-        for (uint256 i = 0; i < ids.length; i++) {
+        uint256 length = ids.length;
+        for (uint256 i = 0; i < length; ) {
             uint256 id = ids[i];
             uint256 amount = amounts[i];
             require(balances1155[nftContract][id][msg.sender] >= amount, "Insufficient balance");
@@ -364,6 +395,7 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
                 expiry1155[nftContract][id][msg.sender] = 0;
             }
             emit Moved1155(nftContract, id, msg.sender, amount, destinationVault);
+            unchecked { i++; }
         }
 
         bytes memory data;
