@@ -120,7 +120,8 @@ contract NFTMarketplace is ReentrancyGuard, Pausable, AccessControl {
      */
     function batchCreateOffers(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256[] calldata amounts, uint256[] calldata prices) external nonReentrant whenNotPaused {
         require(nftContracts.length == tokenIds.length && tokenIds.length == amounts.length && amounts.length == prices.length, "Mismatched arrays");
-        for (uint256 i = 0; i < nftContracts.length; ) {
+        uint256 length = nftContracts.length;
+        for (uint256 i = 0; i < length; ) {
             _createOffer(nftContracts[i], tokenIds[i], amounts[i], prices[i], 0);
             unchecked { i++; }
         }
@@ -136,7 +137,8 @@ contract NFTMarketplace is ReentrancyGuard, Pausable, AccessControl {
      */
     function batchCreateOffersWithExpiries(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256[] calldata amounts, uint256[] calldata prices, uint256[] calldata expiries) external nonReentrant whenNotPaused {
         require(nftContracts.length == tokenIds.length && tokenIds.length == amounts.length && amounts.length == prices.length && prices.length == expiries.length, "Mismatched arrays");
-        for (uint256 i = 0; i < nftContracts.length; ) {
+        uint256 length = nftContracts.length;
+        for (uint256 i = 0; i < length; ) {
             _createOffer(nftContracts[i], tokenIds[i], amounts[i], prices[i], expiries[i]);
             unchecked { i++; }
         }
@@ -181,7 +183,8 @@ contract NFTMarketplace is ReentrancyGuard, Pausable, AccessControl {
      */
     function batchAcceptOffers(address[] calldata nftContracts, uint256[] calldata tokenIds, address[] calldata buyers) external nonReentrant whenNotPaused {
         require(nftContracts.length == tokenIds.length && tokenIds.length == buyers.length, "Mismatched arrays");
-        for (uint256 i = 0; i < nftContracts.length; ) {
+        uint256 length = nftContracts.length;
+        for (uint256 i = 0; i < length; ) {
             _acceptOffer(nftContracts[i], tokenIds[i], buyers[i]);
             unchecked { i++; }
         }
@@ -284,7 +287,8 @@ contract NFTMarketplace is ReentrancyGuard, Pausable, AccessControl {
      */
     function cancelOffers(address[] calldata nftContracts, uint256[] calldata tokenIds) external nonReentrant {
         require(nftContracts.length == tokenIds.length, "Mismatched arrays");
-        for (uint256 i = 0; i < nftContracts.length; ) {
+        uint256 length = nftContracts.length;
+        for (uint256 i = 0; i < length; ) {
             address nftContract = nftContracts[i];
             uint256 tokenId = tokenIds[i];
             Offer memory offer = offers[nftContract][tokenId][msg.sender];
@@ -337,6 +341,16 @@ contract NFTMarketplace is ReentrancyGuard, Pausable, AccessControl {
         emit ListingUpdated(nftContract, tokenId, msg.sender, newPrice, newAmount, oldListing.privateBuyer);
     }
 
+    /**
+     * @notice Update an existing listing including the private buyer
+     */
+    function updateListing(address nftContract, uint256 tokenId, uint256 newAmount, uint256 newPrice, address privateBuyer) external whenNotPaused {
+        Listing memory oldListing = listings[nftContract][tokenId][msg.sender];
+        require(oldListing.price > 0, "Listing does not exist");
+        _createListing(nftContract, tokenId, newAmount, newPrice, privateBuyer);
+        emit ListingUpdated(nftContract, tokenId, msg.sender, newPrice, newAmount, privateBuyer);
+    }
+
     function _createListing(address nftContract, uint256 tokenId, uint256 amount, uint256 price, address privateBuyer) internal {
         require(price > 0, "Price must be greater than 0");
         require(amount > 0, "Amount must be greater than 0");
@@ -363,7 +377,8 @@ contract NFTMarketplace is ReentrancyGuard, Pausable, AccessControl {
      */
     function batchCreateListings(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256[] calldata amounts, uint256[] calldata prices) external whenNotPaused {
         require(nftContracts.length == tokenIds.length && tokenIds.length == amounts.length && amounts.length == prices.length, "Mismatched arrays");
-        for (uint256 i = 0; i < nftContracts.length; ) {
+        uint256 length = nftContracts.length;
+        for (uint256 i = 0; i < length; ) {
             _createListing(nftContracts[i], tokenIds[i], amounts[i], prices[i], address(0));
             emit ListingCreated(nftContracts[i], tokenIds[i], msg.sender, prices[i], amounts[i], address(0));
             unchecked { i++; }
@@ -375,10 +390,27 @@ contract NFTMarketplace is ReentrancyGuard, Pausable, AccessControl {
      */
     function batchCreatePrivateListings(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256[] calldata amounts, uint256[] calldata prices, address[] calldata privateBuyers) external whenNotPaused {
         require(nftContracts.length == tokenIds.length && tokenIds.length == amounts.length && amounts.length == prices.length && prices.length == privateBuyers.length, "Mismatched arrays");
-        for (uint256 i = 0; i < nftContracts.length; ) {
+        uint256 length = nftContracts.length;
+        for (uint256 i = 0; i < length; ) {
             require(privateBuyers[i] != address(0), "Private buyer cannot be zero address");
             _createListing(nftContracts[i], tokenIds[i], amounts[i], prices[i], privateBuyers[i]);
             emit ListingCreated(nftContracts[i], tokenIds[i], msg.sender, prices[i], amounts[i], privateBuyers[i]);
+            unchecked { i++; }
+        }
+    }
+
+    /**
+     * @notice Batch update multiple listings
+     */
+    function batchUpdateListings(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256[] calldata amounts, uint256[] calldata prices) external whenNotPaused {
+        require(nftContracts.length == tokenIds.length && tokenIds.length == amounts.length && amounts.length == prices.length, "Mismatched arrays");
+        uint256 length = nftContracts.length;
+        for (uint256 i = 0; i < length; ) {
+            Listing memory oldListing = listings[nftContracts[i]][tokenIds[i]][msg.sender];
+            if (oldListing.price > 0) {
+                _createListing(nftContracts[i], tokenIds[i], amounts[i], prices[i], oldListing.privateBuyer);
+                emit ListingUpdated(nftContracts[i], tokenIds[i], msg.sender, prices[i], amounts[i], oldListing.privateBuyer);
+            }
             unchecked { i++; }
         }
     }
@@ -397,7 +429,8 @@ contract NFTMarketplace is ReentrancyGuard, Pausable, AccessControl {
      */
     function batchCancelListings(address[] calldata nftContracts, uint256[] calldata tokenIds) external {
         require(nftContracts.length == tokenIds.length, "Mismatched arrays");
-        for (uint256 i = 0; i < nftContracts.length; ) {
+        uint256 length = nftContracts.length;
+        for (uint256 i = 0; i < length; ) {
             if (listings[nftContracts[i]][tokenIds[i]][msg.sender].price > 0) {
                 delete listings[nftContracts[i]][tokenIds[i]][msg.sender];
                 emit ListingCanceled(nftContracts[i], tokenIds[i], msg.sender);
@@ -422,7 +455,8 @@ contract NFTMarketplace is ReentrancyGuard, Pausable, AccessControl {
      */
     function batchBuyFromListings(address[] calldata nftContracts, uint256[] calldata tokenIds, address[] calldata sellers, uint256[] calldata expectedPrices) external nonReentrant whenNotPaused {
         require(nftContracts.length == tokenIds.length && tokenIds.length == sellers.length && sellers.length == expectedPrices.length, "Mismatched arrays");
-        for (uint256 i = 0; i < nftContracts.length; ) {
+        uint256 length = nftContracts.length;
+        for (uint256 i = 0; i < length; ) {
             _buyFromListing(nftContracts[i], tokenIds[i], sellers[i], expectedPrices[i]);
             unchecked { i++; }
         }
@@ -503,6 +537,22 @@ contract NFTMarketplace is ReentrancyGuard, Pausable, AccessControl {
      * @param buyer The address of the buyer whose offer is being rejected
      */
     function rejectOffer(address nftContract, uint256 tokenId, address buyer) external nonReentrant whenNotPaused {
+        _rejectOffer(nftContract, tokenId, buyer);
+    }
+
+    /**
+     * @notice Batch reject multiple offers
+     */
+    function batchRejectOffers(address[] calldata nftContracts, uint256[] calldata tokenIds, address[] calldata buyers) external nonReentrant whenNotPaused {
+        require(nftContracts.length == tokenIds.length && tokenIds.length == buyers.length, "Mismatched arrays");
+        uint256 length = nftContracts.length;
+        for (uint256 i = 0; i < length; ) {
+            _rejectOffer(nftContracts[i], tokenIds[i], buyers[i]);
+            unchecked { i++; }
+        }
+    }
+
+    function _rejectOffer(address nftContract, uint256 tokenId, address buyer) internal {
         Offer memory offer = offers[nftContract][tokenId][buyer];
         require(offer.price > 0, "No valid offer exists");
 
