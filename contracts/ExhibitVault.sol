@@ -112,7 +112,7 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
         address from,
         uint256 tokenId,
         bytes memory data
-    ) public override nonReentrant returns (bytes4) {
+    ) public override returns (bytes4) {
         (address actualOwner, uint256 duration) = _parseDepositData(from, operator, data);
 
         owner721[msg.sender][tokenId] = actualOwner;
@@ -136,7 +136,7 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
         uint256 id,
         uint256 value,
         bytes memory data
-    ) public override nonReentrant returns (bytes4) {
+    ) public override returns (bytes4) {
         (address actualOwner, uint256 duration) = _parseDepositData(from, operator, data);
 
         balances1155[msg.sender][id][actualOwner] += value;
@@ -157,7 +157,7 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
         uint256[] memory ids,
         uint256[] memory values,
         bytes memory data
-    ) public override nonReentrant returns (bytes4) {
+    ) public override returns (bytes4) {
         (address actualOwner, uint256 duration) = _parseDepositData(from, operator, data);
 
         uint256 newExpiry = duration > 0 ? block.timestamp + duration : 0;
@@ -221,6 +221,58 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
         }
     }
 
+    /**
+     * @dev Exhibit multiple ERC721 tokens from the same contract.
+     */
+    function batchExhibit721(address nftContract, uint256[] calldata tokenIds, uint256 duration) external {
+        bytes memory data = abi.encode(msg.sender, duration);
+        for (uint256 i = 0; i < tokenIds.length; i++) {
+            IERC721(nftContract).safeTransferFrom(msg.sender, address(this), tokenIds[i], data);
+        }
+    }
+
+    /**
+     * @dev Exhibit multiple ERC1155 tokens from the same contract.
+     */
+    function batchExhibit1155(address nftContract, uint256[] calldata ids, uint256[] calldata amounts, uint256 duration) external {
+        bytes memory data = abi.encode(msg.sender, duration);
+        IERC1155(nftContract).safeBatchTransferFrom(msg.sender, address(this), ids, amounts, data);
+    }
+
+    /**
+     * @dev Extend the duration of an ERC721 exhibition.
+     */
+    function extendExhibition721(address nftContract, uint256 tokenId, uint256 duration) external {
+        require(owner721[nftContract][tokenId] == msg.sender, "Not the owner");
+        require(duration > 0, "Invalid duration");
+
+        if (expiry721[nftContract][tokenId] < block.timestamp) {
+            expiry721[nftContract][tokenId] = block.timestamp + duration;
+        } else {
+            expiry721[nftContract][tokenId] += duration;
+        }
+
+        string memory location = registry.getVaultInfo(address(this)).name;
+        emit Exhibited721(nftContract, tokenId, msg.sender, location, expiry721[nftContract][tokenId]);
+    }
+
+    /**
+     * @dev Extend the duration of an ERC1155 exhibition.
+     */
+    function extendExhibition1155(address nftContract, uint256 tokenId, uint256 duration) external {
+        require(balances1155[nftContract][tokenId][msg.sender] > 0, "Not an exhibitor");
+        require(duration > 0, "Invalid duration");
+
+        if (expiry1155[nftContract][tokenId][msg.sender] < block.timestamp) {
+            expiry1155[nftContract][tokenId][msg.sender] = block.timestamp + duration;
+        } else {
+            expiry1155[nftContract][tokenId][msg.sender] += duration;
+        }
+
+        string memory location = registry.getVaultInfo(address(this)).name;
+        emit Exhibited1155(nftContract, tokenId, msg.sender, 0, location, expiry1155[nftContract][tokenId][msg.sender]);
+    }
+
     function _withdraw1155(address nftContract, uint256 tokenId, uint256 amount) internal {
         require(balances1155[nftContract][tokenId][msg.sender] >= amount, "Insufficient balance");
         require(block.timestamp >= expiry1155[nftContract][tokenId][msg.sender], "Exhibition not yet expired");
@@ -268,10 +320,20 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
     /**
      * @dev Move multiple ERC721 tokens directly to another verified vault.
      */
-    function batchMove721(address[] calldata nftContracts, uint256[] calldata tokenIds, address destinationVault) external nonReentrant {
+    function moveBatch721(address[] calldata nftContracts, uint256[] calldata tokenIds, address destinationVault) external nonReentrant {
         require(nftContracts.length == tokenIds.length, "Mismatched arrays");
         for (uint256 i = 0; i < nftContracts.length; i++) {
             _move721(nftContracts[i], tokenIds[i], destinationVault, 0);
+        }
+    }
+
+    /**
+     * @dev Move multiple ERC721 tokens directly to another verified vault with a duration.
+     */
+    function moveBatch721WithDuration(address[] calldata nftContracts, uint256[] calldata tokenIds, address destinationVault, uint256 duration) external nonReentrant {
+        require(nftContracts.length == tokenIds.length, "Mismatched arrays");
+        for (uint256 i = 0; i < nftContracts.length; i++) {
+            _move721(nftContracts[i], tokenIds[i], destinationVault, duration);
         }
     }
 
