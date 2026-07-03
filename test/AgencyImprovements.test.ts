@@ -55,19 +55,28 @@ describe("AgencyImprovements", async function () {
       buyer,
       publicClient,
       testClient,
+      mockPriceFeed,
     };
   }
 
   describe("BragNFT Improvements", async function () {
     it("should handle cumulative glow correctly", async function () {
-      const { bragNFT, testClient, publicClient } = await deployFixture();
+      const { bragNFT, testClient, publicClient, mockPriceFeed } = await deployFixture();
 
       await bragNFT.write.donate(["Cumulative test", "uri", false], {
         value: parseEther("0.1"),
       });
       const tokenId = 0n;
 
+      assert.equal(await bragNFT.read.isGlowing([tokenId]), true);
+
+      // Expire glow
+      await testClient.increaseTime({ seconds: 31 * 24 * 3600 });
+      await testClient.mine({ blocks: 1 });
       assert.equal(await bragNFT.read.isGlowing([tokenId]), false);
+
+      // Update mock price feed to not be stale
+      await mockPriceFeed.write.setUpdatedAt([BigInt((await publicClient.getBlock()).timestamp)]);
 
       // First top up
       await bragNFT.write.topUp([tokenId], { value: parseEther("0.001") }); // $2.50

@@ -69,7 +69,7 @@ describe("Batch Operations", async function () {
     assert.equal(await bragNFT.read.ownerOf([1n]), getAddress(vault1.address));
 
     // Batch move
-    await vault1.write.batchMove721([[bragNFT.address, bragNFT.address], [0n, 1n], vault2.address], { account: seller.account });
+    await vault1.write.moveBatch721([[bragNFT.address, bragNFT.address], [0n, 1n], vault2.address], { account: seller.account });
 
     assert.equal(await bragNFT.read.ownerOf([0n]), getAddress(vault2.address));
     assert.equal(await bragNFT.read.ownerOf([1n]), getAddress(vault2.address));

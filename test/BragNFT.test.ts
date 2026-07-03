@@ -160,14 +160,22 @@ describe("BragNFT Dual-State Model", async function () {
   });
 
   it("Should handle Top-up and Glowing state", async function () {
-      const { bragNFT, donor, treasury } = await deployContracts();
+      const { bragNFT, donor, treasury, priceFeed } = await deployContracts();
       const publicClient = await viem.getPublicClient();
       const initialTreasuryBalance = await publicClient.getBalance({ address: treasury.account.address });
 
       await bragNFT.write.donate(["Glowing NFT", ""], { account: donor.account, value: parseEther("0.1") });
       const tokenId = 0n;
 
+      assert.equal(await bragNFT.read.isGlowing([tokenId]), true);
+
+      // Fast forward 31 days to expire glow
+      await publicClient.request({ method: "evm_increaseTime" as any, params: [31 * 24 * 3600] });
+      await publicClient.request({ method: "evm_mine" as any, params: [] });
       assert.equal(await bragNFT.read.isGlowing([tokenId]), false);
+
+      // Update mock price feed to not be stale
+      await priceFeed.write.setUpdatedAt([BigInt((await publicClient.getBlock()).timestamp)]);
 
       // Top up with $1.00 USD worth of ETH. At $2500/ETH, $1.00 is 0.0004 ETH
       const topUpAmount = parseEther("0.0004");
