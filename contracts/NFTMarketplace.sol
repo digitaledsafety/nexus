@@ -192,10 +192,7 @@ contract NFTMarketplace is ReentrancyGuard, Pausable, AccessControl {
         require(offer.price > 0, "No valid offer exists");
         require(offer.expiry == 0 || block.timestamp <= offer.expiry, "Offer expired");
 
-        // Transfer the NFT to the buyer
-        _transferNFT(nftContract, tokenId, msg.sender, buyer, offer.amount);
-
-        // CEI: Clear the offer after ownership check but before token transfers
+        // CEI: Clear state before external calls
         delete offers[nftContract][tokenId][buyer];
 
         // Automatically cancel any listing by the seller for this token
@@ -203,6 +200,9 @@ contract NFTMarketplace is ReentrancyGuard, Pausable, AccessControl {
             delete listings[nftContract][tokenId][msg.sender];
             emit ListingCanceled(nftContract, tokenId, msg.sender);
         }
+
+        // Transfer the NFT to the buyer
+        _transferNFT(nftContract, tokenId, msg.sender, buyer, offer.amount);
 
         // Pay the seller and handle fees/royalties
         _distributeProceedsFromContract(nftContract, tokenId, msg.sender, offer.price);
@@ -437,11 +437,11 @@ contract NFTMarketplace is ReentrancyGuard, Pausable, AccessControl {
         // Transfer payment from buyer to contract
         paymentToken.safeTransferFrom(msg.sender, address(this), listing.price);
 
-        // Transfer NFT from seller to buyer
-        _transferNFT(nftContract, tokenId, seller, msg.sender, listing.amount);
-
         // CEI: Clear listing
         delete listings[nftContract][tokenId][seller];
+
+        // Transfer NFT from seller to buyer
+        _transferNFT(nftContract, tokenId, seller, msg.sender, listing.amount);
 
         // Distribute proceeds
         _distributeProceedsFromContract(nftContract, tokenId, seller, listing.price);
@@ -471,6 +471,7 @@ contract NFTMarketplace is ReentrancyGuard, Pausable, AccessControl {
 
     function _distributeProceedsFromContract(address nftContract, uint256 tokenId, address seller, uint256 price) internal {
         uint256 protocolFee = (price * protocolFeeBps) / 10000;
+        require(protocolFee <= price, "Protocol fee exceeds price");
         uint256 royaltyFee = 0;
         address royaltyRecipient;
 
