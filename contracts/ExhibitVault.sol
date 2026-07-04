@@ -158,6 +158,7 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
         uint256[] memory values,
         bytes memory data
     ) public override nonReentrant returns (bytes4) {
+        require(ids.length == values.length, "Mismatched arrays");
         (address actualOwner, uint256 duration) = _parseDepositData(from, operator, data);
 
         uint256 newExpiry = duration > 0 ? block.timestamp + duration : 0;
