@@ -70,15 +70,12 @@ describe("BragNFT Dual-State Model", async function () {
     // But we want to simulate a STALE price.
     // block.timestamp is now approx T_start + 7200.
     // If we set updatedAt to T_start, it will be stale.
-    const now = BigInt(Math.floor(Date.now() / 1000)); // This is local time, not EVM time
-    // Better use block.timestamp from EVM
+
     const block = await publicClient.getBlock();
     const evmNow = block.timestamp;
 
+    // Set price feed to be stale but the call ITSELF should still succeed
     await (priceFeed as any).write.setUpdatedAt([evmNow - 7200n]);
-
-    // Force total failure of price feed as a double-check if needed,
-    // but the staleness check should be enough to trigger manual price fallback.
 
     // Donate. Price feed should be stale, so it should fall back to manual price if available.
     // $2000 * 0.1 ETH = $200.
@@ -118,7 +115,8 @@ describe("BragNFT Dual-State Model", async function () {
     assert.equal(json.image, tokenURI);
     assert.equal(json.attributes[0].value, recordMessage);
     assert.equal(json.attributes[1].value, donor.account.address.toLowerCase());
-    assert.equal(json.attributes[2].value, "Pending");
+    assert.equal(json.attributes[2].value, "$1250.00");
+    assert.equal(json.attributes[3].value, "Pending");
 
     // 2.5 Check BragToken reward
     const balance = await bragToken.read.balanceOf([donor.account.address]);
@@ -180,7 +178,7 @@ describe("BragNFT Dual-State Model", async function () {
 
       const uri = await bragNFT.read.tokenURI([tokenId]);
       const json = JSON.parse(Buffer.from(uri.split(",")[1], "base64").toString());
-      assert.equal(json.attributes[3].value, "Yes");
+      assert.equal(json.attributes[4].value, "Yes");
 
       const svg = Buffer.from(json.image.split(",")[1], "base64").toString();
       assert.ok(svg.includes('filter="url(#glow)"'), "SVG should include glow filter");
