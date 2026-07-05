@@ -112,7 +112,7 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
         address from,
         uint256 tokenId,
         bytes memory data
-    ) public override nonReentrant returns (bytes4) {
+    ) public override returns (bytes4) {
         (address actualOwner, uint256 duration) = _parseDepositData(from, operator, data);
 
         owner721[msg.sender][tokenId] = actualOwner;
@@ -136,7 +136,7 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
         uint256 id,
         uint256 value,
         bytes memory data
-    ) public override nonReentrant returns (bytes4) {
+    ) public override returns (bytes4) {
         (address actualOwner, uint256 duration) = _parseDepositData(from, operator, data);
 
         balances1155[msg.sender][id][actualOwner] += value;
@@ -157,7 +157,8 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
         uint256[] memory ids,
         uint256[] memory values,
         bytes memory data
-    ) public override nonReentrant returns (bytes4) {
+    ) public override returns (bytes4) {
+        require(ids.length == values.length, "Mismatched arrays");
         (address actualOwner, uint256 duration) = _parseDepositData(from, operator, data);
 
         uint256 newExpiry = duration > 0 ? block.timestamp + duration : 0;
@@ -374,6 +375,58 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
         }
 
         IERC1155(nftContract).safeBatchTransferFrom(address(this), destinationVault, ids, amounts, data);
+    }
+
+    /**
+     * @dev Batch exhibit ERC721 tokens.
+     */
+    function batchExhibit721(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256 duration) external nonReentrant {
+        require(nftContracts.length == tokenIds.length, "Mismatched arrays");
+        bytes memory data = duration > 0 ? abi.encode(msg.sender, duration) : abi.encode(msg.sender);
+        for (uint256 i = 0; i < nftContracts.length; i++) {
+            IERC721(nftContracts[i]).safeTransferFrom(msg.sender, address(this), tokenIds[i], data);
+        }
+    }
+
+    /**
+     * @dev Batch exhibit ERC1155 tokens.
+     */
+    function batchExhibit1155(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256[] calldata amounts, uint256 duration) external nonReentrant {
+        require(nftContracts.length == tokenIds.length && tokenIds.length == amounts.length, "Mismatched arrays");
+        bytes memory data = duration > 0 ? abi.encode(msg.sender, duration) : abi.encode(msg.sender);
+        for (uint256 i = 0; i < nftContracts.length; i++) {
+            IERC1155(nftContracts[i]).safeTransferFrom(msg.sender, address(this), tokenIds[i], amounts[i], data);
+        }
+    }
+
+    /**
+     * @dev Extend exhibition duration for an ERC721 token.
+     */
+    function extendExhibition721(address nftContract, uint256 tokenId, uint256 duration) external nonReentrant {
+        require(owner721[nftContract][tokenId] == msg.sender, "Not the owner");
+        require(duration > 0, "Duration must be > 0");
+
+        uint256 currentExpiry = expiry721[nftContract][tokenId];
+        uint256 base = currentExpiry > block.timestamp ? currentExpiry : block.timestamp;
+        expiry721[nftContract][tokenId] = base + duration;
+
+        string memory location = registry.getVaultInfo(address(this)).name;
+        emit Exhibited721(nftContract, tokenId, msg.sender, location, expiry721[nftContract][tokenId]);
+    }
+
+    /**
+     * @dev Extend exhibition duration for an ERC1155 token.
+     */
+    function extendExhibition1155(address nftContract, uint256 tokenId, uint256 duration) external nonReentrant {
+        require(balances1155[nftContract][tokenId][msg.sender] > 0, "No balance");
+        require(duration > 0, "Duration must be > 0");
+
+        uint256 currentExpiry = expiry1155[nftContract][tokenId][msg.sender];
+        uint256 base = currentExpiry > block.timestamp ? currentExpiry : block.timestamp;
+        expiry1155[nftContract][tokenId][msg.sender] = base + duration;
+
+        string memory location = registry.getVaultInfo(address(this)).name;
+        emit Exhibited1155(nftContract, tokenId, msg.sender, balances1155[nftContract][tokenId][msg.sender], location, expiry1155[nftContract][tokenId][msg.sender]);
     }
 
 }
