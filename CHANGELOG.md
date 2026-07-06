@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.0] - 2024-05-20 (Current)
 
 ### Added
+- **Owner-Driven Art Updates:** Added `updateMedia` to BragNFT, allowing current owners to change their art metadata without affecting the immutable tax record.
+- **Enhanced Donation Records:** Added `ethAmount` to `PermanentRecord` in BragNFT for dual-denomination auditability (USD + ETH).
+- **Auto-Glow Initialization:** New BragNFTs now automatically start with a 30-day "Impact Vitality" glow.
 - **Multi-Standard Exhibit Vaults:** Expanded support to include ERC1155 tokens alongside ERC721.
 - **Batch Marketplace Operations:** Implemented `batchAcceptOffers` and `batchBuyFromListings` for gas efficiency.
 - **Enhanced Treasury:** Upgraded Treasury to be EIP-4337 (Account Abstraction) compliant with a formal proposal/approval workflow.
@@ -22,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Frontend Core:** Unified `txHandler` to support both EOA and Smart Contract Account (Gasless) transaction modes.
 
 ### Fixed
+- **Marketplace Fund Efficiency:** `buyFromListing` now automatically refunds existing open offers from the buyer for the same item, preventing locked liquidity.
 - **NFT Transfer Logic:** Corrected `_acceptOffer` to include a proper `delete` of the offer before distributing proceeds (CEI pattern).
 - **Royalty Handling:** Added `try-catch` blocks to marketplace settlements to prevent reverts when interacting with non-standard royalty implementations.
 

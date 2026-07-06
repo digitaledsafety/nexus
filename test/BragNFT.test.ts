@@ -105,7 +105,7 @@ describe("BragNFT Dual-State Model", async function () {
     assert.equal(await bragNFT.read.ownerOf([tokenId]), getAddress(donor.account.address));
 
     // 2. Check Permanent Record (Tax Registry)
-    const [originalDonor, usdValue, timestamp, status, recordMessage] = await bragNFT.read.taxRegistry([tokenId]);
+    const [originalDonor, usdValue, ethAmount, timestamp, status, recordMessage] = await bragNFT.read.taxRegistry([tokenId]);
     assert.equal(originalDonor, getAddress(donor.account.address));
     assert.equal(recordMessage, message);
     assert.equal(usdValue, 125000000000n);
@@ -116,7 +116,7 @@ describe("BragNFT Dual-State Model", async function () {
     assert.equal(json.attributes[0].value, recordMessage);
     assert.equal(json.attributes[1].value, donor.account.address.toLowerCase());
     assert.equal(json.attributes[2].value, "$1250.00");
-    assert.equal(json.attributes[3].value, "Pending");
+    assert.equal(json.attributes[4].value, "Pending");
 
     // 2.5 Check BragToken reward
     const balance = await bragToken.read.balanceOf([donor.account.address]);
@@ -165,7 +165,7 @@ describe("BragNFT Dual-State Model", async function () {
       await bragNFT.write.donate(["Glowing NFT", ""], { account: donor.account, value: parseEther("0.1") });
       const tokenId = 0n;
 
-      assert.equal(await bragNFT.read.isGlowing([tokenId]), false);
+      assert.equal(await bragNFT.read.isGlowing([tokenId]), true);
 
       // Top up with $1.00 USD worth of ETH. At $2500/ETH, $1.00 is 0.0004 ETH
       const topUpAmount = parseEther("0.0004");
@@ -178,7 +178,7 @@ describe("BragNFT Dual-State Model", async function () {
 
       const uri = await bragNFT.read.tokenURI([tokenId]);
       const json = JSON.parse(Buffer.from(uri.split(",")[1], "base64").toString());
-      assert.equal(json.attributes[4].value, "Yes");
+      assert.equal(json.attributes[5].value, "Yes");
 
       const svg = Buffer.from(json.image.split(",")[1], "base64").toString();
       assert.ok(svg.includes('filter="url(#glow)"'), "SVG should include glow filter");
