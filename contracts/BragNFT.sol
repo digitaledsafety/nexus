@@ -46,6 +46,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
     struct PermanentRecord {
         address originalDonor;
         uint256 usdValue; // Recorded in 8 decimals (Chainlink standard)
+        uint256 ethAmount; // Recorded in Wei
         uint256 timestamp;
         TaxStatus status;
         string message;
@@ -78,6 +79,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
     constructor(address _initialOwner, address _treasury, uint256 _minimumDonation, address _priceFeed)
         ERC721("BragNFT", "BRAGNFT")
     {
+        require(_treasury != address(0), "Invalid treasury address");
         _grantRole(DEFAULT_ADMIN_ROLE, _initialOwner);
         treasury = _treasury;
         royaltyRecipient = _treasury;
@@ -184,6 +186,23 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
     }
 
     /**
+     * @dev Update the art metadata for a token. Restricted to the current owner.
+     * This allows owners to change their Art layer without affecting the immutable tax record.
+     */
+    function updateMedia(uint256 tokenId, string calldata media, bool onChain) external nonReentrant whenNotPaused {
+        _requireOwned(tokenId);
+        require(ownerOf(tokenId) == msg.sender, "Not the owner");
+
+        if (onChain) {
+            onChainMedia[tokenId] = media;
+            _setTokenURI(tokenId, ""); // Clear URI if switching to on-chain
+        } else {
+            onChainMedia[tokenId] = ""; // Clear on-chain if switching to URI
+            _setTokenURI(tokenId, media);
+        }
+    }
+
+    /**
      * @dev Mint a new BragNFT by donating ETH.
      */
     function donate(string calldata message, string calldata tokenURI_) external payable nonReentrant whenNotPaused {
@@ -264,10 +283,14 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
         taxRegistry[nftTokenId] = PermanentRecord({
             originalDonor: msg.sender,
             usdValue: usdValue,
+            ethAmount: msg.value,
             timestamp: block.timestamp,
             status: TaxStatus.Pending,
             message: message
         });
+
+        // Initialize glow
+        glowExpiry[nftTokenId] = block.timestamp + 30 days;
 
         // 3. Set metadata
         if (onChain) {
@@ -387,6 +410,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
             '{"trait_type": "Message", "value": "', _escapeJSON(record.message), '"},',
             '{"trait_type": "Original Donor", "value": "', Strings.toHexString(record.originalDonor), '"},',
             '{"trait_type": "Donation Value", "value": "$', _formatUSD(record.usdValue), '"},',
+            '{"trait_type": "Donation ETH", "value": "', _formatETH(record.ethAmount), ' ETH"},',
             '{"trait_type": "Tax Status", "value": "', _getStatusString(record.status), '"},',
             '{"trait_type": "Glowing", "value": "', glowing ? "Yes" : "No", '"}'
         );
@@ -516,6 +540,16 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
         uint256 cents = (usdValue % 1e8) / 1e6;
         string memory centsStr = cents < 10 ? string(abi.encodePacked("0", cents.toString())) : cents.toString();
         return string(abi.encodePacked(dollars.toString(), ".", centsStr));
+    }
+
+    function _formatETH(uint256 weiValue) internal pure returns (string memory) {
+        uint256 eth = weiValue / 1e18;
+        uint256 remainder = (weiValue % 1e18) / 1e14; // 4 decimals
+        string memory remainderStr = remainder.toString();
+        while (bytes(remainderStr).length < 4) {
+            remainderStr = string(abi.encodePacked("0", remainderStr));
+        }
+        return string(abi.encodePacked(eth.toString(), ".", remainderStr));
     }
 
     /**

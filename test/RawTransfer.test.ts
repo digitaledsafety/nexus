@@ -45,7 +45,7 @@ describe("BragNFT Raw Transfer", async function () {
     assert.equal(json.attributes[0].value, "Direct donation");
 
     // 2. Check Permanent Record (Tax Registry)
-    const [originalDonor, usdValue, timestamp, status, recordMessage] = await bragNFT.read.taxRegistry([nftTokenId]);
+    const [originalDonor, usdValue, ethAmount, timestamp, status, recordMessage] = await bragNFT.read.taxRegistry([nftTokenId]);
     assert.equal(originalDonor, getAddress(donor.account.address));
     assert.equal(recordMessage, "Direct donation");
     assert.equal(usdValue, 125000000000n); // 0.5 ETH * 250 USD/ETH

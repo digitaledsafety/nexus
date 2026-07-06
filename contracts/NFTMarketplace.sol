@@ -440,6 +440,14 @@ contract NFTMarketplace is ReentrancyGuard, Pausable, AccessControl {
         // CEI: Clear listing before external transfers
         delete listings[nftContract][tokenId][seller];
 
+        // If the buyer has an existing offer for this NFT, cancel it and refund them
+        Offer memory existingOffer = offers[nftContract][tokenId][msg.sender];
+        if (existingOffer.price > 0) {
+            delete offers[nftContract][tokenId][msg.sender];
+            paymentToken.safeTransfer(msg.sender, existingOffer.price);
+            emit OfferCanceled(nftContract, tokenId, msg.sender);
+        }
+
         // Transfer payment from buyer to contract
         paymentToken.safeTransferFrom(msg.sender, address(this), listing.price);
 

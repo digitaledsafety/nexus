@@ -67,7 +67,7 @@ describe("AgencyImprovements", async function () {
       });
       const tokenId = 0n;
 
-      assert.equal(await bragNFT.read.isGlowing([tokenId]), false);
+      assert.equal(await bragNFT.read.isGlowing([tokenId]), true);
 
       // First top up
       await bragNFT.write.topUp([tokenId], { value: parseEther("0.001") }); // $2.50
