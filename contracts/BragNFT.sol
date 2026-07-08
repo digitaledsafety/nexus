@@ -180,9 +180,19 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
     /**
      * @dev Update on-chain media for a token. Restricted to DEFAULT_ADMIN_ROLE.
      */
-    function updateOnChainMedia(uint256 tokenId, string calldata media) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function updateOnChainMedia(uint256 tokenId, string calldata media) public onlyRole(DEFAULT_ADMIN_ROLE) {
         _requireOwned(tokenId);
         onChainMedia[tokenId] = media;
+    }
+
+    /**
+     * @dev Batch update on-chain media for multiple tokens. Restricted to DEFAULT_ADMIN_ROLE.
+     */
+    function batchUpdateOnChainMedia(uint256[] calldata tokenIds, string[] calldata medias) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(tokenIds.length == medias.length, "Mismatched arrays");
+        for (uint256 i = 0; i < tokenIds.length; i++) {
+            updateOnChainMedia(tokenIds[i], medias[i]);
+        }
     }
 
     /**
