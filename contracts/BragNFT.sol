@@ -186,6 +186,18 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
     }
 
     /**
+     * @dev Batch update on-chain media for multiple tokens. Restricted to DEFAULT_ADMIN_ROLE.
+     */
+    function batchUpdateOnChainMedia(uint256[] calldata tokenIds, string[] calldata medias) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(tokenIds.length == medias.length, "Mismatched arrays");
+        for (uint256 i = 0; i < tokenIds.length; ) {
+            _requireOwned(tokenIds[i]);
+            onChainMedia[tokenIds[i]] = medias[i];
+            unchecked { i++; }
+        }
+    }
+
+    /**
      * @dev Update the art metadata for a token. Restricted to the current owner.
      * This allows owners to change their Art layer without affecting the immutable tax record.
      */
@@ -289,8 +301,10 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
             message: message
         });
 
-        // Initialize glow
-        glowExpiry[nftTokenId] = block.timestamp + 30 days;
+        // Initialize glow (proportional to USD value: $1.00 = 30 days)
+        uint256 glowDuration = (usdValue * 30 days) / 1e8;
+        if (glowDuration < 30 days) glowDuration = 30 days; // Minimum 30 days for new mints
+        glowExpiry[nftTokenId] = block.timestamp + glowDuration;
 
         // 3. Set metadata
         if (onChain) {
@@ -316,7 +330,8 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
 
     /**
      * @dev Top up the impact to keep the collectible glowing.
-     * Required amount is $1.00 USD worth of ETH.
+     * Required amount is at least $1.00 USD worth of ETH.
+     * Glow duration is added proportionally ($1.00 = 30 days).
      */
     function topUp(uint256 tokenId) external payable nonReentrant whenNotPaused {
         _requireOwned(tokenId);
@@ -325,10 +340,12 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
 
         require(usdValue >= 1e8, "Top-up requires $1.00 USD");
 
+        uint256 addedDuration = (usdValue * 30 days) / 1e8;
+
         if (glowExpiry[tokenId] < block.timestamp) {
-            glowExpiry[tokenId] = block.timestamp + 30 days;
+            glowExpiry[tokenId] = block.timestamp + addedDuration;
         } else {
-            glowExpiry[tokenId] += 30 days;
+            glowExpiry[tokenId] += addedDuration;
         }
 
         // Mint Brag Tokens (1,000,000 per USD)
