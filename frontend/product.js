@@ -136,7 +136,7 @@ async function loadProductData(contractAddr, tokenId) {
         const isAudio = animUrl.includes('audio') || animUrl.match(/\.(mp3|wav|ogg|m4a|aac)$/i);
         const isVideo = animUrl.includes('video') || animUrl.match(/\.(mp4|mov|ogv|webm|m4v)$/i);
         const isGif = animUrl.includes('image/gif') || animUrl.match(/\.gif$/i);
-        const is3d = animUrl.match(/\.(glb|gltf)$/i);
+        const is3d = animUrl.match(/\.(glb|gltf|mcstructure)$/i);
 
         // Reset players
         ['nftImage', 'audioPlayer', 'videoPlayer', 'threeDPlayer'].forEach(id => {
@@ -150,8 +150,16 @@ async function loadProductData(contractAddr, tokenId) {
             document.getElementById('videoPlayer').classList.remove('hidden');
             document.getElementById('nftVideo').src = animUrl;
         } else if (is3d) {
-            document.getElementById('threeDPlayer').classList.remove('hidden');
-            document.getElementById('nft3d').src = animUrl;
+            if (animUrl.toLowerCase().endsWith('.mcstructure')) {
+                // Fallback for MCStructure since model-viewer doesn't support it directly
+                document.getElementById('nftImage').classList.remove('hidden');
+                // High-quality 3D block SVG placeholder
+                document.getElementById('nftImage').src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzFlMjkzYiIvPjxwYXRoIGQ9Ik01MCAyMCBMODAgMzUgTDUwIDUwIEwyMCAzNSBaIiBmaWxsPSIjODE4Y2Y4Ii8+PHBhdGggZD0iTTUwIDUwIEw4MCAzNSBMODAgNjUgTDUwIDgwIFoiIGZpbGw9IiM0ZjQ2ZTUiLz48cGF0aCBkPSJNNTAgNTAgTDIwIDM1IEwyMCA2NSBMNTAgODAgWiIgZmlsbD0iIzQzMzhjYSIvPjwvc3ZnPg==';
+                document.getElementById('nftDescription').innerHTML += '<br><br><span class="text-indigo-400 font-bold uppercase text-[10px] bg-indigo-500/10 px-3 py-2 rounded-lg border border-indigo-500/20 shadow-lg inline-block mt-4"><i class="fas fa-cube mr-2"></i> Minecraft Structure File (.mcstructure)</span>';
+            } else {
+                document.getElementById('threeDPlayer').classList.remove('hidden');
+                document.getElementById('nft3d').src = animUrl;
+            }
         } else if (isGif) {
             document.getElementById('nftImage').classList.remove('hidden');
             document.getElementById('nftImage').src = animUrl;

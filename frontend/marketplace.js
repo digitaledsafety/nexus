@@ -111,7 +111,7 @@ async function renderNFTCard(contract, tokenId, collectionName = "Impact NFT") {
         const isAudio = animUrl.includes('audio') || animUrl.match(/\.(mp3|wav|ogg|m4a|aac)$/i);
         const isVideo = animUrl.includes('video') || animUrl.match(/\.(mp4|mov|ogv|webm|m4v)$/i);
         const isGif = animUrl.includes('image/gif') || animUrl.match(/\.gif$/i);
-        const is3d = animUrl.match(/\.(glb|gltf)$/i);
+        const is3d = animUrl.match(/\.(glb|gltf|mcstructure)$/i);
 
         const isExternal = CONTRACT_DATA.externalCollections?.some(c => c.address.toLowerCase() === contract.address.toLowerCase());
 
