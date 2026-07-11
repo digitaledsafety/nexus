@@ -107,7 +107,7 @@ function setupManagerListeners() {
     if (btnUpload) {
         const fileInput = document.createElement('input');
         fileInput.type = 'file';
-        fileInput.accept = 'image/*,audio/*,video/*';
+        fileInput.accept = 'image/*,audio/*,video/*,.glb,.gltf,.mcstructure';
         btnUpload.onclick = () => fileInput.click();
 
         fileInput.onchange = (e) => {
