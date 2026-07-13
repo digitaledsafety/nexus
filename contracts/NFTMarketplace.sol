@@ -337,6 +337,30 @@ contract NFTMarketplace is ReentrancyGuard, Pausable, AccessControl {
         emit ListingUpdated(nftContract, tokenId, msg.sender, newPrice, newAmount, oldListing.privateBuyer);
     }
 
+    /**
+     * @notice Update an existing listing including private buyer
+     */
+    function updateListing(address nftContract, uint256 tokenId, uint256 newAmount, uint256 newPrice, address newPrivateBuyer) external whenNotPaused {
+        Listing memory oldListing = listings[nftContract][tokenId][msg.sender];
+        require(oldListing.price > 0, "Listing does not exist");
+        _createListing(nftContract, tokenId, newAmount, newPrice, newPrivateBuyer);
+        emit ListingUpdated(nftContract, tokenId, msg.sender, newPrice, newAmount, newPrivateBuyer);
+    }
+
+    /**
+     * @notice Batch update multiple listings
+     */
+    function batchUpdateListings(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256[] calldata amounts, uint256[] calldata prices) external whenNotPaused {
+        require(nftContracts.length == tokenIds.length && tokenIds.length == amounts.length && amounts.length == prices.length, "Mismatched arrays");
+        for (uint256 i = 0; i < nftContracts.length; ) {
+            Listing memory oldListing = listings[nftContracts[i]][tokenIds[i]][msg.sender];
+            require(oldListing.price > 0, "Listing does not exist");
+            _createListing(nftContracts[i], tokenIds[i], amounts[i], prices[i], oldListing.privateBuyer);
+            emit ListingUpdated(nftContracts[i], tokenIds[i], msg.sender, prices[i], amounts[i], oldListing.privateBuyer);
+            unchecked { i++; }
+        }
+    }
+
     function _createListing(address nftContract, uint256 tokenId, uint256 amount, uint256 price, address privateBuyer) internal {
         require(price > 0, "Price must be greater than 0");
         require(amount > 0, "Amount must be greater than 0");
