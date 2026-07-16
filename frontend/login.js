@@ -38,6 +38,11 @@ async function initLogin() {
             localStorage.setItem('wallet_connected', 'true');
             localStorage.setItem('brag_address', address);
 
+            // Sync global Web3 state in core.js
+            if (typeof connectWallet === 'function') {
+                await connectWallet(true);
+            }
+
             // 4. Handle Account Linking if token present
             const params = getParams();
             const token = params.get('token');

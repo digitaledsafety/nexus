@@ -1,10 +1,52 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
+import http from 'node:http';
+import fs from 'node:fs';
 
 test.describe('Gasless Configuration', () => {
-  const landingUrl = `file://${path.resolve('frontend/index.html')}`;
+  let server: http.Server;
+  let landingUrl = '';
+
+  test.beforeAll(async () => {
+    server = http.createServer((req, res) => {
+      const cleanPath = req.url?.split('?')[0].split('#')[0] || '';
+      const filePath = path.resolve('frontend', cleanPath === '/' ? 'index.html' : cleanPath.startsWith('/') ? cleanPath.substring(1) : cleanPath);
+
+      fs.readFile(filePath, (err, data) => {
+        if (err) {
+          res.writeHead(404, { 'Content-Type': 'text/plain' });
+          res.end('Not Found');
+          return;
+        }
+        let contentType = 'text/html';
+        if (filePath.endsWith('.js')) contentType = 'application/javascript';
+        else if (filePath.endsWith('.css')) contentType = 'text/css';
+        else if (filePath.endsWith('.json')) contentType = 'application/json';
+
+        res.writeHead(200, { 'Content-Type': contentType });
+        res.end(data);
+      });
+    });
+
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', () => {
+        const port = (server.address() as any).port;
+        landingUrl = `http://127.0.0.1:${port}/index.html`;
+        resolve();
+      });
+    });
+  });
+
+  test.afterAll(async () => {
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
+    });
+  });
 
   test.beforeEach(async ({ page }) => {
+    page.on('console', msg => console.log('PAGE LOG:', msg.text()));
+    page.on('pageerror', err => console.log('PAGE ERROR:', err.message));
+
     // Mock wallet connection and AA SDK
     await page.addInitScript(() => {
         const mockAddress = '0x1234567890123456789012345678901234567890';
@@ -42,26 +84,16 @@ test.describe('Gasless Configuration', () => {
     // Block esm.sh to speed up and use mock
     await page.route('https://esm.sh/**', route => route.abort());
 
-    // We need to fetch the local views and other local assets relative to the landingUrl
-    await page.route('**/*', async (route) => {
-        const url = route.request().url();
-        console.log('Requesting:', url);
-        if (url.startsWith('file://')) {
-            if (url.includes('views/')) {
-                const viewName = url.split('/').pop();
-                const filePath = path.resolve(`frontend/views/${viewName}`);
-                await route.fulfill({ path: filePath });
-            } else if (url.endsWith('.js') || url.endsWith('.css')) {
-                const fileName = url.split('/').pop();
-                if (fileName === 'index.html') return route.continue();
-                const filePath = path.resolve(`frontend/${fileName}`);
-                await route.fulfill({ path: filePath });
-            } else {
-                await route.continue();
-            }
-        } else {
-            await route.continue();
-        }
+    // Mock the environment control API to avoid connection refused errors
+    await page.route('http://localhost:9002/**', async (route) => {
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                services: {},
+                minecraft: { connected: false }
+            })
+        });
     });
 
     await page.goto(landingUrl + '#/manager');
@@ -79,11 +111,11 @@ test.describe('Gasless Configuration', () => {
     await expect(gaslessConfig).toBeHidden();
 
     // Toggle on
-    await toggleGasless.check();
+    await toggleGasless.check({ force: true });
     await expect(gaslessConfig).toBeVisible();
 
     // Toggle off
-    await toggleGasless.uncheck();
+    await toggleGasless.uncheck({ force: true });
     await expect(gaslessConfig).toBeHidden();
   });
 
@@ -93,7 +125,7 @@ test.describe('Gasless Configuration', () => {
     const policyIdInput = page.locator('#alchemyPolicyId');
 
     // Toggle on to see fields
-    await toggleGasless.check();
+    await toggleGasless.check({ force: true });
 
     // Set values
     await apiKeyInput.fill('test-api-key');
