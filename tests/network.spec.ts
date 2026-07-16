@@ -1,8 +1,67 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
+import http from 'node:http';
+import fs from 'node:fs';
 
 test.describe('Network Detection', () => {
-  const landingUrl = `file://${path.resolve('frontend/index.html')}`;
+  let server: http.Server;
+  let landingUrl = '';
+
+  test.beforeAll(async () => {
+    server = http.createServer((req, res) => {
+      const cleanPath = req.url?.split('?')[0].split('#')[0] || '';
+      const filePath = path.resolve('frontend', cleanPath === '/' ? 'index.html' : cleanPath.startsWith('/') ? cleanPath.substring(1) : cleanPath);
+
+      fs.readFile(filePath, (err, data) => {
+        if (err) {
+          res.writeHead(404, { 'Content-Type': 'text/plain' });
+          res.end('Not Found');
+          return;
+        }
+        let contentType = 'text/html';
+        if (filePath.endsWith('.js')) contentType = 'application/javascript';
+        else if (filePath.endsWith('.css')) contentType = 'text/css';
+        else if (filePath.endsWith('.json')) contentType = 'application/json';
+
+        res.writeHead(200, { 'Content-Type': contentType });
+        res.end(data);
+      });
+    });
+
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', () => {
+        const port = (server.address() as any).port;
+        landingUrl = `http://127.0.0.1:${port}/index.html`;
+        resolve();
+      });
+    });
+  });
+
+  test.afterAll(async () => {
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
+    });
+  });
+
+  test.beforeEach(async ({ page }) => {
+    page.on('console', msg => console.log('PAGE LOG:', msg.text()));
+    page.on('pageerror', err => console.log('PAGE ERROR:', err.message));
+
+    // Block esm.sh to speed up and use mock
+    await page.route('https://esm.sh/**', route => route.abort());
+
+    // Mock the environment control API to avoid connection refused errors
+    await page.route('http://localhost:9002/**', async (route) => {
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                services: {},
+                minecraft: { connected: false }
+            })
+        });
+    });
+  });
 
   test('should display Sepolia network badge on landing page when connected to chain 11155111', async ({ page }) => {
     await page.addInitScript(() => {
@@ -53,7 +112,7 @@ test.describe('Network Detection', () => {
     await page.addInitScript(() => {
       (window as any).ethereum = {
         request: async (request: any) => {
-          if (request.method === 'eth_accounts' || request.method === 'eth_requestAccounts') return ['0x123'];
+          if (request.method === 'eth_accounts' || request.method === 'eth_requestAccounts') return ['0x1234567890123456789012345678901234567890'];
           if (request.method === 'eth_chainId') return '0xaa36a7';
           if (request.method === 'personal_sign') {
             (window as any).capturedMessage = request.params[0];
@@ -76,7 +135,11 @@ test.describe('Network Detection', () => {
 
     // Wait for message to be captured
     await expect.poll(async () => {
-      return await page.evaluate(() => (window as any).capturedMessage || '');
+      const hex = await page.evaluate(() => (window as any).capturedMessage || '');
+      if (hex.startsWith('0x')) {
+        return Buffer.from(hex.substring(2), 'hex').toString('utf8');
+      }
+      return hex;
     }).toContain('Chain ID: 11155111');
   });
 });
