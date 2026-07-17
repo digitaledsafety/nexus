@@ -94,4 +94,98 @@ describe("Batch Operations", async function () {
     assert.equal(await vault2.read.balances1155([mock1155.address, 1n, seller.account.address]), 5n);
     assert.equal(await vault2.read.balances1155([mock1155.address, 2n, seller.account.address]), 10n);
   });
+
+  describe("New Batch Enhancements", async function () {
+    it("BragNFT: Should allow admin to batch update on-chain media", async function () {
+      const { bragNFT, owner, seller } = await deployAll();
+
+      await bragNFT.write.donate(["nft1", "uri1", true], { account: seller.account, value: parseEther("0.1") });
+      await bragNFT.write.donate(["nft2", "uri2", true], { account: seller.account, value: parseEther("0.1") });
+
+      assert.equal(await bragNFT.read.onChainMedia([0n]), "uri1");
+      assert.equal(await bragNFT.read.onChainMedia([1n]), "uri2");
+
+      // Batch update by admin
+      await bragNFT.write.batchUpdateOnChainMedia([[0n, 1n], ["new_uri1", "new_uri2"]], { account: owner.account });
+
+      assert.equal(await bragNFT.read.onChainMedia([0n]), "new_uri1");
+      assert.equal(await bragNFT.read.onChainMedia([1n]), "new_uri2");
+
+      // Should fail if non-admin attempts
+      await assert.rejects(
+        bragNFT.write.batchUpdateOnChainMedia([[0n, 1n], ["bad_uri1", "bad_uri2"]], { account: seller.account })
+      );
+
+      // Should fail if array lengths mismatch
+      await assert.rejects(
+        bragNFT.write.batchUpdateOnChainMedia([[0n], ["new_uri1", "new_uri2"]], { account: owner.account })
+      );
+    });
+
+    it("ExhibitVault: Should batch extend 721 active exhibitions", async function () {
+      const { bragNFT, vault1, seller } = await deployAll();
+
+      await bragNFT.write.donate(["nft1", ""], { account: seller.account, value: parseEther("0.1") });
+      await bragNFT.write.donate(["nft2", ""], { account: seller.account, value: parseEther("0.1") });
+
+      await bragNFT.write.safeTransferFrom([seller.account.address, vault1.address, 0n], { account: seller.account });
+      await bragNFT.write.safeTransferFrom([seller.account.address, vault1.address, 1n], { account: seller.account });
+
+      const expiry0_before = await vault1.read.expiry721([bragNFT.address, 0n]);
+      const expiry1_before = await vault1.read.expiry721([bragNFT.address, 1n]);
+
+      // Batch extend
+      await vault1.write.batchExtendExhibition721([[bragNFT.address, bragNFT.address], [0n, 1n], 3600n], { account: seller.account });
+
+      const expiry0_after = await vault1.read.expiry721([bragNFT.address, 0n]);
+      const expiry1_after = await vault1.read.expiry721([bragNFT.address, 1n]);
+
+      assert.ok(expiry0_after > expiry0_before);
+      assert.ok(expiry1_after > expiry1_before);
+
+      // Non-owner cannot extend
+      const [,,, anotherUser] = await viem.getWalletClients();
+      await assert.rejects(
+        vault1.write.batchExtendExhibition721([[bragNFT.address, bragNFT.address], [0n, 1n], 3600n], { account: anotherUser.account })
+      );
+
+      // Array mismatch should fail
+      await assert.rejects(
+        vault1.write.batchExtendExhibition721([[bragNFT.address], [0n, 1n], 3600n], { account: seller.account })
+      );
+    });
+
+    it("ExhibitVault: Should batch extend 1155 active exhibitions", async function () {
+      const { mock1155, vault1, seller, owner } = await deployAll();
+
+      await mock1155.write.mint([seller.account.address, 1n, 10n], { account: owner.account });
+      await mock1155.write.mint([seller.account.address, 2n, 20n], { account: owner.account });
+
+      await mock1155.write.safeTransferFrom([seller.account.address, vault1.address, 1n, 5n, "0x"], { account: seller.account });
+      await mock1155.write.safeTransferFrom([seller.account.address, vault1.address, 2n, 10n, "0x"], { account: seller.account });
+
+      const expiry1_before = await vault1.read.expiry1155([mock1155.address, 1n, seller.account.address]);
+      const expiry2_before = await vault1.read.expiry1155([mock1155.address, 2n, seller.account.address]);
+
+      // Batch extend
+      await vault1.write.batchExtendExhibition1155([[mock1155.address, mock1155.address], [1n, 2n], 7200n], { account: seller.account });
+
+      const expiry1_after = await vault1.read.expiry1155([mock1155.address, 1n, seller.account.address]);
+      const expiry2_after = await vault1.read.expiry1155([mock1155.address, 2n, seller.account.address]);
+
+      assert.ok(expiry1_after > expiry1_before);
+      assert.ok(expiry2_after > expiry2_before);
+
+      // Zero balance / non-exhibitor cannot extend
+      const [,,, anotherUser] = await viem.getWalletClients();
+      await assert.rejects(
+        vault1.write.batchExtendExhibition1155([[mock1155.address, mock1155.address], [1n, 2n], 7200n], { account: anotherUser.account })
+      );
+
+      // Array mismatch should fail
+      await assert.rejects(
+        vault1.write.batchExtendExhibition1155([[mock1155.address], [1n, 2n], 7200n], { account: seller.account })
+      );
+    });
+  });
 });
