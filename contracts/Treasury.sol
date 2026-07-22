@@ -143,6 +143,7 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
      * @dev Propose a batch of transactions. The proposer auto-approves it.
      */
     function propose(address[] calldata targets, uint256[] calldata values, bytes[] calldata datas, uint256 nonce) external onlyOwner(nonce) returns (uint256) {
+        require(targets.length == values.length && values.length == datas.length, "Mismatched arrays");
         Call[] memory calls = new Call[](targets.length);
         for (uint256 i = 0; i < targets.length; i++) {
             calls[i] = Call({target: targets[i], value: values[i], data: datas[i]});

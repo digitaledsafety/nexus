@@ -316,14 +316,14 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
 
     /**
      * @dev Top up the impact to keep the collectible glowing.
-     * Required amount is $1.00 USD worth of ETH.
+     * Required amount is $0.90 USD worth of ETH (flexible threshold to account for price fluctuations).
      */
     function topUp(uint256 tokenId) external payable nonReentrant whenNotPaused {
         _requireOwned(tokenId);
 
         uint256 usdValue = _getUsdValue(msg.value);
 
-        require(usdValue >= 1e8, "Top-up requires $1.00 USD");
+        require(usdValue >= 0.9e8, "Top-up requires $0.90 USD");
 
         if (glowExpiry[tokenId] < block.timestamp) {
             glowExpiry[tokenId] = block.timestamp + 30 days;
