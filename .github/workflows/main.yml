@@ -112,14 +112,10 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           allow-no-subscriptions: true
-      - name: Confirm Azure login
-        run: az account show
-      - name: Update Azure VM via Run-Command
-        uses: azure/cli@v3
-        with:
-          inlineScript: |
-            az vm run-command invoke \
-              --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-              --name ${{ secrets.AZURE_VM_NAME }} \
-              --command-id RunShellScript \
-              --scripts "echo '--- Azure Integration Verification ---' && pwd && node -v && npm -v && echo 'Successfully connected to Azure VM!'"
+      - name: Run Azure Command
+        run: |
+          az vm run-command invoke \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --name ${{ secrets.AZURE_VM_NAME }} \
+            --command-id RunShellScript \
+            --scripts "echo '--- Azure Integration Verification ---' && pwd && node -v && npm -v && echo 'Successfully connected to Azure VM!'"
