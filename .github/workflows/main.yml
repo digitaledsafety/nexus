@@ -121,4 +121,4 @@ jobs:
               --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
               --name ${{ secrets.AZURE_VM_NAME }} \
               --command-id RunShellScript \
-              --scripts "cd /app && git pull && npm install && npm run build:frontend && npm run env:init"
+              --scripts "echo '--- Azure Integration Verification ---' && pwd && node -v && npm -v && echo 'Successfully connected to Azure VM!'"
