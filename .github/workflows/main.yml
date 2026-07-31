@@ -115,7 +115,7 @@ jobs:
       - name: Confirm Azure login
         run: az account show
       - name: Update Azure VM via Run-Command
-        uses: azure/cli@v2
+        uses: azure/cli@v3
         with:
           inlineScript: |
             az vm run-command invoke \
