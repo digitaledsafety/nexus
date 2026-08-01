@@ -112,6 +112,7 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           allow-no-subscriptions: true
+          enable-AzPSSession: true
 
       - name: Set Default Subscription
         run: az account set --subscription "6d19ff6a-12d2-4497-918d-b5be1628f2b4"
