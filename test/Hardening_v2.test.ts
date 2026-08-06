@@ -143,6 +143,71 @@ describe("Hardening and Enhancement v2", async function () {
       const expiry = await vault.read.expiry721([bragNFT.address, 0n]);
       assert.ok(expiry > 0n);
     });
+
+    it("Should batch extend exhibitions for ERC721 and ERC1155", async function () {
+      const { bragNFT, mock1155, vault, user, owner } = await deployContracts();
+
+      // Setup 2 ERC721 NFTs
+      await bragNFT.write.donate(["Extend test 1", ""], { account: user.account, value: parseEther("0.1") });
+      await bragNFT.write.donate(["Extend test 2", ""], { account: user.account, value: parseEther("0.1") });
+      await bragNFT.write.safeTransferFrom([user.account.address, vault.address, 0n], { account: user.account });
+      await bragNFT.write.safeTransferFrom([user.account.address, vault.address, 1n], { account: user.account });
+
+      // Setup 2 ERC1155 NFTs
+      await mock1155.write.mint([user.account.address, 10n, 100n], { account: owner.account });
+      await mock1155.write.mint([user.account.address, 20n, 100n], { account: owner.account });
+      await mock1155.write.safeBatchTransferFrom([user.account.address, vault.address, [10n, 20n], [50n, 50n], "0x"], { account: user.account });
+
+      // Batch extend ERC721
+      await vault.write.batchExtendExhibition721([[bragNFT.address, bragNFT.address], [0n, 1n], [3600n, 7200n]], { account: user.account });
+      const expiry1 = await vault.read.expiry721([bragNFT.address, 0n]);
+      const expiry2 = await vault.read.expiry721([bragNFT.address, 1n]);
+      assert.ok(expiry1 > 0n);
+      assert.ok(expiry2 > 0n);
+
+      // Batch extend ERC1155
+      await vault.write.batchExtendExhibition1155([[mock1155.address, mock1155.address], [10n, 20n], [1800n, 5400n]], { account: user.account });
+      const expiry1155_1 = await vault.read.expiry1155([mock1155.address, 10n, user.account.address]);
+      const expiry1155_2 = await vault.read.expiry1155([mock1155.address, 20n, user.account.address]);
+      assert.ok(expiry1155_1 > 0n);
+      assert.ok(expiry1155_2 > 0n);
+    });
+
+    it("Should revert batch extension if array lengths are mismatched", async function () {
+      const { bragNFT, mock1155, vault, user } = await deployContracts();
+
+      await assert.rejects(
+        vault.write.batchExtendExhibition721([[bragNFT.address], [0n, 1n], [3600n]], { account: user.account }),
+        /Mismatched arrays/
+      );
+
+      await assert.rejects(
+        vault.write.batchExtendExhibition1155([[mock1155.address, mock1155.address], [10n], [1800n, 5400n]], { account: user.account }),
+        /Mismatched arrays/
+      );
+    });
+
+    it("Should revert batch extension if caller is not the owner / has no balance", async function () {
+      const { bragNFT, mock1155, vault, user, user2, owner } = await deployContracts();
+
+      // ERC721
+      await bragNFT.write.donate(["Extend test 1", ""], { account: user.account, value: parseEther("0.1") });
+      await bragNFT.write.safeTransferFrom([user.account.address, vault.address, 0n], { account: user.account });
+
+      await assert.rejects(
+        vault.write.batchExtendExhibition721([[bragNFT.address], [0n], [3600n]], { account: user2.account }),
+        /Not the owner/
+      );
+
+      // ERC1155
+      await mock1155.write.mint([user.account.address, 10n, 100n], { account: owner.account });
+      await mock1155.write.safeTransferFrom([user.account.address, vault.address, 10n, 50n, "0x"], { account: user.account });
+
+      await assert.rejects(
+        vault.write.batchExtendExhibition1155([[mock1155.address], [10n], [1800n]], { account: user2.account }),
+        /No balance/
+      );
+    });
   });
 
   describe("BragNFT Enhancements", async function () {
