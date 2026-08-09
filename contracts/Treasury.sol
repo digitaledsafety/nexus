@@ -250,7 +250,7 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
     /**
      * @dev Cancel a proposal (only by proposer or via treasury execution).
      */
-    function cancel(uint256 proposalId, uint256 nonce) external {
+    function cancel(uint256 proposalId, uint256 nonce) public {
         address caller = _getMsgSender(nonce);
         if (proposalId >= proposalCount) revert ProposalNotFound();
 
@@ -264,6 +264,28 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
 
         p.canceled = true;
         emit Canceled(proposalId);
+    }
+
+    /**
+     * @dev Approve multiple proposals.
+     */
+    function batchApprove(uint256[] calldata proposalIds, uint256[] calldata nonces) external {
+        require(proposalIds.length == nonces.length, "Mismatched arrays");
+        for (uint256 i = 0; i < proposalIds.length; ) {
+            approve(proposalIds[i], nonces[i]);
+            unchecked { i++; }
+        }
+    }
+
+    /**
+     * @dev Cancel multiple proposals.
+     */
+    function batchCancel(uint256[] calldata proposalIds, uint256[] calldata nonces) external {
+        require(proposalIds.length == nonces.length, "Mismatched arrays");
+        for (uint256 i = 0; i < proposalIds.length; ) {
+            cancel(proposalIds[i], nonces[i]);
+            unchecked { i++; }
+        }
     }
 
     /**
