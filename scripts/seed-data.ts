@@ -186,6 +186,34 @@ async function main() {
         { message: "Crystal Clear Support (WebP)", uri: "https://www.gstatic.com/webp/gallery/1.webp", onChain: false }
     ];
 
+    const currentNextTokenId = await publicClient.readContract({
+        address: bragNFTAddr,
+        abi: bragNFTArtifact.abi,
+        functionName: 'nextTokenId',
+    }) as bigint;
+
+    const currentMaxSupply = await publicClient.readContract({
+        address: bragNFTAddr,
+        abi: bragNFTArtifact.abi,
+        functionName: 'maxSupply',
+    }) as bigint;
+
+    console.log(`Current BragNFT nextTokenId: ${currentNextTokenId}, maxSupply: ${currentMaxSupply}`);
+
+    const requiredSupply = currentNextTokenId + BigInt(donations.length);
+    if (requiredSupply >= currentMaxSupply) {
+        const newMaxSupply = requiredSupply + 100n;
+        console.log(`Increasing BragNFT maxSupply to ${newMaxSupply}...`);
+        await sendTx(client0, [{
+            to: bragNFTAddr,
+            data: encodeFunctionData({
+                abi: bragNFTArtifact.abi,
+                functionName: 'setMaxSupply',
+                args: [newMaxSupply]
+            })
+        }]);
+    }
+
     let lastTokenId = 0n;
     for (const d of donations) {
         console.log(`Donating: ${d.message}...`);
