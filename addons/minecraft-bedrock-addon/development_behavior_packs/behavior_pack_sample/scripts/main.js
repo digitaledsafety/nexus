@@ -65,7 +65,7 @@ async function handleChat(event) {
 }
 
 // 1. World Initialization Listener
-world.afterEvents.worldInitialize.subscribe(() => {
+world.beforeEvents.worldInitialize.subscribe(() => {
     system.runTimeout(initiateBridgeConnection, 100);
 });
 
