@@ -90,4 +90,4 @@ async function handleChat(event) {
 
 // Subscribe to events
 world.afterEvents.playerSpawn.subscribe((event) => checkNftStatus(event.player));
-world.afterEvents.chatSend.subscribe(handleChat);
+world.beforeEvents.chatSend.subscribe(handleChat);

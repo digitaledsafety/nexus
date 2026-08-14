@@ -24,10 +24,9 @@ describe('Minecraft Addon Validation', () => {
             assert.ok(description.properties['minecraft:sound_variant'], 'sound_variant missing');
         });
 
-        it('should define actor_properties in the components block', () => {
+        it('should not define actor_properties in components block (schema validation)', () => {
             const components = cowJson['minecraft:entity'].components;
-            assert.ok(components['minecraft:actor_properties'], 'actor_properties missing from components');
-            assert.ok(Array.isArray(components['minecraft:actor_properties'].properties), 'actor_properties.properties should be an array');
+            assert.strictEqual(components['minecraft:actor_properties'], undefined, 'actor_properties should not be in components (declared in description.properties)');
         });
 
         it('should use valid types for properties (No string type)', () => {
