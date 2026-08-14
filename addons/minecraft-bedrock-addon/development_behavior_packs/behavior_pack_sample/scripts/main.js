@@ -77,7 +77,7 @@ world.afterEvents.playerSpawn.subscribe((event) => {
 });
 
 // 3. Before Chat Listener (Cancels the !command broadcast to other players)
-world.beforeEvents.chatSend.subscribe((event) => {
+world.afterEvents.chatSend.subscribe((event) => {
     if (event.message.trim().startsWith("!")) {
         event.cancel = true; // Hides command from public chat
         handleChat(event);
