@@ -1,4 +1,4 @@
-import { world, system, DynamicPropertiesDefinition } from "@minecraft/server";
+import { world, system } from "@minecraft/server";
 
 /**
  * ARCHITECTURE NOTE:
@@ -91,13 +91,6 @@ async function handleChat(event) {
         initiateBridgeConnection();
     }
 }
-
-// Register dynamic properties
-world.afterEvents.worldInitialize.subscribe((event) => {
-    const def = new DynamicPropertiesDefinition();
-    def.defineString("nft_uuid", 100);
-    event.propertyRegistry.registerEntityTypeDynamicProperties(def, "minecraft:player");
-});
 
 // Subscribe to events
 world.afterEvents.playerSpawn.subscribe((event) => checkNftStatus(event.player));
