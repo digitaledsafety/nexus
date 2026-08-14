@@ -133,8 +133,104 @@ export async function prepareAddon() {
                      .replace('__NEXUS_ADDRESS__', nexusAddress);
 
     fs.writeFileSync(mainJsPath, content);
+
+    // Dynamic manifest configuration for @minecraft/server version
+    const manifestPath = path.join(targetDir, 'development_behavior_packs', 'behavior_pack_sample', 'manifest.json');
+    if (fs.existsSync(manifestPath)) {
+        try {
+            const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+            const targetVersion = process.env.MC_SERVER_VERSION || (process.env.MC_EDITION === 'education' ? '1.10.0' : '1.15.0');
+            if (manifest.dependencies) {
+                manifest.dependencies = manifest.dependencies.map(dep => {
+                    if (dep.module_name === '@minecraft/server') {
+                        return { ...dep, version: targetVersion };
+                    }
+                    return dep;
+                });
+                fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+                console.log(`Configured manifest.json @minecraft/server to version: ${targetVersion}`);
+            }
+        } catch (e) {
+            console.error(`Failed to dynamically configure manifest.json: ${e.message}`);
+        }
+    }
+
     console.log(`Addon prepared with WS_URL=${wsUrl}, SERVER_ID=${serverId}, NEXUS=${nexusAddress}`);
     return targetDir;
+}
+
+export function getLocalClientPaths(type = 'auto') {
+    const paths = [];
+    const isWin = process.platform === 'win32' || !!process.env.APPDATA || !!process.env.LOCALAPPDATA;
+    const isMac = process.platform === 'darwin';
+
+    if (isWin) {
+        const appData = process.env.APPDATA || '';
+        const localAppData = process.env.LOCALAPPDATA || '';
+
+        const mceeMsi = path.join(appData, 'Minecraft Education Edition', 'games', 'com.mojang');
+        const mceeStore = path.join(localAppData, 'Packages', 'Microsoft.MinecraftEducationEdition_8wekyb3d8bbwe', 'LocalState', 'games', 'com.mojang');
+        const retailWin = path.join(localAppData, 'Packages', 'Microsoft.MinecraftUWP_8wekyb3d8bbwe', 'LocalState', 'games', 'com.mojang');
+
+        if (type === 'education-msi') return [mceeMsi];
+        if (type === 'education-store') return [mceeStore];
+        if (type === 'retail') return [retailWin];
+
+        if (type === 'auto') {
+            if (fs.existsSync(mceeMsi)) paths.push(mceeMsi);
+            if (fs.existsSync(mceeStore)) paths.push(mceeStore);
+            if (fs.existsSync(retailWin)) paths.push(retailWin);
+        }
+    } else if (isMac) {
+        const home = process.env.HOME || '';
+        const macPath = path.join(home, 'Library', 'Application Support', 'Minecraftpe', 'Games', 'com.mojang');
+        if (type === 'retail' || type === 'auto' || type === 'education-msi' || type === 'education-store') {
+            paths.push(macPath);
+        }
+    }
+
+    return paths;
+}
+
+export function injectToLocalClient(targetDir, type = 'auto') {
+    const comMojangPaths = getLocalClientPaths(type);
+    if (comMojangPaths.length === 0) {
+        console.log(`No active com.mojang directories found for type: ${type}`);
+        return { success: false, message: `No active com.mojang directories found for type: ${type}` };
+    }
+
+    const injectedPaths = [];
+    for (const comMojang of comMojangPaths) {
+        console.log(`Injecting addon into com.mojang at: ${comMojang}`);
+
+        const bpSrc = path.join(targetDir, 'development_behavior_packs', 'behavior_pack_sample');
+        const rpSrc = path.join(targetDir, 'development_resource_packs', 'resource_pack_sample');
+
+        const bpDest = path.join(comMojang, 'development_behavior_packs', 'behavior_pack_sample');
+        const rpDest = path.join(comMojang, 'development_resource_packs', 'resource_pack_sample');
+
+        // Copy behavior pack
+        if (fs.existsSync(bpSrc)) {
+            if (fs.existsSync(bpDest)) fs.rmSync(bpDest, { recursive: true, force: true });
+            fs.mkdirSync(path.dirname(bpDest), { recursive: true });
+            fs.cpSync(bpSrc, bpDest, { recursive: true });
+        }
+
+        // Copy resource pack
+        if (fs.existsSync(rpSrc)) {
+            if (fs.existsSync(rpDest)) fs.rmSync(rpDest, { recursive: true, force: true });
+            fs.mkdirSync(path.dirname(rpDest), { recursive: true });
+            fs.cpSync(rpSrc, rpDest, { recursive: true });
+        }
+
+        injectedPaths.push(comMojang);
+    }
+
+    return {
+        success: true,
+        message: `Successfully injected addon to local client directories: ${injectedPaths.join(', ')}`,
+        paths: injectedPaths
+    };
 }
 
 async function initEnvironment() {
@@ -341,6 +437,25 @@ const server = http.createServer((req, res) => {
               res.writeHead(500);
               res.end(JSON.stringify({ error: err.message }));
           });
+    } else if (url.pathname === '/minecraft/inject-client' && req.method === 'POST') {
+        const addonPath = path.join(ROOT, 'temp_addon');
+        if (!fs.existsSync(addonPath)) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ error: 'Addon not prepared. Run /init first.' }));
+            return;
+        }
+
+        const type = url.searchParams.get('type') || 'auto';
+        console.log(`Injecting addon to local client directories of type: ${type}`);
+        const result = injectToLocalClient(addonPath, type);
+
+        if (result.success) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+        } else {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+        }
     } else {
         res.writeHead(404);
         res.end();

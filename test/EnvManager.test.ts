@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it, beforeEach, afterEach } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
-import { prepareAddon, ROOT } from "../scripts/env-manager.js";
+import { prepareAddon, ROOT, getLocalClientPaths, injectToLocalClient } from "../scripts/env-manager.js";
 
 describe("Environment Manager Logic", () => {
     const tempDir = path.join(ROOT, "temp_addon");
@@ -23,6 +23,8 @@ describe("Environment Manager Logic", () => {
         delete process.env.STAGING_BRIDGE_URL;
         delete process.env.STAGING_BRAGNFT_ADDRESS;
         delete process.env.SERVER_ID;
+        delete process.env.MC_EDITION;
+        delete process.env.MC_SERVER_VERSION;
     });
 
     afterEach(() => {
@@ -66,5 +68,72 @@ describe("Environment Manager Logic", () => {
         assert.ok(content.includes('const WS_URL = "wss://staging-bridge.example.com";'));
         assert.ok(content.includes('const SERVER_ID = "staging-server";'));
         assert.ok(content.includes('const NEXUS_ADDRESS = "0xSTAGING_NEXUS_ADDRESS";'));
+    });
+
+    it("should fallback to stable version 1.10.0 for @minecraft/server when MC_EDITION=education", async () => {
+        process.env.MC_EDITION = "education";
+        await prepareAddon();
+
+        const manifestPath = path.join(tempDir, "development_behavior_packs", "behavior_pack_sample", "manifest.json");
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+        const serverDep = manifest.dependencies.find((dep: any) => dep.module_name === "@minecraft/server");
+
+        assert.strictEqual(serverDep.version, "1.10.0");
+    });
+
+    it("should allow custom version override via MC_SERVER_VERSION", async () => {
+        process.env.MC_SERVER_VERSION = "1.8.0-beta";
+        await prepareAddon();
+
+        const manifestPath = path.join(tempDir, "development_behavior_packs", "behavior_pack_sample", "manifest.json");
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+        const serverDep = manifest.dependencies.find((dep: any) => dep.module_name === "@minecraft/server");
+
+        assert.strictEqual(serverDep.version, "1.8.0-beta");
+    });
+
+    describe("Local Client Injection", () => {
+        const mockBaseDir = path.join(ROOT, "test_mock_com_mojang");
+
+        beforeEach(() => {
+            if (fs.existsSync(mockBaseDir)) {
+                fs.rmSync(mockBaseDir, { recursive: true, force: true });
+            }
+            fs.mkdirSync(mockBaseDir, { recursive: true });
+        });
+
+        afterEach(() => {
+            if (fs.existsSync(mockBaseDir)) {
+                fs.rmSync(mockBaseDir, { recursive: true, force: true });
+            }
+        });
+
+        it("should successfully inject behavior and resource packs to mock directories", async () => {
+            await prepareAddon();
+
+            const originalAppData = process.env.APPDATA;
+            const originalLocalAppData = process.env.LOCALAPPDATA;
+
+            process.env.APPDATA = path.join(mockBaseDir, "AppData", "Roaming");
+            process.env.LOCALAPPDATA = path.join(mockBaseDir, "AppData", "Local");
+
+            // Create mock folders so existsSync passes
+            const mceeMsiPath = path.join(process.env.APPDATA, "Minecraft Education Edition", "games", "com.mojang");
+            fs.mkdirSync(mceeMsiPath, { recursive: true });
+
+            // Check path resolution
+            const resolvedPaths = getLocalClientPaths("education-msi");
+            assert.strictEqual(resolvedPaths[0], mceeMsiPath);
+
+            // Test client injection
+            const result = injectToLocalClient(tempDir, "education-msi");
+            assert.strictEqual(result.success, true);
+            assert.ok(fs.existsSync(path.join(mceeMsiPath, "development_behavior_packs", "behavior_pack_sample")));
+            assert.ok(fs.existsSync(path.join(mceeMsiPath, "development_resource_packs", "resource_pack_sample")));
+
+            // Clean up environment overrides
+            process.env.APPDATA = originalAppData;
+            process.env.LOCALAPPDATA = originalLocalAppData;
+        });
     });
 });
