@@ -56,7 +56,6 @@ async function handleChat(event) {
     const player = event.sender;
 
     if (message.toLowerCase() === "!register") {
-        event.cancel = true;
         if (!player.xuid) {
             player.sendMessage("§cYou must be signed in to Xbox Live to register.§r");
             return;
@@ -69,7 +68,6 @@ async function handleChat(event) {
             player.sendMessage("§cBridge server is offline.§r");
         }
     } else if (message.toLowerCase() === "!my_nfts") {
-        event.cancel = true;
         if (!player.xuid) {
             player.sendMessage("§cYou must be signed in to Xbox Live to view your NFTs.§r");
             return;
@@ -83,10 +81,8 @@ async function handleChat(event) {
             player.sendMessage("§cBridge server error.§r");
         }
     } else if (message.toLowerCase() === "!nexus") {
-        event.cancel = true;
         player.sendMessage(`§6[Nexus]§r Contract Address: §f${NEXUS_ADDRESS}§r`);
     } else if (message.toLowerCase() === "!reconnect") {
-        event.cancel = true;
         player.sendMessage("§bAttempting to reconnect to bridge...§r");
         initiateBridgeConnection();
     }
@@ -94,4 +90,4 @@ async function handleChat(event) {
 
 // Subscribe to events
 world.afterEvents.playerSpawn.subscribe((event) => checkNftStatus(event.player));
-world.beforeEvents.chatSend.subscribe(handleChat);
+world.afterEvents.chatSend.subscribe(handleChat);

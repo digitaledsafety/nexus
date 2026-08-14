@@ -46,7 +46,6 @@ async function handleChat(event: any, world: any) {
     const platformId = player.xuid;
 
     if (message.toLowerCase() === "!register") {
-        event.cancel = true;
         if (!platformId) {
             player.sendMessage("§cYou must be signed in to Xbox Live to register.§r");
             return;
@@ -59,7 +58,6 @@ async function handleChat(event: any, world: any) {
             player.sendMessage("§cBridge server is offline.§r");
         }
     } else if (message.toLowerCase() === "!my_nfts") {
-        event.cancel = true;
         if (!platformId) {
             player.sendMessage("§cYou must be signed in to Xbox Live to view your NFTs.§r");
             return;
@@ -73,7 +71,6 @@ async function handleChat(event: any, world: any) {
             player.sendMessage("§cBridge server error.§r");
         }
     } else if (message.toLowerCase() === "!nexus") {
-        event.cancel = true;
         player.sendMessage(`§6[Nexus]§r Contract Address: §f${NEXUS_ADDRESS}§r`);
     }
 }
@@ -108,36 +105,32 @@ describe('Minecraft Script Logic', () => {
 
     describe('handleChat', () => {
         it('should send !my_nfts command via WebSocket', async () => {
-            const event = { message: "!my_nfts", sender: mockPlayer, cancel: false };
+            const event = { message: "!my_nfts", sender: mockPlayer };
             await handleChat(event, mockWorld);
 
-            assert.strictEqual(event.cancel, true);
             assert.strictEqual(mockDimension.runCommand.mock.calls.length, 1);
             assert.strictEqual(mockDimension.runCommand.mock.calls[0].arguments[0], `say !my_nfts test-xuid server-1 "test-player"`);
         });
 
         it('should provide registration via WebSocket when !register is typed', async () => {
-            const event = { message: "!register", sender: mockPlayer, cancel: false };
+            const event = { message: "!register", sender: mockPlayer };
             await handleChat(event, mockWorld);
 
-            assert.strictEqual(event.cancel, true);
             assert.strictEqual(mockDimension.runCommand.mock.calls.length, 1);
             assert.strictEqual(mockDimension.runCommand.mock.calls[0].arguments[0], `say !register test-xuid server-1 "test-player"`);
         });
 
         it('should not intercept other messages', async () => {
-            const event = { message: "Hello", sender: mockPlayer, cancel: false };
+            const event = { message: "Hello", sender: mockPlayer };
             await handleChat(event, mockWorld);
 
-            assert.strictEqual(event.cancel, false);
             assert.strictEqual(mockDimension.runCommand.mock.calls.length, 0);
         });
 
         it('should display Nexus address when !nexus is typed', async () => {
-            const event = { message: "!nexus", sender: mockPlayer, cancel: false };
+            const event = { message: "!nexus", sender: mockPlayer };
             await handleChat(event, mockWorld);
 
-            assert.strictEqual(event.cancel, true);
             assert.strictEqual(mockPlayer.sendMessage.mock.calls.length, 1);
             assert.ok(mockPlayer.sendMessage.mock.calls[0].arguments[0].includes(NEXUS_ADDRESS));
         });
