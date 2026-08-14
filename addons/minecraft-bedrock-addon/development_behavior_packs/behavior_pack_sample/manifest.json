@@ -5,7 +5,7 @@
       "name": "My Behavior Pack",
       "uuid": "3958f9a2-96e4-4db0-a907-145d065cd7f0",
       "version": [1, 0, 0],
-      "min_engine_version": [1, 20, 0]
+      "min_engine_version": [1, 21, 0]
     },
     "modules": [
       {
@@ -30,7 +30,7 @@
       },
       {
         "module_name": "@minecraft/server",
-        "version": "1.15.0"
+        "version": "2.9.0"
       }
     ]
   }

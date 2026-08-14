@@ -8,6 +8,23 @@ const RESOURCE_PATH = "addons/minecraft-bedrock-addon/development_resource_packs
 
 describe('Minecraft Addon Validation', () => {
 
+    describe('Behavior Pack Manifest (manifest.json)', () => {
+        const manifestPath = path.join(BEHAVIOR_PATH, 'manifest.json');
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+
+        it('should require @minecraft/server version 2.9.0', () => {
+            const serverDep = manifest.dependencies.find((dep: any) => dep.module_name === '@minecraft/server');
+            assert.ok(serverDep, '@minecraft/server dependency missing');
+            assert.strictEqual(serverDep.version, '2.9.0');
+        });
+
+        it('should have min_engine_version [1, 21, 0] or higher', () => {
+            const version = manifest.header.min_engine_version;
+            assert.ok(Array.isArray(version));
+            assert.ok(version[0] >= 1 && version[1] >= 21);
+        });
+    });
+
     describe('Cow Entity Behavior Pack (cow.json)', () => {
         const cowJsonPath = path.join(BEHAVIOR_PATH, 'entities/cow.json');
         const cowJson = JSON.parse(fs.readFileSync(cowJsonPath, 'utf8'));
