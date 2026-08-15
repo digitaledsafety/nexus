@@ -27,6 +27,21 @@ const mockWorld = {
 const SERVER_ID = "server-1";
 const NEXUS_ADDRESS = "0x1234567890123456789012345678901234567890";
 
+// Custom Command Registry Mock Implementation
+class MockCustomCommandRegistry {
+    commands: Map<string, { config: any, callback: Function }> = new Map();
+
+    registerCommand(config: any, callback: Function) {
+        this.commands.set(config.name, { config, callback });
+    }
+
+    executeCommand(name: string, origin: any) {
+        const cmd = this.commands.get(name);
+        if (!cmd) throw new Error(`Command ${name} not registered`);
+        return cmd.callback(origin);
+    }
+}
+
 // Logic copied from addons/minecraft-bedrock-addon/development_behavior_packs/behavior_pack_sample/scripts/main.js
 async function checkNftStatus(player: any, world: any) {
     const platformId = player.xuid;
@@ -34,48 +49,98 @@ async function checkNftStatus(player: any, world: any) {
 
     try {
         // Send check command via WebSocket
-        world.getDimension("overworld").runCommand(`say !check ${platformId} ${SERVER_ID} "${player.name}"`);
+        world.getDimension("overworld").runCommand(`say nexus:check ${platformId} ${SERVER_ID} "${player.name}"`);
     } catch (error) {
         console.warn("NFT Bridge Error: " + error);
     }
 }
 
-async function handleChat(event: any, world: any) {
-    const message = event.message.trim();
-    const player = event.sender;
-    const platformId = player.xuid;
+function registerCustomCommands(registry: MockCustomCommandRegistry, world: any) {
+    registry.registerCommand(
+        {
+            name: "nexus:register",
+            description: "Request registration link for NFT bridge",
+            permissionLevel: "Any",
+            cheatsRequired: false
+        },
+        (origin: any) => {
+            const player = origin.initiator ?? origin.sourceEntity;
+            if (!player || !player.xuid) {
+                player?.sendMessage?.("§cYou must be signed in to Xbox Live to register.§r");
+                return { status: 0 };
+            }
+            player.sendMessage("§bRequesting registration link...§r");
 
-    if (message.toLowerCase() === "!register") {
-        if (!platformId) {
-            player.sendMessage("§cYou must be signed in to Xbox Live to register.§r");
-            return;
+            try {
+                world.getDimension("overworld").runCommand(`say nexus:register ${player.xuid} ${SERVER_ID} "${player.name}"`);
+            } catch (error) {
+                player.sendMessage("§cBridge server is offline.§r");
+            }
+            return { status: 1 };
         }
-        player.sendMessage("§bRequesting registration link...§r");
+    );
 
-        try {
-            world.getDimension("overworld").runCommand(`say !register ${platformId} ${SERVER_ID} "${player.name}"`);
-        } catch (error) {
-            player.sendMessage("§cBridge server is offline.§r");
-        }
-    } else if (message.toLowerCase() === "!my_nfts") {
-        if (!platformId) {
-            player.sendMessage("§cYou must be signed in to Xbox Live to view your NFTs.§r");
-            return;
-        }
+    registry.registerCommand(
+        {
+            name: "nexus:my_nfts",
+            description: "Fetch and display your NFTs",
+            permissionLevel: "Any",
+            cheatsRequired: false
+        },
+        (origin: any) => {
+            const player = origin.initiator ?? origin.sourceEntity;
+            if (!player || !player.xuid) {
+                player?.sendMessage?.("§cYou must be signed in to Xbox Live to view your NFTs.§r");
+                return { status: 0 };
+            }
 
-        player.sendMessage("§bFetching your NFTs...§r");
+            player.sendMessage("§bFetching your NFTs...§r");
 
-        try {
-            world.getDimension("overworld").runCommand(`say !my_nfts ${platformId} ${SERVER_ID} "${player.name}"`);
-        } catch (error) {
-            player.sendMessage("§cBridge server error.§r");
+            try {
+                world.getDimension("overworld").runCommand(`say nexus:my_nfts ${player.xuid} ${SERVER_ID} "${player.name}"`);
+            } catch (error) {
+                player.sendMessage("§cBridge server error.§r");
+            }
+            return { status: 1 };
         }
-    } else if (message.toLowerCase() === "!nexus") {
-        player.sendMessage(`§6[Nexus]§r Contract Address: §f${NEXUS_ADDRESS}§r`);
-    }
+    );
+
+    registry.registerCommand(
+        {
+            name: "nexus:contract",
+            description: "Display the Nexus contract address",
+            permissionLevel: "Any",
+            cheatsRequired: false
+        },
+        (origin: any) => {
+            const player = origin.initiator ?? origin.sourceEntity;
+            if (player?.sendMessage) {
+                player.sendMessage(`§6[Nexus]§r Contract Address: §f${NEXUS_ADDRESS}§r`);
+            }
+            return { status: 1 };
+        }
+    );
+
+    registry.registerCommand(
+        {
+            name: "nexus:reconnect",
+            description: "Reconnect to the NFT bridge server",
+            permissionLevel: "Any",
+            cheatsRequired: false
+        },
+        (origin: any) => {
+            const player = origin.initiator ?? origin.sourceEntity;
+            if (player?.sendMessage) {
+                player.sendMessage("§bAttempting to reconnect to bridge...§r");
+            }
+            return { status: 1 };
+        }
+    );
 }
 
-describe('Minecraft Script Logic', () => {
+describe('Minecraft Custom Commands Logic', () => {
+    let registry: MockCustomCommandRegistry;
+
     beforeEach(() => {
         // Reset mocks
         mockPlayer.sendMessage.mock.resetCalls();
@@ -85,54 +150,62 @@ describe('Minecraft Script Logic', () => {
         mockPlayer.getDynamicProperty.mock.resetCalls();
         mockPlayer.setDynamicProperty.mock.resetCalls();
         mockDimension.runCommand.mock.resetCalls();
+
+        registry = new MockCustomCommandRegistry();
+        registerCustomCommands(registry, mockWorld);
     });
 
     describe('checkNftStatus', () => {
-        it('should send !check command via WebSocket', async () => {
+        it('should send nexus:check command via WebSocket', async () => {
             await checkNftStatus(mockPlayer, mockWorld);
 
             assert.strictEqual(mockDimension.runCommand.mock.calls.length, 1);
-            assert.strictEqual(mockDimension.runCommand.mock.calls[0].arguments[0], `say !check test-xuid server-1 "test-player"`);
+            assert.strictEqual(mockDimension.runCommand.mock.calls[0].arguments[0], `say nexus:check test-xuid server-1 "test-player"`);
         });
 
         it('should handle player name with spaces', async () => {
             const playerWithSpaces = { ...mockPlayer, name: "Player Name With Spaces" };
             await checkNftStatus(playerWithSpaces, mockWorld);
 
-            assert.strictEqual(mockDimension.runCommand.mock.calls[0].arguments[0], `say !check test-xuid server-1 "Player Name With Spaces"`);
+            assert.strictEqual(mockDimension.runCommand.mock.calls[0].arguments[0], `say nexus:check test-xuid server-1 "Player Name With Spaces"`);
         });
     });
 
-    describe('handleChat', () => {
-        it('should send !my_nfts command via WebSocket', async () => {
-            const event = { message: "!my_nfts", sender: mockPlayer };
-            await handleChat(event, mockWorld);
+    describe('custom commands execution', () => {
+        it('should execute nexus:my_nfts custom command', () => {
+            const origin = { sourceEntity: mockPlayer };
+            registry.executeCommand("nexus:my_nfts", origin);
 
             assert.strictEqual(mockDimension.runCommand.mock.calls.length, 1);
-            assert.strictEqual(mockDimension.runCommand.mock.calls[0].arguments[0], `say !my_nfts test-xuid server-1 "test-player"`);
+            assert.strictEqual(mockDimension.runCommand.mock.calls[0].arguments[0], `say nexus:my_nfts test-xuid server-1 "test-player"`);
+            assert.strictEqual(mockPlayer.sendMessage.mock.calls.length, 1);
+            assert.strictEqual(mockPlayer.sendMessage.mock.calls[0].arguments[0], "§bFetching your NFTs...§r");
         });
 
-        it('should provide registration via WebSocket when !register is typed', async () => {
-            const event = { message: "!register", sender: mockPlayer };
-            await handleChat(event, mockWorld);
+        it('should execute nexus:register custom command', () => {
+            const origin = { sourceEntity: mockPlayer };
+            registry.executeCommand("nexus:register", origin);
 
             assert.strictEqual(mockDimension.runCommand.mock.calls.length, 1);
-            assert.strictEqual(mockDimension.runCommand.mock.calls[0].arguments[0], `say !register test-xuid server-1 "test-player"`);
+            assert.strictEqual(mockDimension.runCommand.mock.calls[0].arguments[0], `say nexus:register test-xuid server-1 "test-player"`);
+            assert.strictEqual(mockPlayer.sendMessage.mock.calls.length, 1);
+            assert.strictEqual(mockPlayer.sendMessage.mock.calls[0].arguments[0], "§bRequesting registration link...§r");
         });
 
-        it('should not intercept other messages', async () => {
-            const event = { message: "Hello", sender: mockPlayer };
-            await handleChat(event, mockWorld);
-
-            assert.strictEqual(mockDimension.runCommand.mock.calls.length, 0);
-        });
-
-        it('should display Nexus address when !nexus is typed', async () => {
-            const event = { message: "!nexus", sender: mockPlayer };
-            await handleChat(event, mockWorld);
+        it('should display Nexus address when nexus:contract custom command is executed', () => {
+            const origin = { sourceEntity: mockPlayer };
+            registry.executeCommand("nexus:contract", origin);
 
             assert.strictEqual(mockPlayer.sendMessage.mock.calls.length, 1);
             assert.ok(mockPlayer.sendMessage.mock.calls[0].arguments[0].includes(NEXUS_ADDRESS));
+        });
+
+        it('should execute nexus:reconnect custom command', () => {
+            const origin = { sourceEntity: mockPlayer };
+            registry.executeCommand("nexus:reconnect", origin);
+
+            assert.strictEqual(mockPlayer.sendMessage.mock.calls.length, 1);
+            assert.strictEqual(mockPlayer.sendMessage.mock.calls[0].arguments[0], "§bAttempting to reconnect to bridge...§r");
         });
     });
 });
