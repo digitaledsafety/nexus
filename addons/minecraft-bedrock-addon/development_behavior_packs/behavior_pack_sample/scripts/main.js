@@ -33,7 +33,7 @@ world.afterEvents.worldLoad.subscribe(() => {
 });
 
 // 2. Player Spawn Listener (Updated for @minecraft/server 2.9.0+)
-world.afterEvents.playerSpawned.subscribe((event) => {
+world.afterEvents.playerSpawn.subscribe((event) => {
     if (event.initialSpawn) {
         checkNftStatus(event.player);
     }
