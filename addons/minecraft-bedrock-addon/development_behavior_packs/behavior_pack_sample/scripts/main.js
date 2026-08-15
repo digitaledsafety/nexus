@@ -28,7 +28,7 @@ function initiateBridgeConnection() {
 }
 
 // 1. World Initialization Listener
-world.beforeEvents.worldInitialize.subscribe(() => {
+world.afterEvents.worldInitialize.subscribe(() => {
     system.runTimeout(initiateBridgeConnection, 100);
 });
 
