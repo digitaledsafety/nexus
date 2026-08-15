@@ -55,7 +55,7 @@ The resource pack uses the `subpacks` feature to offer configuration options.
 The behavior pack uses `@minecraft/server` and `@minecraft/server-net` to:
 *   Listen for `playerSpawn` events.
 *   Trigger WebSocket/HTTP commands to the bridge.
-*   Apply tags and handle chat commands (`!register`, `!my_nfts`, `!nexus`).
+*   Apply tags and handle custom commands (`/nexus:register`, `/nexus:my_nfts`, `/nexus:contract`, `/nexus:reconnect`).
 
 ---
 

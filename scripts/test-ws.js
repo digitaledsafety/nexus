@@ -9,28 +9,28 @@ ws.on('open', () => {
     ws.send(JSON.stringify({
         body: {
             eventName: 'PlayerMessage',
-            properties: { Message: '!handshake server-1' }
+            properties: { Message: 'nexus:handshake server-1' }
         }
     }));
 
     setTimeout(() => {
-        // Test !register with spaces in name
-        console.log('Testing !register with spaces...');
+        // Test nexus:register with spaces in name
+        console.log('Testing nexus:register with spaces...');
         ws.send(JSON.stringify({
             body: {
                 eventName: 'PlayerMessage',
-                properties: { Message: '!register test-xuid server-1 "Player With Spaces"' }
+                properties: { Message: 'nexus:register test-xuid server-1 "Player With Spaces"' }
             }
         }));
     }, 500);
 
     setTimeout(() => {
-        // Test !check with spaces in name
-        console.log('Testing !check with spaces...');
+        // Test nexus:check with spaces in name
+        console.log('Testing nexus:check with spaces...');
         ws.send(JSON.stringify({
             body: {
                 eventName: 'PlayerMessage',
-                properties: { Message: '!check test-xuid server-1 "Player With Spaces"' }
+                properties: { Message: 'nexus:check test-xuid server-1 "Player With Spaces"' }
             }
         }));
     }, 1000);

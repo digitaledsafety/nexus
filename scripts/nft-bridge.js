@@ -111,15 +111,15 @@ wss.on('connection', (ws, req) => {
                 const message = msg.body.properties.Message;
                 if (!message) return;
 
-                if (message.startsWith('!handshake ')) {
+                if (message.startsWith('nexus:handshake ') || message.startsWith('!handshake ')) {
                     const serverId = message.split(' ')[1];
                     if (serverConfigs[serverId]) {
                         serverSockets.set(serverId, ws);
                         console.log(`WebSocket handshaked and assigned to ${serverId} (${serverConfigs[serverId].name})`);
                     }
                 } else {
-                    // Robust parsing for: !<command> <platformId> <serverId> "<playerName>"
-                    const match = message.match(/^!(check|register|my_nfts)\s+(\S+)\s+(\S+)\s+"(.+)"$/);
+                    // Robust parsing for: nexus:<command> or !<command> <platformId> <serverId> "<playerName>"
+                    const match = message.match(/^(?:nexus:|!)(check|register|my_nfts)\s+(\S+)\s+(\S+)\s+"(.+)"$/);
                     if (match) {
                         const [_, command, platformId, serverId, playerName] = match;
 
