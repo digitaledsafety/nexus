@@ -9,7 +9,7 @@ describe("Batch Operations", async function () {
   async function deployAll() {
     const [owner, seller, buyer, treasury] = await viem.getWalletClients();
 
-    const bragToken = await viem.deployContract("BragToken", [owner.account.address, parseEther("1000000"), parseEther("2000000")]);
+    const bragToken = await viem.deployContract("BragToken", [owner.account.address, parseEther("1000000000"), parseEther("10000000000")]);
     const marketplace = await viem.deployContract("NFTMarketplace", [owner.account.address, bragToken.address]);
     const priceFeed = await viem.deployContract("MockPriceFeed", [250000000000n]);
     const bragNFT = await viem.deployContract("BragNFT", [owner.account.address, treasury.account.address, parseEther("0.1")
@@ -93,5 +93,77 @@ describe("Batch Operations", async function () {
     assert.equal(await mock1155.read.balanceOf([vault2.address, 2n]), 10n);
     assert.equal(await vault2.read.balances1155([mock1155.address, 1n, seller.account.address]), 5n);
     assert.equal(await vault2.read.balances1155([mock1155.address, 2n, seller.account.address]), 10n);
+  });
+
+  it("BragNFT: Should support batch ETH and BRAG top-ups on BragNFT", async function () {
+    const { bragNFT, bragToken, seller, owner } = await deployAll();
+
+    // Mint 2 NFTs
+    await bragNFT.write.donate(["nft1", ""], { account: seller.account, value: parseEther("0.1") });
+    await bragNFT.write.donate(["nft2", ""], { account: seller.account, value: parseEther("0.1") });
+
+    // Set bragToken in BragNFT and grant MINTER_ROLE on bragToken to bragNFT
+    await bragNFT.write.setBragToken([bragToken.address], { account: owner.account });
+    const MINTER_ROLE = keccak256(toBytes("MINTER_ROLE"));
+    await bragToken.write.grantRole([MINTER_ROLE, bragNFT.address], { account: owner.account });
+
+    // Batch ETH top-up (min $1 per top up; 0.001 ETH * $2500/ETH = $2.50 > $2.00)
+    await bragNFT.write.batchTopUp([[0n, 1n]], { account: seller.account, value: parseEther("0.002") });
+
+    assert.equal(await bragNFT.read.isGlowing([0n]), true);
+    assert.equal(await bragNFT.read.isGlowing([1n]), true);
+
+    // Give seller BRAG tokens for BRAG top up (2,000,000 BRAG total needed)
+    await bragToken.write.transfer([seller.account.address, parseEther("2000000")], { account: owner.account });
+    await bragToken.write.approve([bragNFT.address, parseEther("2000000")], { account: seller.account });
+
+    // Batch BRAG top-up
+    await bragNFT.write.batchTopUpWithBrag([[0n, 1n]], { account: seller.account });
+  });
+
+  it("BragNFT: Should support batch donations with ETH dust distribution on BragNFT", async function () {
+    const { bragNFT, buyer, seller } = await deployAll();
+
+    // Batch donate to self
+    await bragNFT.write.batchDonate([["msg1", "msg2"], ["uri1", "uri2"]], { account: buyer.account, value: parseEther("0.25") });
+
+    assert.equal(await bragNFT.read.totalSupply(), 2n);
+    assert.equal(await bragNFT.read.ownerOf([0n]), getAddress(buyer.account.address));
+    assert.equal(await bragNFT.read.ownerOf([1n]), getAddress(buyer.account.address));
+
+    // Batch donate to recipients
+    await bragNFT.write.batchDonateTo([[buyer.account.address, seller.account.address], ["msg3", "msg4"], ["uri3", "uri4"]], { account: buyer.account, value: parseEther("0.25") });
+
+    assert.equal(await bragNFT.read.totalSupply(), 4n);
+    assert.equal(await bragNFT.read.ownerOf([2n]), getAddress(buyer.account.address));
+    assert.equal(await bragNFT.read.ownerOf([3n]), getAddress(seller.account.address));
+  });
+
+  it("ExhibitVault: Should support batch exhibition extensions for ERC721 and ERC1155 in ExhibitVault", async function () {
+    const { bragNFT, mock1155, vault1, seller, owner } = await deployAll();
+
+    // Setup ERC721
+    await bragNFT.write.donate(["nft1", ""], { account: seller.account, value: parseEther("0.1") });
+    await bragNFT.write.donate(["nft2", ""], { account: seller.account, value: parseEther("0.1") });
+    await bragNFT.write.safeTransferFrom([seller.account.address, vault1.address, 0n], { account: seller.account });
+    await bragNFT.write.safeTransferFrom([seller.account.address, vault1.address, 1n], { account: seller.account });
+
+    // Batch extend ERC721
+    await vault1.write.batchExtendExhibition721([[bragNFT.address, bragNFT.address], [0n, 1n], [3600n, 7200n]], { account: seller.account });
+
+    assert.ok(await vault1.read.expiry721([bragNFT.address, 0n]) > 0n);
+    assert.ok(await vault1.read.expiry721([bragNFT.address, 1n]) > 0n);
+
+    // Setup ERC1155
+    await mock1155.write.mint([seller.account.address, 1n, 10n], { account: owner.account });
+    await mock1155.write.mint([seller.account.address, 2n, 20n], { account: owner.account });
+    await mock1155.write.safeTransferFrom([seller.account.address, vault1.address, 1n, 5n, "0x"], { account: seller.account });
+    await mock1155.write.safeTransferFrom([seller.account.address, vault1.address, 2n, 10n, "0x"], { account: seller.account });
+
+    // Batch extend ERC1155
+    await vault1.write.batchExtendExhibition1155([[mock1155.address, mock1155.address], [1n, 2n], [3600n, 7200n]], { account: seller.account });
+
+    assert.ok(await vault1.read.expiry1155([mock1155.address, 1n, seller.account.address]) > 0n);
+    assert.ok(await vault1.read.expiry1155([mock1155.address, 2n, seller.account.address]) > 0n);
   });
 });
