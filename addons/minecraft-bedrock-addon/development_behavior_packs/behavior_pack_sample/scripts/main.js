@@ -27,13 +27,13 @@ function initiateBridgeConnection() {
     }
 }
 
-// 1. World Initialization Listener
-world.afterEvents.worldInitialize.subscribe(() => {
+// 1. World Initialization Listener (Updated for @minecraft/server 2.9.0)
+world.afterEvents.worldLoad.subscribe(() => {
     system.runTimeout(initiateBridgeConnection, 100);
 });
 
-// 2. Player Spawn Listener
-world.afterEvents.playerSpawn.subscribe((event) => {
+// 2. Player Spawn Listener (Updated for @minecraft/server 2.9.0+)
+world.afterEvents.playerSpawned.subscribe((event) => {
     if (event.initialSpawn) {
         checkNftStatus(event.player);
     }
