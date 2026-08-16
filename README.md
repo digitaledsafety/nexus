@@ -141,6 +141,8 @@ To map specific Minecraft servers to `ExhibitVault` contracts, create a `bridge-
 }
 ```
 
+For detailed instructions on Minecraft Addon configuration injection (`WS_URL`, `SERVER_ID`, `NEXUS_ADDRESS`) and end-to-end setup, see [addons/minecraft-bedrock-addon/README.md](addons/minecraft-bedrock-addon/README.md).
+
 ### Pointing to External Minecraft Managers
 If you are using an external service like `bedrock-server-manager` for remote server control, set the `MANAGER_API_URL` environment variable:
 ```shell
