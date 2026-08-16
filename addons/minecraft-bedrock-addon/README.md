@@ -49,21 +49,26 @@ This directory contains the Minecraft Bedrock Add-on for the Brag ecosystem. It 
 The addon's main entry script (`development_behavior_packs/behavior_pack_sample/scripts/main.js`) contains placeholder constants that are dynamic and environment-specific:
 
 ```javascript
-const WS_URL = "__WS_URL__";
-const SERVER_ID = "__SERVER_ID__";
-const NEXUS_ADDRESS = "__NEXUS_ADDRESS__";
+const RAW_WS_URL = "__WS_URL__";
+const RAW_SERVER_ID = "__SERVER_ID__";
+const RAW_NEXUS_ADDRESS = "__NEXUS_ADDRESS__";
+
+const WS_URL = (!RAW_WS_URL || RAW_WS_URL.indexOf("__") !== -1) ? "localhost:9001" : RAW_WS_URL;
+const SERVER_ID = (!RAW_SERVER_ID || RAW_SERVER_ID.indexOf("__") !== -1) ? "local-dev" : RAW_SERVER_ID;
+const NEXUS_ADDRESS = (!RAW_NEXUS_ADDRESS || RAW_NEXUS_ADDRESS.indexOf("__") !== -1) ? "0x0000000000000000000000000000000000000000" : RAW_NEXUS_ADDRESS;
 ```
 
-### How Configuration Injection Works
+### How Configuration Injection & Runtime Fallbacks Work
 1. **Source & Templates**: The static source files live in `addons/minecraft-bedrock-addon/`.
-2. **`prepareAddon()` Pipeline**:
+2. **Runtime Safety Net**: If the raw addon files are loaded directly into Minecraft without running the `prepareAddon()` build step (e.g. manual copy of `addons/minecraft-bedrock-addon/`), `main.js` automatically detects un-replaced `__...__` placeholders and falls back to safe runtime defaults (`localhost:9001`, `local-dev`, `0x0000000000000000000000000000000000000000`).
+3. **`prepareAddon()` Pipeline**:
    - The orchestration script `scripts/env-manager.js` exports a `prepareAddon()` function.
    - It copies `addons/minecraft-bedrock-addon/` into a runtime directory at `temp_addon/`.
    - It resolves the values for the placeholders depending on the environment (`APP_ENV`):
      - **Local Environment (`APP_ENV=local` or unset)**:
-       - `WS_URL`: Defaults to `localhost:9001` (WebSocket port of the local NFT bridge).
+       - `WS_URL`: Resolves from `process.env.WS_URL` or defaults to `localhost:9001` (WebSocket port of the local NFT bridge).
        - `SERVER_ID`: Resolves from `process.env.SERVER_ID` or defaults to `'local-dev'`.
-       - `NEXUS_ADDRESS`: Reads the local deployment address from `ignition/deployments/chain-31337/deployed_addresses.json` (`AppModule#BragNFT`), falling back to `0x0000000000000000000000000000000000000000`.
+       - `NEXUS_ADDRESS`: Reads `process.env.CONTRACT_ADDRESS_BRAGNFT` or local deployment address from `ignition/deployments/chain-31337/deployed_addresses.json` (`AppModule#BragNFT`), falling back to `0x0000000000000000000000000000000000000000`.
      - **Staging Environment (`APP_ENV=staging`)**:
        - `WS_URL`: Resolves from `process.env.STAGING_BRIDGE_URL`.
        - `SERVER_ID`: Resolves from `process.env.SERVER_ID` or defaults to `'local-dev'`.

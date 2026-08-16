@@ -113,18 +113,18 @@ export async function prepareAddon() {
     const mainJsPath = path.join(targetDir, 'development_behavior_packs', 'behavior_pack_sample', 'scripts', 'main.js');
     let content = fs.readFileSync(mainJsPath, 'utf8');
 
-    let wsUrl = 'localhost:9001';
+    let wsUrl = process.env.WS_URL || 'localhost:9001';
     let serverId = process.env.SERVER_ID || 'local-dev';
-    let nexusAddress = '0x0000000000000000000000000000000000000000';
+    let nexusAddress = process.env.CONTRACT_ADDRESS_BRAGNFT || '0x0000000000000000000000000000000000000000';
 
     if (isStaging()) {
-        wsUrl = process.env.STAGING_BRIDGE_URL || wsUrl;
-        nexusAddress = process.env.STAGING_BRAGNFT_ADDRESS || nexusAddress;
+        wsUrl = process.env.STAGING_BRIDGE_URL || process.env.WS_URL || wsUrl;
+        nexusAddress = process.env.STAGING_BRAGNFT_ADDRESS || process.env.CONTRACT_ADDRESS_BRAGNFT || nexusAddress;
     } else {
         const deploymentPath = path.join(ROOT, 'ignition', 'deployments', 'chain-31337', 'deployed_addresses.json');
         if (fs.existsSync(deploymentPath)) {
             const deployments = JSON.parse(fs.readFileSync(deploymentPath, 'utf8'));
-            nexusAddress = deployments['AppModule#BragNFT'] || nexusAddress;
+            nexusAddress = process.env.CONTRACT_ADDRESS_BRAGNFT || deployments['AppModule#BragNFT'] || nexusAddress;
         }
     }
 
