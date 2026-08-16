@@ -276,6 +276,16 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
         }
     }
 
+    /**
+     * @dev Move multiple ERC721 tokens directly to another verified vault with a specified duration.
+     */
+    function batchMove721WithDuration(address[] calldata nftContracts, uint256[] calldata tokenIds, address destinationVault, uint256 duration) external nonReentrant {
+        require(nftContracts.length == tokenIds.length, "Mismatched arrays");
+        for (uint256 i = 0; i < nftContracts.length; i++) {
+            _move721(nftContracts[i], tokenIds[i], destinationVault, duration);
+        }
+    }
+
     function _move721(address nftContract, uint256 tokenId, address destinationVault, uint256 duration) internal {
         require(owner721[nftContract][tokenId] == msg.sender, "Not the owner");
         require(registry.isVerified(destinationVault), "Destination not verified");
@@ -314,6 +324,16 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
         require(nftContracts.length == ids.length && ids.length == amounts.length, "Mismatched arrays");
         for (uint256 i = 0; i < nftContracts.length; i++) {
             _move1155(nftContracts[i], ids[i], amounts[i], destinationVault, 0);
+        }
+    }
+
+    /**
+     * @dev Move multiple ERC1155 tokens directly to another verified vault with a specified duration.
+     */
+    function batchMove1155WithDuration(address[] calldata nftContracts, uint256[] calldata ids, uint256[] calldata amounts, address destinationVault, uint256 duration) external nonReentrant {
+        require(nftContracts.length == ids.length && ids.length == amounts.length, "Mismatched arrays");
+        for (uint256 i = 0; i < nftContracts.length; i++) {
+            _move1155(nftContracts[i], ids[i], amounts[i], destinationVault, duration);
         }
     }
 
@@ -402,7 +422,21 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
     /**
      * @dev Extend exhibition duration for an ERC721 token.
      */
-    function extendExhibition721(address nftContract, uint256 tokenId, uint256 duration) external nonReentrant {
+    function extendExhibition721(address nftContract, uint256 tokenId, uint256 duration) public nonReentrant {
+        _extendExhibition721(nftContract, tokenId, duration);
+    }
+
+    /**
+     * @dev Batch extend exhibition duration for ERC721 tokens.
+     */
+    function batchExtendExhibition721(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256 duration) external nonReentrant {
+        require(nftContracts.length == tokenIds.length, "Mismatched arrays");
+        for (uint256 i = 0; i < nftContracts.length; i++) {
+            _extendExhibition721(nftContracts[i], tokenIds[i], duration);
+        }
+    }
+
+    function _extendExhibition721(address nftContract, uint256 tokenId, uint256 duration) internal {
         require(owner721[nftContract][tokenId] == msg.sender, "Not the owner");
         require(duration > 0, "Duration must be > 0");
 
@@ -417,7 +451,21 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
     /**
      * @dev Extend exhibition duration for an ERC1155 token.
      */
-    function extendExhibition1155(address nftContract, uint256 tokenId, uint256 duration) external nonReentrant {
+    function extendExhibition1155(address nftContract, uint256 tokenId, uint256 duration) public nonReentrant {
+        _extendExhibition1155(nftContract, tokenId, duration);
+    }
+
+    /**
+     * @dev Batch extend exhibition duration for ERC1155 tokens.
+     */
+    function batchExtendExhibition1155(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256 duration) external nonReentrant {
+        require(nftContracts.length == tokenIds.length, "Mismatched arrays");
+        for (uint256 i = 0; i < nftContracts.length; i++) {
+            _extendExhibition1155(nftContracts[i], tokenIds[i], duration);
+        }
+    }
+
+    function _extendExhibition1155(address nftContract, uint256 tokenId, uint256 duration) internal {
         require(balances1155[nftContract][tokenId][msg.sender] > 0, "No balance");
         require(duration > 0, "Duration must be > 0");
 
