@@ -23,6 +23,8 @@ describe("Environment Manager Logic", () => {
         delete process.env.STAGING_BRIDGE_URL;
         delete process.env.STAGING_BRAGNFT_ADDRESS;
         delete process.env.SERVER_ID;
+        delete process.env.WS_URL;
+        delete process.env.CONTRACT_ADDRESS_BRAGNFT;
     });
 
     afterEach(() => {
@@ -37,19 +39,21 @@ describe("Environment Manager Logic", () => {
         const mainJsPath = path.join(tempDir, "development_behavior_packs", "behavior_pack_sample", "scripts", "main.js");
         const content = fs.readFileSync(mainJsPath, "utf8");
 
-        assert.ok(content.includes('const WS_URL = "localhost:9001";'));
-        assert.ok(content.includes('const SERVER_ID = "local-dev";'));
-        assert.ok(content.includes('const NEXUS_ADDRESS = "0xLOCAL_NEXUS_ADDRESS";'));
+        assert.ok(content.includes('const RAW_WS_URL = "localhost:9001";'));
+        assert.ok(content.includes('const RAW_SERVER_ID = "local-dev";'));
+        assert.ok(content.includes('const RAW_NEXUS_ADDRESS = "0xLOCAL_NEXUS_ADDRESS";'));
     });
 
-    it("should prepare local addon with custom SERVER_ID", async () => {
+    it("should prepare local addon with custom SERVER_ID and WS_URL", async () => {
         process.env.SERVER_ID = "custom-server";
+        process.env.WS_URL = "127.0.0.1:9001";
         await prepareAddon();
 
         const mainJsPath = path.join(tempDir, "development_behavior_packs", "behavior_pack_sample", "scripts", "main.js");
         const content = fs.readFileSync(mainJsPath, "utf8");
 
-        assert.ok(content.includes('const SERVER_ID = "custom-server";'));
+        assert.ok(content.includes('const RAW_WS_URL = "127.0.0.1:9001";'));
+        assert.ok(content.includes('const RAW_SERVER_ID = "custom-server";'));
     });
 
     it("should prepare staging addon with staging environment variables", async () => {
@@ -63,8 +67,18 @@ describe("Environment Manager Logic", () => {
         const mainJsPath = path.join(tempDir, "development_behavior_packs", "behavior_pack_sample", "scripts", "main.js");
         const content = fs.readFileSync(mainJsPath, "utf8");
 
-        assert.ok(content.includes('const WS_URL = "wss://staging-bridge.example.com";'));
-        assert.ok(content.includes('const SERVER_ID = "staging-server";'));
-        assert.ok(content.includes('const NEXUS_ADDRESS = "0xSTAGING_NEXUS_ADDRESS";'));
+        assert.ok(content.includes('const RAW_WS_URL = "wss://staging-bridge.example.com";'));
+        assert.ok(content.includes('const RAW_SERVER_ID = "staging-server";'));
+        assert.ok(content.includes('const RAW_NEXUS_ADDRESS = "0xSTAGING_NEXUS_ADDRESS";'));
+    });
+
+    it("should fallback to default values in main.js when placeholders remain unreplaced", () => {
+        const rawSourcePath = path.join(ROOT, "addons", "minecraft-bedrock-addon", "development_behavior_packs", "behavior_pack_sample", "scripts", "main.js");
+        const content = fs.readFileSync(rawSourcePath, "utf8");
+
+        assert.ok(content.includes('const RAW_WS_URL = "__WS_URL__";'));
+        assert.ok(content.includes('const WS_URL = (!RAW_WS_URL || RAW_WS_URL.indexOf("__") !== -1) ? "localhost:9001" : RAW_WS_URL;'));
+        assert.ok(content.includes('const SERVER_ID = (!RAW_SERVER_ID || RAW_SERVER_ID.indexOf("__") !== -1) ? "local-dev" : RAW_SERVER_ID;'));
+        assert.ok(content.includes('const NEXUS_ADDRESS = (!RAW_NEXUS_ADDRESS || RAW_NEXUS_ADDRESS.indexOf("__") !== -1) ? "0x0000000000000000000000000000000000000000" : RAW_NEXUS_ADDRESS;'));
     });
 });
