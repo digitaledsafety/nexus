@@ -101,17 +101,9 @@ async function checkManagerStatus() {
 export async function prepareAddon() {
     console.log('Preparing NFT addon...');
     const sourceDir = path.join(ROOT, 'addons', 'minecraft-bedrock-addon');
-    const targetDir = path.join(ROOT, 'temp_addon');
 
-    // Create a clean copy in temp_addon
-    if (fs.existsSync(targetDir)) {
-        fs.rmSync(targetDir, { recursive: true, force: true });
-    }
-    fs.cpSync(sourceDir, targetDir, { recursive: true });
-
-    // Inject configuration into main.js
-    const mainJsPath = path.join(targetDir, 'development_behavior_packs', 'behavior_pack_sample', 'scripts', 'main.js');
-    let content = fs.readFileSync(mainJsPath, 'utf8');
+    // Inject configuration into config.js
+    const configJsPath = path.join(sourceDir, 'development_behavior_packs', 'behavior_pack_sample', 'scripts', 'config.js');
 
     let wsUrl = process.env.WS_URL || 'localhost:9001';
     let serverId = process.env.SERVER_ID || 'local-dev';
@@ -128,13 +120,11 @@ export async function prepareAddon() {
         }
     }
 
-    content = content.replace('__WS_URL__', wsUrl)
-                     .replace('__SERVER_ID__', serverId)
-                     .replace('__NEXUS_ADDRESS__', nexusAddress);
+    const configContent = `export const WS_URL = "${wsUrl}";\nexport const SERVER_ID = "${serverId}";\nexport const NEXUS_ADDRESS = "${nexusAddress}";\n`;
 
-    fs.writeFileSync(mainJsPath, content);
+    fs.writeFileSync(configJsPath, configContent);
     console.log(`Addon prepared with WS_URL=${wsUrl}, SERVER_ID=${serverId}, NEXUS=${nexusAddress}`);
-    return targetDir;
+    return sourceDir;
 }
 
 async function initEnvironment() {
@@ -320,12 +310,7 @@ const server = http.createServer((req, res) => {
             });
     } else if (url.pathname === '/minecraft/inject' && req.method === 'POST') {
         // Proxy to bedrock-server-manager
-        const addonPath = path.join(ROOT, 'temp_addon');
-        if (!fs.existsSync(addonPath)) {
-            res.writeHead(400);
-            res.end(JSON.stringify({ error: 'Addon not prepared. Run /init first.' }));
-            return;
-        }
+        const addonPath = path.join(ROOT, 'addons', 'minecraft-bedrock-addon');
 
         console.log(`Injecting addon from ${addonPath} to ${getManagerApiUrl()}`);
 

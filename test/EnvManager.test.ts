@@ -5,9 +5,14 @@ import path from "node:path";
 import { prepareAddon, ROOT } from "../scripts/env-manager.js";
 
 describe("Environment Manager Logic", () => {
-    const tempDir = path.join(ROOT, "temp_addon");
+    const configJsPath = path.join(ROOT, "addons", "minecraft-bedrock-addon", "development_behavior_packs", "behavior_pack_sample", "scripts", "config.js");
     const mockDeploymentPath = path.join(ROOT, "ignition", "deployments", "chain-31337");
     const mockAddressesFile = path.join(mockDeploymentPath, "deployed_addresses.json");
+
+    const resetConfigToDefaults = () => {
+        const defaultContent = 'export const WS_URL = "localhost:9001";\nexport const SERVER_ID = "local-dev";\nexport const NEXUS_ADDRESS = "0x0000000000000000000000000000000000000000";\n';
+        fs.writeFileSync(configJsPath, defaultContent);
+    };
 
     beforeEach(() => {
         // Ensure mock deployment exists for local tests
@@ -28,20 +33,17 @@ describe("Environment Manager Logic", () => {
     });
 
     afterEach(() => {
-        if (fs.existsSync(tempDir)) {
-            fs.rmSync(tempDir, { recursive: true, force: true });
-        }
+        resetConfigToDefaults();
     });
 
-    it("should prepare local addon with default values", async () => {
+    it("should prepare local addon with default values in config.js", async () => {
         await prepareAddon();
 
-        const mainJsPath = path.join(tempDir, "development_behavior_packs", "behavior_pack_sample", "scripts", "main.js");
-        const content = fs.readFileSync(mainJsPath, "utf8");
+        const content = fs.readFileSync(configJsPath, "utf8");
 
-        assert.ok(content.includes('const RAW_WS_URL = "localhost:9001";'));
-        assert.ok(content.includes('const RAW_SERVER_ID = "local-dev";'));
-        assert.ok(content.includes('const RAW_NEXUS_ADDRESS = "0xLOCAL_NEXUS_ADDRESS";'));
+        assert.ok(content.includes('export const WS_URL = "localhost:9001";'));
+        assert.ok(content.includes('export const SERVER_ID = "local-dev";'));
+        assert.ok(content.includes('export const NEXUS_ADDRESS = "0xLOCAL_NEXUS_ADDRESS";'));
     });
 
     it("should prepare local addon with custom SERVER_ID and WS_URL", async () => {
@@ -49,11 +51,10 @@ describe("Environment Manager Logic", () => {
         process.env.WS_URL = "127.0.0.1:9001";
         await prepareAddon();
 
-        const mainJsPath = path.join(tempDir, "development_behavior_packs", "behavior_pack_sample", "scripts", "main.js");
-        const content = fs.readFileSync(mainJsPath, "utf8");
+        const content = fs.readFileSync(configJsPath, "utf8");
 
-        assert.ok(content.includes('const RAW_WS_URL = "127.0.0.1:9001";'));
-        assert.ok(content.includes('const RAW_SERVER_ID = "custom-server";'));
+        assert.ok(content.includes('export const WS_URL = "127.0.0.1:9001";'));
+        assert.ok(content.includes('export const SERVER_ID = "custom-server";'));
     });
 
     it("should prepare staging addon with staging environment variables", async () => {
@@ -64,21 +65,17 @@ describe("Environment Manager Logic", () => {
 
         await prepareAddon();
 
-        const mainJsPath = path.join(tempDir, "development_behavior_packs", "behavior_pack_sample", "scripts", "main.js");
-        const content = fs.readFileSync(mainJsPath, "utf8");
+        const content = fs.readFileSync(configJsPath, "utf8");
 
-        assert.ok(content.includes('const RAW_WS_URL = "wss://staging-bridge.example.com";'));
-        assert.ok(content.includes('const RAW_SERVER_ID = "staging-server";'));
-        assert.ok(content.includes('const RAW_NEXUS_ADDRESS = "0xSTAGING_NEXUS_ADDRESS";'));
+        assert.ok(content.includes('export const WS_URL = "wss://staging-bridge.example.com";'));
+        assert.ok(content.includes('export const SERVER_ID = "staging-server";'));
+        assert.ok(content.includes('export const NEXUS_ADDRESS = "0xSTAGING_NEXUS_ADDRESS";'));
     });
 
-    it("should fallback to default values in main.js when placeholders remain unreplaced", () => {
+    it("should import configuration constants in main.js from config.js", () => {
         const rawSourcePath = path.join(ROOT, "addons", "minecraft-bedrock-addon", "development_behavior_packs", "behavior_pack_sample", "scripts", "main.js");
         const content = fs.readFileSync(rawSourcePath, "utf8");
 
-        assert.ok(content.includes('const RAW_WS_URL = "__WS_URL__";'));
-        assert.ok(content.includes('const WS_URL = (!RAW_WS_URL || RAW_WS_URL.indexOf("__") !== -1) ? "localhost:9001" : RAW_WS_URL;'));
-        assert.ok(content.includes('const SERVER_ID = (!RAW_SERVER_ID || RAW_SERVER_ID.indexOf("__") !== -1) ? "local-dev" : RAW_SERVER_ID;'));
-        assert.ok(content.includes('const NEXUS_ADDRESS = (!RAW_NEXUS_ADDRESS || RAW_NEXUS_ADDRESS.indexOf("__") !== -1) ? "0x0000000000000000000000000000000000000000" : RAW_NEXUS_ADDRESS;'));
+        assert.ok(content.includes('import { WS_URL, SERVER_ID, NEXUS_ADDRESS } from "./config.js";'));
     });
 });

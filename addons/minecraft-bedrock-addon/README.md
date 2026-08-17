@@ -46,25 +46,20 @@ This directory contains the Minecraft Bedrock Add-on for the Brag ecosystem. It 
 
 ## Configuration Injection
 
-The addon's main entry script (`development_behavior_packs/behavior_pack_sample/scripts/main.js`) contains placeholder constants that are dynamic and environment-specific:
+The addon's main entry script (`development_behavior_packs/behavior_pack_sample/scripts/main.js`) imports dynamic, environment-specific configuration constants from `development_behavior_packs/behavior_pack_sample/scripts/config.js`:
 
 ```javascript
-const RAW_WS_URL = "__WS_URL__";
-const RAW_SERVER_ID = "__SERVER_ID__";
-const RAW_NEXUS_ADDRESS = "__NEXUS_ADDRESS__";
-
-const WS_URL = (!RAW_WS_URL || RAW_WS_URL.indexOf("__") !== -1) ? "localhost:9001" : RAW_WS_URL;
-const SERVER_ID = (!RAW_SERVER_ID || RAW_SERVER_ID.indexOf("__") !== -1) ? "local-dev" : RAW_SERVER_ID;
-const NEXUS_ADDRESS = (!RAW_NEXUS_ADDRESS || RAW_NEXUS_ADDRESS.indexOf("__") !== -1) ? "0x0000000000000000000000000000000000000000" : RAW_NEXUS_ADDRESS;
+export const WS_URL = "localhost:9001";
+export const SERVER_ID = "local-dev";
+export const NEXUS_ADDRESS = "0x0000000000000000000000000000000000000000";
 ```
 
-### How Configuration Injection & Runtime Fallbacks Work
-1. **Source & Templates**: The static source files live in `addons/minecraft-bedrock-addon/`.
-2. **Runtime Safety Net**: If the raw addon files are loaded directly into Minecraft without running the `prepareAddon()` build step (e.g. manual copy of `addons/minecraft-bedrock-addon/`), `main.js` automatically detects un-replaced `__...__` placeholders and falls back to safe runtime defaults (`localhost:9001`, `local-dev`, `0x0000000000000000000000000000000000000000`).
-3. **`prepareAddon()` Pipeline**:
+### How Configuration Injection Works
+1. **Source & Defaults**: The behavior pack contains `config.js` committed with safe default values (`localhost:9001`, `local-dev`, `0x0000000000000000000000000000000000000000`).
+2. **`prepareAddon()` Pipeline**:
    - The orchestration script `scripts/env-manager.js` exports a `prepareAddon()` function.
-   - It copies `addons/minecraft-bedrock-addon/` into a runtime directory at `temp_addon/`.
-   - It resolves the values for the placeholders depending on the environment (`APP_ENV`):
+   - It updates `development_behavior_packs/behavior_pack_sample/scripts/config.js` directly with active environment variables and deployment parameters.
+   - It resolves the values depending on the environment (`APP_ENV`):
      - **Local Environment (`APP_ENV=local` or unset)**:
        - `WS_URL`: Resolves from `process.env.WS_URL` or defaults to `localhost:9001` (WebSocket port of the local NFT bridge).
        - `SERVER_ID`: Resolves from `process.env.SERVER_ID` or defaults to `'local-dev'`.
@@ -73,9 +68,8 @@ const NEXUS_ADDRESS = (!RAW_NEXUS_ADDRESS || RAW_NEXUS_ADDRESS.indexOf("__") !==
        - `WS_URL`: Resolves from `process.env.STAGING_BRIDGE_URL`.
        - `SERVER_ID`: Resolves from `process.env.SERVER_ID` or defaults to `'local-dev'`.
        - `NEXUS_ADDRESS`: Resolves from `process.env.STAGING_BRAGNFT_ADDRESS`.
-3. **In-place Substitution**: `prepareAddon()` replaces `__WS_URL__`, `__SERVER_ID__`, and `__NEXUS_ADDRESS__` in `temp_addon/.../scripts/main.js`.
-4. **Server Manager Injection**:
-   - Calling `/minecraft/inject` on the Environment Manager (or Bedrock Server Manager) copies `temp_addon` directly into the Minecraft Bedrock Dedicated Server's active `behavior_packs` and `resource_packs` directories.
+3. **Server Manager Injection**:
+   - Calling `/minecraft/inject` on the Environment Manager (or Bedrock Server Manager) copies `addons/minecraft-bedrock-addon` directly into the Minecraft Bedrock Dedicated Server's active `behavior_packs` and `resource_packs` directories.
 
 ---
 
@@ -93,7 +87,7 @@ This command:
 * Deploys the smart contracts (`BragNFT`, `NFTMarketplace`, `Treasury`).
 * Exports ABIs and addresses to `frontend/contracts.js` and `ignition/deployments/chain-31337/`.
 * Seeds initial test NFTs and marketplace listings.
-* Calls `prepareAddon()` to generate `temp_addon/` with the active WebSocket server URL (`localhost:9001`), server ID (`local-dev`), and deployed contract address.
+* Calls `prepareAddon()` to generate `config.js` with the active WebSocket server URL (`localhost:9001`), server ID (`local-dev`), and deployed contract address.
 * Starts the Bedrock Server Manager and injects the prepared addon.
 
 ### 2. Run the NFT Bridge Server

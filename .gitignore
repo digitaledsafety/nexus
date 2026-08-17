@@ -31,4 +31,3 @@ hardhat_node.log
 server.log
 seed-artifacts.json
 /external
-/temp_addon
