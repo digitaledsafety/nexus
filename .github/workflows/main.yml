@@ -30,22 +30,6 @@ jobs:
       - name: Run tests
         run: npx hardhat test
 
-      - name: Create .mcaddon file
-        run: |
-          for dir in addons/minecraft-bedrock-addon/development_behavior_packs/* addons/minecraft-bedrock-addon/development_resource_packs/*; do
-            if [ -d "$dir" ]; then
-              pack_dir=$(basename "$dir")
-              parent_dir=$(dirname "$dir")
-              (cd "$parent_dir" && zip -r ../../../minecraft-addon.mcaddon "$pack_dir")
-            fi
-          done
-          
-      - name: Upload .mcaddon artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: minecraft-addon
-          path: minecraft-addon.mcaddon        
-
       - name: Verify local deployment and seeding
         run: |
           npx hardhat node > hardhat.log 2>&1 &
@@ -60,6 +44,25 @@ jobs:
           done
           npx cross-env HARDHAT_IGNITION_CONFIRM_DEPLOYMENT=true npx hardhat ignition deploy ignition/modules/App.ts --network localhost
           npm run seed:local
+
+      - name: Prepare addon configuration
+        run: node -e "import('./scripts/env-manager.js').then(m => m.prepareAddon())"
+
+      - name: Create .mcaddon file
+        run: |
+          for dir in addons/minecraft-bedrock-addon/development_behavior_packs/* addons/minecraft-bedrock-addon/development_resource_packs/*; do
+            if [ -d "$dir" ]; then
+              pack_dir=$(basename "$dir")
+              parent_dir=$(dirname "$dir")
+              (cd "$parent_dir" && zip -r ../../../minecraft-addon.mcaddon "$pack_dir")
+            fi
+          done
+
+      - name: Upload .mcaddon artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: minecraft-addon
+          path: minecraft-addon.mcaddon
 
       - name: Deploy to Sepolia (Gasless)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

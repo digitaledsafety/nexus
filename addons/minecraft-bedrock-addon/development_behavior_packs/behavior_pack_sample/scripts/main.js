@@ -1,12 +1,5 @@
 import { world, system, CommandPermissionLevel, CustomCommandStatus } from "@minecraft/server";
-
-const RAW_WS_URL = "__WS_URL__";
-const RAW_SERVER_ID = "__SERVER_ID__";
-const RAW_NEXUS_ADDRESS = "__NEXUS_ADDRESS__";
-
-const WS_URL = (!RAW_WS_URL || RAW_WS_URL.indexOf("__") !== -1) ? "localhost:9001" : RAW_WS_URL;
-const SERVER_ID = (!RAW_SERVER_ID || RAW_SERVER_ID.indexOf("__") !== -1) ? "local-dev" : RAW_SERVER_ID;
-const NEXUS_ADDRESS = (!RAW_NEXUS_ADDRESS || RAW_NEXUS_ADDRESS.indexOf("__") !== -1) ? "0x0000000000000000000000000000000000000000" : RAW_NEXUS_ADDRESS;
+import { WS_URL, SERVER_ID, NEXUS_ADDRESS } from "./config.js";
 
 async function checkNftStatus(player) {
     if (!player || !player.xuid) return;
