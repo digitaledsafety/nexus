@@ -10,7 +10,7 @@ describe("Environment Manager Logic", () => {
     const mockAddressesFile = path.join(mockDeploymentPath, "deployed_addresses.json");
 
     const resetConfigToDefaults = () => {
-        const defaultContent = 'export const WS_URL = "localhost:9001";\nexport const SERVER_ID = "local-dev";\nexport const NEXUS_ADDRESS = "0x0000000000000000000000000000000000000000";\n';
+        const defaultContent = 'export const WS_URL = "ws://127.0.0.1:9001";\nexport const SERVER_ID = "local-dev";\nexport const NEXUS_ADDRESS = "0x0000000000000000000000000000000000000000";\n';
         fs.writeFileSync(configJsPath, defaultContent);
     };
 
@@ -41,7 +41,7 @@ describe("Environment Manager Logic", () => {
 
         const content = fs.readFileSync(configJsPath, "utf8");
 
-        assert.ok(content.includes('export const WS_URL = "localhost:9001";'));
+        assert.ok(content.includes('export const WS_URL = "ws://127.0.0.1:9001";'));
         assert.ok(content.includes('export const SERVER_ID = "local-dev";'));
         assert.ok(content.includes('export const NEXUS_ADDRESS = "0xLOCAL_NEXUS_ADDRESS";'));
     });
