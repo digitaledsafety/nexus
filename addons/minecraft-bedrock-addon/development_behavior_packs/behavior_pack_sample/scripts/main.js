@@ -2,10 +2,11 @@ import { world, system, CommandPermissionLevel, CustomCommandStatus } from "@min
 import { WS_URL, SERVER_ID, NEXUS_ADDRESS } from "./config.js";
 
 async function checkNftStatus(player) {
-    if (!player || !player.xuid) return;
+    const platformId = player?.xuid || player?.id;
+    if (!player || !platformId) return;
 
     try {
-        world.getDimension("overworld").runCommand(`say nexus:check ${player.xuid} ${SERVER_ID} "${player.name}"`);
+        world.getDimension("overworld").runCommand(`say nexus:check ${platformId} ${SERVER_ID} "${player.name}"`);
     } catch (error) {
         console.warn("NFT Bridge Error: " + error);
     }
@@ -50,14 +51,15 @@ if (system.beforeEvents && system.beforeEvents.startup) {
             },
             (origin) => {
                 const player = origin.initiator ?? origin.sourceEntity;
-                if (!player || !player.xuid) {
+                const platformId = player?.xuid || player?.id;
+                if (!player || !platformId) {
                     player?.sendMessage?.("§cYou must be signed in to Xbox Live to register.§r");
                     return { status: CustomCommandStatus ? CustomCommandStatus.Failure : 0 };
                 }
                 player.sendMessage("§bRequesting registration link...§r");
 
                 try {
-                    world.getDimension("overworld").runCommand(`say nexus:register ${player.xuid} ${SERVER_ID} "${player.name}"`);
+                    world.getDimension("overworld").runCommand(`say nexus:register ${platformId} ${SERVER_ID} "${player.name}"`);
                 } catch (error) {
                     player.sendMessage("§cBridge server is offline.§r");
                 }
@@ -74,7 +76,8 @@ if (system.beforeEvents && system.beforeEvents.startup) {
             },
             (origin) => {
                 const player = origin.initiator ?? origin.sourceEntity;
-                if (!player || !player.xuid) {
+                const platformId = player?.xuid || player?.id;
+                if (!player || !platformId) {
                     player?.sendMessage?.("§cYou must be signed in to Xbox Live to view your NFTs.§r");
                     return { status: CustomCommandStatus ? CustomCommandStatus.Failure : 0 };
                 }
@@ -82,7 +85,7 @@ if (system.beforeEvents && system.beforeEvents.startup) {
                 player.sendMessage("§bFetching your NFTs...§r");
 
                 try {
-                    world.getDimension("overworld").runCommand(`say nexus:my_nfts ${player.xuid} ${SERVER_ID} "${player.name}"`);
+                    world.getDimension("overworld").runCommand(`say nexus:my_nfts ${platformId} ${SERVER_ID} "${player.name}"`);
                 } catch (error) {
                     player.sendMessage("§cBridge server error.§r");
                 }

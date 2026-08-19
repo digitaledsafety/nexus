@@ -44,8 +44,8 @@ class MockCustomCommandRegistry {
 
 // Logic copied from addons/minecraft-bedrock-addon/development_behavior_packs/behavior_pack_sample/scripts/main.js
 async function checkNftStatus(player: any, world: any) {
-    const platformId = player.xuid;
-    if (!platformId) return;
+    const platformId = player?.xuid || player?.id;
+    if (!player || !platformId) return;
 
     try {
         // Send check command via WebSocket
@@ -65,14 +65,15 @@ function registerCustomCommands(registry: MockCustomCommandRegistry, world: any)
         },
         (origin: any) => {
             const player = origin.initiator ?? origin.sourceEntity;
-            if (!player || !player.xuid) {
+            const platformId = player?.xuid || player?.id;
+            if (!player || !platformId) {
                 player?.sendMessage?.("§cYou must be signed in to Xbox Live to register.§r");
                 return { status: 0 };
             }
             player.sendMessage("§bRequesting registration link...§r");
 
             try {
-                world.getDimension("overworld").runCommand(`say nexus:register ${player.xuid} ${SERVER_ID} "${player.name}"`);
+                world.getDimension("overworld").runCommand(`say nexus:register ${platformId} ${SERVER_ID} "${player.name}"`);
             } catch (error) {
                 player.sendMessage("§cBridge server is offline.§r");
             }
@@ -89,7 +90,8 @@ function registerCustomCommands(registry: MockCustomCommandRegistry, world: any)
         },
         (origin: any) => {
             const player = origin.initiator ?? origin.sourceEntity;
-            if (!player || !player.xuid) {
+            const platformId = player?.xuid || player?.id;
+            if (!player || !platformId) {
                 player?.sendMessage?.("§cYou must be signed in to Xbox Live to view your NFTs.§r");
                 return { status: 0 };
             }
@@ -97,7 +99,7 @@ function registerCustomCommands(registry: MockCustomCommandRegistry, world: any)
             player.sendMessage("§bFetching your NFTs...§r");
 
             try {
-                world.getDimension("overworld").runCommand(`say nexus:my_nfts ${player.xuid} ${SERVER_ID} "${player.name}"`);
+                world.getDimension("overworld").runCommand(`say nexus:my_nfts ${platformId} ${SERVER_ID} "${player.name}"`);
             } catch (error) {
                 player.sendMessage("§cBridge server error.§r");
             }
@@ -190,6 +192,17 @@ describe('Minecraft Custom Commands Logic', () => {
             assert.strictEqual(mockDimension.runCommand.mock.calls[0].arguments[0], `say nexus:register test-xuid server-1 "test-player"`);
             assert.strictEqual(mockPlayer.sendMessage.mock.calls.length, 1);
             assert.strictEqual(mockPlayer.sendMessage.mock.calls[0].arguments[0], "§bRequesting registration link...§r");
+        });
+
+        it('should execute nexus:register falling back to player.id when xuid is missing', () => {
+            const playerWithoutXuid = { ...mockPlayer, xuid: undefined, sendMessage: mock.fn() };
+            const origin = { sourceEntity: playerWithoutXuid };
+            registry.executeCommand("nexus:register", origin);
+
+            assert.strictEqual(mockDimension.runCommand.mock.calls.length, 1);
+            assert.strictEqual(mockDimension.runCommand.mock.calls[0].arguments[0], `say nexus:register test-uuid server-1 "test-player"`);
+            assert.strictEqual(playerWithoutXuid.sendMessage.mock.calls.length, 1);
+            assert.strictEqual(playerWithoutXuid.sendMessage.mock.calls[0].arguments[0], "§bRequesting registration link...§r");
         });
 
         it('should display Nexus address when nexus:contract custom command is executed', () => {
