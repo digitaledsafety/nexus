@@ -5,24 +5,28 @@ async function checkNftStatus(player) {
     const platformId = player?.xuid || player?.id;
     if (!player || !platformId) return;
 
-    try {
-        world.getDimension("overworld").runCommand(`say nexus:check ${platformId} ${SERVER_ID} "${player.name}"`);
-    } catch (error) {
-        console.warn("NFT Bridge Error: " + error);
-    }
+    system.run(() => {
+        try {
+            world.getDimension("overworld").runCommand(`say nexus:check ${platformId} ${SERVER_ID} "${player.name}"`);
+        } catch (error) {
+            console.warn("NFT Bridge Error: " + error);
+        }
+    });
 }
 
 function initiateBridgeConnection() {
-    try {
-        world.getDimension("overworld").runCommand(`connect ${WS_URL}`);
+    system.run(() => {
+        try {
+            world.getDimension("overworld").runCommand(`connect ${WS_URL}`);
 
-        system.runTimeout(() => {
-            world.getDimension("overworld").runCommand(`say nexus:handshake ${SERVER_ID}`);
-            console.warn(`[NFT] Handshaked with bridge as ${SERVER_ID}`);
-        }, 500);
-    } catch (e) {
-        console.warn(`[NFT] Connection/Handshake failed: ${e}`);
-    }
+            system.runTimeout(() => {
+                world.getDimension("overworld").runCommand(`say nexus:handshake ${SERVER_ID}`);
+                console.warn(`[NFT] Handshaked with bridge as ${SERVER_ID}`);
+            }, 500);
+        } catch (e) {
+            console.warn(`[NFT] Connection/Handshake failed: ${e}`);
+        }
+    });
 }
 
 // 1. World Initialization Listener (Updated for @minecraft/server 2.9.0)
@@ -58,11 +62,13 @@ if (system.beforeEvents && system.beforeEvents.startup) {
                 }
                 player.sendMessage("§bRequesting registration link...§r");
 
-                try {
-                    world.getDimension("overworld").runCommand(`say nexus:register ${platformId} ${SERVER_ID} "${player.name}"`);
-                } catch (error) {
-                    player.sendMessage("§cBridge server is offline.§r");
-                }
+                system.run(() => {
+                    try {
+                        world.getDimension("overworld").runCommand(`say nexus:register ${platformId} ${SERVER_ID} "${player.name}"`);
+                    } catch (error) {
+                        player.sendMessage("§cBridge server is offline.§r");
+                    }
+                });
                 return { status: CustomCommandStatus ? CustomCommandStatus.Success : 1 };
             }
         );
@@ -84,11 +90,13 @@ if (system.beforeEvents && system.beforeEvents.startup) {
 
                 player.sendMessage("§bFetching your NFTs...§r");
 
-                try {
-                    world.getDimension("overworld").runCommand(`say nexus:my_nfts ${platformId} ${SERVER_ID} "${player.name}"`);
-                } catch (error) {
-                    player.sendMessage("§cBridge server error.§r");
-                }
+                system.run(() => {
+                    try {
+                        world.getDimension("overworld").runCommand(`say nexus:my_nfts ${platformId} ${SERVER_ID} "${player.name}"`);
+                    } catch (error) {
+                        player.sendMessage("§cBridge server error.§r");
+                    }
+                });
                 return { status: CustomCommandStatus ? CustomCommandStatus.Success : 1 };
             }
         );
