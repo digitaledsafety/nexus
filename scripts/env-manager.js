@@ -105,7 +105,7 @@ export async function prepareAddon() {
     // Inject configuration into config.js
     const configJsPath = path.join(sourceDir, 'development_behavior_packs', 'behavior_pack_sample', 'scripts', 'config.js');
 
-    let wsUrl = process.env.WS_URL || 'localhost:9001';
+    let wsUrl = process.env.WS_URL || 'ws://127.0.0.1:9001';
     let serverId = process.env.SERVER_ID || 'local-dev';
     let nexusAddress = process.env.CONTRACT_ADDRESS_BRAGNFT || '0x0000000000000000000000000000000000000000';
 

@@ -49,7 +49,7 @@ This directory contains the Minecraft Bedrock Add-on for the Brag ecosystem. It 
 The addon's main entry script (`development_behavior_packs/behavior_pack_sample/scripts/main.js`) imports dynamic, environment-specific configuration constants from `development_behavior_packs/behavior_pack_sample/scripts/config.js`:
 
 ```javascript
-export const WS_URL = "localhost:9001";
+export const WS_URL = "ws://127.0.0.1:9001";
 export const SERVER_ID = "local-dev";
 export const NEXUS_ADDRESS = "0x0000000000000000000000000000000000000000";
 ```
@@ -61,7 +61,7 @@ export const NEXUS_ADDRESS = "0x0000000000000000000000000000000000000000";
    - It updates `development_behavior_packs/behavior_pack_sample/scripts/config.js` directly with active environment variables and deployment parameters.
    - It resolves the values depending on the environment (`APP_ENV`):
      - **Local Environment (`APP_ENV=local` or unset)**:
-       - `WS_URL`: Resolves from `process.env.WS_URL` or defaults to `localhost:9001` (WebSocket port of the local NFT bridge).
+       - `WS_URL`: Resolves from `process.env.WS_URL` or defaults to `ws://127.0.0.1:9001` (WebSocket port of the local NFT bridge).
        - `SERVER_ID`: Resolves from `process.env.SERVER_ID` or defaults to `'local-dev'`.
        - `NEXUS_ADDRESS`: Reads `process.env.CONTRACT_ADDRESS_BRAGNFT` or local deployment address from `ignition/deployments/chain-31337/deployed_addresses.json` (`AppModule#BragNFT`), falling back to `0x0000000000000000000000000000000000000000`.
      - **Staging Environment (`APP_ENV=staging`)**:
