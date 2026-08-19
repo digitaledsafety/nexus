@@ -24,6 +24,10 @@ const mockWorld = {
     getDimension: () => mockDimension
 };
 
+const mockSystem = {
+    run: (fn: Function) => fn()
+};
+
 const SERVER_ID = "server-1";
 const NEXUS_ADDRESS = "0x1234567890123456789012345678901234567890";
 
@@ -43,19 +47,21 @@ class MockCustomCommandRegistry {
 }
 
 // Logic copied from addons/minecraft-bedrock-addon/development_behavior_packs/behavior_pack_sample/scripts/main.js
-async function checkNftStatus(player: any, world: any) {
+async function checkNftStatus(player: any, world: any, system: any = mockSystem) {
     const platformId = player?.xuid || player?.id;
     if (!player || !platformId) return;
 
-    try {
-        // Send check command via WebSocket
-        world.getDimension("overworld").runCommand(`say nexus:check ${platformId} ${SERVER_ID} "${player.name}"`);
-    } catch (error) {
-        console.warn("NFT Bridge Error: " + error);
-    }
+    system.run(() => {
+        try {
+            // Send check command via WebSocket
+            world.getDimension("overworld").runCommand(`say nexus:check ${platformId} ${SERVER_ID} "${player.name}"`);
+        } catch (error) {
+            console.warn("NFT Bridge Error: " + error);
+        }
+    });
 }
 
-function registerCustomCommands(registry: MockCustomCommandRegistry, world: any) {
+function registerCustomCommands(registry: MockCustomCommandRegistry, world: any, system: any = mockSystem) {
     registry.registerCommand(
         {
             name: "nexus:register",
@@ -72,11 +78,13 @@ function registerCustomCommands(registry: MockCustomCommandRegistry, world: any)
             }
             player.sendMessage("§bRequesting registration link...§r");
 
-            try {
-                world.getDimension("overworld").runCommand(`say nexus:register ${platformId} ${SERVER_ID} "${player.name}"`);
-            } catch (error) {
-                player.sendMessage("§cBridge server is offline.§r");
-            }
+            system.run(() => {
+                try {
+                    world.getDimension("overworld").runCommand(`say nexus:register ${platformId} ${SERVER_ID} "${player.name}"`);
+                } catch (error) {
+                    player.sendMessage("§cBridge server is offline.§r");
+                }
+            });
             return { status: 1 };
         }
     );
@@ -98,11 +106,13 @@ function registerCustomCommands(registry: MockCustomCommandRegistry, world: any)
 
             player.sendMessage("§bFetching your NFTs...§r");
 
-            try {
-                world.getDimension("overworld").runCommand(`say nexus:my_nfts ${platformId} ${SERVER_ID} "${player.name}"`);
-            } catch (error) {
-                player.sendMessage("§cBridge server error.§r");
-            }
+            system.run(() => {
+                try {
+                    world.getDimension("overworld").runCommand(`say nexus:my_nfts ${platformId} ${SERVER_ID} "${player.name}"`);
+                } catch (error) {
+                    player.sendMessage("§cBridge server error.§r");
+                }
+            });
             return { status: 1 };
         }
     );
