@@ -178,6 +178,10 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
      * @dev Approve an existing proposal.
      */
     function approve(uint256 proposalId, uint256 nonce) public onlyOwner(nonce) {
+        _approve(proposalId, nonce);
+    }
+
+    function _approve(uint256 proposalId, uint256 nonce) internal {
         address owner = _getMsgSender(nonce);
         if (proposalId >= proposalCount) revert ProposalNotFound();
 
@@ -190,6 +194,18 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
         p.approvalCount++;
 
         emit Approved(proposalId, owner);
+    }
+
+    /**
+     * @dev Batch approve existing proposals.
+     */
+    function batchApprove(uint256[] calldata proposalIds, uint256[] calldata nonces) external {
+        require(proposalIds.length == nonces.length, "Mismatched arrays");
+        for (uint256 i = 0; i < proposalIds.length; ) {
+            _checkOwner(_getMsgSender(nonces[i]));
+            _approve(proposalIds[i], nonces[i]);
+            unchecked { i++; }
+        }
     }
 
     /**
@@ -250,7 +266,11 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
     /**
      * @dev Cancel a proposal (only by proposer or via treasury execution).
      */
-    function cancel(uint256 proposalId, uint256 nonce) external {
+    function cancel(uint256 proposalId, uint256 nonce) public {
+        _cancel(proposalId, nonce);
+    }
+
+    function _cancel(uint256 proposalId, uint256 nonce) internal {
         address caller = _getMsgSender(nonce);
         if (proposalId >= proposalCount) revert ProposalNotFound();
 
@@ -264,6 +284,17 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
 
         p.canceled = true;
         emit Canceled(proposalId);
+    }
+
+    /**
+     * @dev Batch cancel multiple proposals.
+     */
+    function batchCancel(uint256[] calldata proposalIds, uint256[] calldata nonces) external {
+        require(proposalIds.length == nonces.length, "Mismatched arrays");
+        for (uint256 i = 0; i < proposalIds.length; ) {
+            _cancel(proposalIds[i], nonces[i]);
+            unchecked { i++; }
+        }
     }
 
     /**
