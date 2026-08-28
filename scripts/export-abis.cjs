@@ -128,6 +128,25 @@ if (fs.existsSync(deploymentsDir)) {
   });
 }
 
+// Environment variable overrides (e.g. for Production/Mainnet)
+const envChainId = process.env.DEPLOY_NETWORK_ID || '1';
+const knownContracts = ['BragNFT', 'BragToken', 'DonationReceipt', 'ExhibitRegistry', 'NFTMarketplace', 'Treasury'];
+
+knownContracts.forEach(name => {
+  const envVar = `CONTRACT_ADDRESS_${name.toUpperCase()}`;
+  if (process.env[envVar]) {
+    const addr = process.env[envVar];
+    console.log(`Using environment override for ${name}: ${addr} on chain ${envChainId}`);
+
+    if (!addresses[envChainId]) addresses[envChainId] = {};
+    addresses[envChainId][name] = addr;
+
+    const prefixedId = `chain-${envChainId}`;
+    if (!addresses[prefixedId]) addresses[prefixedId] = {};
+    addresses[prefixedId][name] = addr;
+  }
+});
+
 const finalData = {
   contracts: output,
   deployments: addresses,
