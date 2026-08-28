@@ -139,4 +139,18 @@ describe("Treasury Management", async function () {
     const finalTreasuryBalance = await bragToken.read.balanceOf([treasury.address]);
     assert.equal(finalTreasuryBalance, initialTreasuryBalance + offerPrice);
   });
+
+  it("Should revert when proposing a batch with mismatched arrays", async function () {
+    const { treasury, owner } = await deployContracts();
+
+    const targets = [owner.account.address];
+    const values = [0n, 0n]; // length 2
+    const datas = ["0x"] as `0x${string}`[]; // length 1
+    const nonce = 0n;
+
+    await assert.rejects(
+      treasury.write.propose([targets, values, datas, nonce], { account: owner.account }),
+      /Mismatched arrays/
+    );
+  });
 });
