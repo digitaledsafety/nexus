@@ -402,7 +402,21 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
     /**
      * @dev Extend exhibition duration for an ERC721 token.
      */
-    function extendExhibition721(address nftContract, uint256 tokenId, uint256 duration) external nonReentrant {
+    function extendExhibition721(address nftContract, uint256 tokenId, uint256 duration) public nonReentrant {
+        _extendExhibition721(nftContract, tokenId, duration);
+    }
+
+    /**
+     * @dev Batch extend exhibition duration for ERC721 tokens.
+     */
+    function batchExtendExhibition721(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256 duration) external nonReentrant {
+        require(nftContracts.length == tokenIds.length, "Mismatched arrays");
+        for (uint256 i = 0; i < nftContracts.length; i++) {
+            _extendExhibition721(nftContracts[i], tokenIds[i], duration);
+        }
+    }
+
+    function _extendExhibition721(address nftContract, uint256 tokenId, uint256 duration) internal {
         require(owner721[nftContract][tokenId] == msg.sender, "Not the owner");
         require(duration > 0, "Duration must be > 0");
 
@@ -417,7 +431,21 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
     /**
      * @dev Extend exhibition duration for an ERC1155 token.
      */
-    function extendExhibition1155(address nftContract, uint256 tokenId, uint256 duration) external nonReentrant {
+    function extendExhibition1155(address nftContract, uint256 tokenId, uint256 duration) public nonReentrant {
+        _extendExhibition1155(nftContract, tokenId, duration);
+    }
+
+    /**
+     * @dev Batch extend exhibition duration for ERC1155 tokens.
+     */
+    function batchExtendExhibition1155(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256 duration) external nonReentrant {
+        require(nftContracts.length == tokenIds.length, "Mismatched arrays");
+        for (uint256 i = 0; i < nftContracts.length; i++) {
+            _extendExhibition1155(nftContracts[i], tokenIds[i], duration);
+        }
+    }
+
+    function _extendExhibition1155(address nftContract, uint256 tokenId, uint256 duration) internal {
         require(balances1155[nftContract][tokenId][msg.sender] > 0, "No balance");
         require(duration > 0, "Duration must be > 0");
 
