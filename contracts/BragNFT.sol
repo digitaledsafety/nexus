@@ -186,6 +186,18 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
     }
 
     /**
+     * @dev Update on-chain media for multiple tokens. Restricted to DEFAULT_ADMIN_ROLE.
+     */
+    function batchUpdateOnChainMedia(uint256[] calldata tokenIds, string[] calldata media) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(tokenIds.length == media.length, "Mismatched arrays");
+        for (uint256 i = 0; i < tokenIds.length; ) {
+            _requireOwned(tokenIds[i]);
+            onChainMedia[tokenIds[i]] = media[i];
+            unchecked { i++; }
+        }
+    }
+
+    /**
      * @dev Update the art metadata for a token. Restricted to the current owner.
      * This allows owners to change their Art layer without affecting the immutable tax record.
      */
@@ -289,8 +301,10 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
             message: message
         });
 
-        // Initialize glow
-        glowExpiry[nftTokenId] = block.timestamp + 30 days;
+        // Initialize glow (Proportional: $1.00 = 30 days, minimum 30 days)
+        uint256 glowDuration = (usdValue * 30 days) / 1e8;
+        if (glowDuration < 30 days) glowDuration = 30 days;
+        glowExpiry[nftTokenId] = block.timestamp + glowDuration;
 
         // 3. Set metadata
         if (onChain) {
@@ -325,10 +339,11 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
 
         require(usdValue >= 1e8, "Top-up requires $1.00 USD");
 
+        uint256 glowDuration = (usdValue * 30 days) / 1e8;
         if (glowExpiry[tokenId] < block.timestamp) {
-            glowExpiry[tokenId] = block.timestamp + 30 days;
+            glowExpiry[tokenId] = block.timestamp + glowDuration;
         } else {
-            glowExpiry[tokenId] += 30 days;
+            glowExpiry[tokenId] += glowDuration;
         }
 
         // Mint Brag Tokens (1,000,000 per USD)
