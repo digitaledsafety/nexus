@@ -576,7 +576,19 @@ export const handleRequest = async (req, res) => {
 
 const server = http.createServer(handleRequest);
 
-export { pendingTokens, mappings, handleSummonCommand, getOwnershipStatus };
+export {
+    pendingTokens,
+    mappings,
+    handleSummonCommand,
+    getOwnershipStatus,
+    setupWss,
+    sendMinecraftCommand,
+    handleStatusChange,
+    activePlayers,
+    serverSockets,
+    serverConfigs,
+    statusCache
+};
 
 async function fetchWithRetry(fn, label, maxRetries = 3) {
     for (let i = 0; i < maxRetries; i++) {
