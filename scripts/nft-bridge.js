@@ -89,6 +89,75 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
     };
 }
 
+async function handleSummonCommand(target, platformId, serverId, playerName) {
+    const platformStatus = await getPlatformStatus(platformId);
+    if (!platformStatus.linked) {
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] You must link your wallet first using /nexus:register.§r"}]}`);
+        return { success: false, reason: "unlinked" };
+    }
+
+    const ownership = await getOwnershipStatus(platformId, serverId, playerName);
+    const serverConfig = serverConfigs[serverId];
+    const vaultAddr = (serverConfig && serverConfig.vaultAddress) ? serverConfig.vaultAddress.toLowerCase() : null;
+
+    if (!vaultAddr || !ownership.inVault) {
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] You do not have an active exhibited NFT in this server's vault.§r"}]}`);
+        return { success: false, reason: "not_in_vault" };
+    }
+
+    const vaultNfts = statusCache.get(ownership.address.toLowerCase())?.vaults[vaultAddr] || [];
+    // Match target against tokenId or title/name or media URL
+    const cleanTarget = target ? target.replace(/^#/, '').toLowerCase() : '';
+    const matchingNft = target
+        ? vaultNfts.find(nft =>
+            nft.tokenId.toString().toLowerCase() === cleanTarget ||
+            (nft.animation_url && nft.animation_url.toLowerCase().includes(cleanTarget)) ||
+            (nft.image && nft.image.toLowerCase().includes(cleanTarget))
+          )
+        : vaultNfts[0];
+
+    if (!matchingNft) {
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] NFT structure target '${target}' not found in your vault exhibition.§r"}]}`);
+        return { success: false, reason: "nft_not_found" };
+    }
+
+    const mediaUrl = matchingNft.animation_url || matchingNft.image;
+    if (!mediaUrl || (!mediaUrl.toLowerCase().endsWith('.mcstructure') && !mediaUrl.toLowerCase().includes('.mcstructure'))) {
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] Selected NFT #${matchingNft.tokenId} is not a valid .mcstructure object.§r"}]}`);
+        return { success: false, reason: "not_mcstructure" };
+    }
+
+    try {
+        const structuresDir = path.join(process.cwd(), 'addons', 'minecraft-bedrock-addon', 'development_behavior_packs', 'behavior_pack_sample', 'structures');
+        if (!fs.existsSync(structuresDir)) {
+            fs.mkdirSync(structuresDir, { recursive: true });
+        }
+
+        const structureName = `nft_${matchingNft.tokenId}`;
+        const structureFilePath = path.join(structuresDir, `${structureName}.mcstructure`);
+
+        if (mediaUrl.startsWith('data:')) {
+            const base64Data = mediaUrl.split(',')[1];
+            fs.writeFileSync(structureFilePath, Buffer.from(base64Data, 'base64'));
+        } else if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
+            const response = await fetch(mediaUrl);
+            const arrayBuffer = await response.arrayBuffer();
+            fs.writeFileSync(structureFilePath, Buffer.from(arrayBuffer));
+        } else {
+            // Local file or mock path
+            fs.writeFileSync(structureFilePath, Buffer.from(`MOCK_STRUCTURE_DATA_FOR_${structureName}`));
+        }
+
+        sendMinecraftCommand(serverId, `execute at "${playerName}" run structure load "${structureName}" ~ ~ ~`);
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§a[NFT] Successfully summoned structure '${structureName}' for NFT #${matchingNft.tokenId}!§r"}]}`);
+        return { success: true, structureName, tokenId: matchingNft.tokenId };
+    } catch (e) {
+        console.error("Failed to download or load structure:", e);
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] Failed to load structure: ${e.message}§r"}]}`);
+        return { success: false, error: e.message };
+    }
+}
+
 // --- WebSocket Server (Minecraft Bedrock Protocol) ---
 let wss;
 if (isMain) {
@@ -118,9 +187,14 @@ wss.on('connection', (ws, req) => {
                         console.log(`WebSocket handshaked and assigned to ${serverId} (${serverConfigs[serverId].name})`);
                     }
                 } else {
-                    // Robust parsing for: nexus:<command> or !<command> <platformId> <serverId> "<playerName>"
+                    // Handle nexus:summon <target> <platformId> <serverId> "<playerName>"
+                    const matchSummon = message.match(/^(?:nexus:|!)summon\s+(\S+)\s+(\S+)\s+(\S+)\s+"(.+)"$/);
                     const match = message.match(/^(?:nexus:|!)(check|register|my_nfts)\s+(\S+)\s+(\S+)\s+"(.+)"$/);
-                    if (match) {
+
+                    if (matchSummon) {
+                        const [_, target, platformId, serverId, playerName] = matchSummon;
+                        await handleSummonCommand(target, platformId, serverId, playerName);
+                    } else if (match) {
                         const [_, command, platformId, serverId, playerName] = match;
 
                         if (command === 'check') {
@@ -502,7 +576,7 @@ export const handleRequest = async (req, res) => {
 
 const server = http.createServer(handleRequest);
 
-export { pendingTokens, mappings };
+export { pendingTokens, mappings, handleSummonCommand, getOwnershipStatus };
 
 async function fetchWithRetry(fn, label, maxRetries = 3) {
     for (let i = 0; i < maxRetries; i++) {
