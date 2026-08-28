@@ -133,5 +133,38 @@ if (system.beforeEvents && system.beforeEvents.startup) {
                 return { status: CustomCommandStatus ? CustomCommandStatus.Success : 1 };
             }
         );
+
+        customCommandRegistry.registerCommand(
+            {
+                name: "nexus:summon",
+                description: "Summon an owned structure NFT into the world",
+                permissionLevel: CommandPermissionLevel ? CommandPermissionLevel.Any : "Any",
+                cheatsRequired: false
+            },
+            (origin, target) => {
+                const player = origin.initiator ?? origin.sourceEntity;
+                const platformId = player?.xuid || player?.id;
+                if (!player || !platformId) {
+                    player?.sendMessage?.("§cYou must be signed in to Xbox Live to summon structures.§r");
+                    return { status: CustomCommandStatus ? CustomCommandStatus.Failure : 0 };
+                }
+
+                if (!target) {
+                    player.sendMessage("§cUsage: /nexus:summon <tokenId_or_name>§r");
+                    return { status: CustomCommandStatus ? CustomCommandStatus.Failure : 0 };
+                }
+
+                player.sendMessage(`§bRequesting structure summon for ${target}...§r`);
+
+                system.run(() => {
+                    try {
+                        world.getDimension("overworld").runCommand(`say nexus:summon ${target} ${platformId} ${SERVER_ID} "${player.name}"`);
+                    } catch (error) {
+                        player.sendMessage("§cBridge server error.§r");
+                    }
+                });
+                return { status: CustomCommandStatus ? CustomCommandStatus.Success : 1 };
+            }
+        );
     });
 }

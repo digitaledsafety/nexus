@@ -123,4 +123,43 @@ describe('Minecraft Addon Validation', () => {
             assert.ok(uiDefs.ui_defs.includes('ui/hud_screen.json'), 'hud_screen.json not in ui_defs');
         });
     });
+
+    describe('Custom Commands (main.js)', () => {
+        const mainJsPath = path.join(BEHAVIOR_PATH, 'scripts/main.js');
+        const mainJsContent = fs.readFileSync(mainJsPath, 'utf8');
+
+        it('should register nexus:summon custom command', () => {
+            assert.ok(mainJsContent.includes('nexus:summon'), 'nexus:summon missing from main.js');
+            assert.ok(mainJsContent.includes('Summon an owned structure NFT into the world'), 'nexus:summon description missing');
+            assert.ok(mainJsContent.includes('say nexus:summon'), 'nexus:summon chat command trigger missing');
+        });
+    });
+
+    describe('Bridge Structure Summon Handler (handleSummonCommand)', () => {
+        it('should reject unlinked players', async () => {
+            const { handleSummonCommand } = await import('../scripts/nft-bridge.js');
+            const res = await handleSummonCommand("1", "unlinked_xuid", "server-1", "TestPlayer");
+            assert.strictEqual(res.success, false);
+            assert.strictEqual(res.reason, "unlinked");
+        });
+
+        it('should reject players with no NFTs in vault', async () => {
+            const { handleSummonCommand, mappings } = await import('../scripts/nft-bridge.js');
+            mappings.set("test_xuid", "0x1111111111111111111111111111111111111111");
+            const res = await handleSummonCommand("1", "test_xuid", "server-1", "TestPlayer");
+            assert.strictEqual(res.success, false);
+            assert.strictEqual(res.reason, "not_in_vault");
+        });
+
+        it('should reject non-existent targets when target is specified', async () => {
+            const { handleSummonCommand, mappings } = await import('../scripts/nft-bridge.js');
+            // Mock status in cache for user with a vault entry
+            const addr = "0x2222222222222222222222222222222222222222";
+            mappings.set("xuid_with_vault", addr);
+            // We can invoke handleSummonCommand for a target not in the vault
+            const res = await handleSummonCommand("99999", "xuid_with_vault", "server-1", "TestPlayer");
+            assert.strictEqual(res.success, false);
+            assert.strictEqual(res.reason, "not_in_vault");
+        });
+    });
 });
