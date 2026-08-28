@@ -252,4 +252,71 @@ describe("Exhibiting System", async function () {
     assert.ok(expiry3 > expiry1);
   });
 
+  it("Should batch extend exhibition duration for ERC721 and ERC1155 tokens", async function () {
+    const { bragNFT, mock1155, vault1, user, user2, owner } = await deployContracts();
+
+    // 1. ERC721 setup
+    await bragNFT.write.donate(["nft1", ""], { account: user.account, value: parseEther("0.1") });
+    await bragNFT.write.donate(["nft2", ""], { account: user.account, value: parseEther("0.1") });
+    const token721_0 = 0n;
+    const token721_1 = 1n;
+
+    const dur721 = 1000n;
+    const data721 = encodeAbiParameters(parseAbiParameters('uint256'), [dur721]);
+    await bragNFT.write.safeTransferFrom([user.account.address, vault1.address, token721_0, data721], { account: user.account });
+    await bragNFT.write.safeTransferFrom([user.account.address, vault1.address, token721_1, data721], { account: user.account });
+
+    const initExp721_0 = await vault1.read.expiry721([bragNFT.address, token721_0]);
+    const initExp721_1 = await vault1.read.expiry721([bragNFT.address, token721_1]);
+
+    // Batch extend 721 by 2000s
+    await vault1.write.batchExtendExhibition721([[bragNFT.address, bragNFT.address], [token721_0, token721_1], 2000n], { account: user.account });
+
+    assert.equal(await vault1.read.expiry721([bragNFT.address, token721_0]), initExp721_0 + 2000n);
+    assert.equal(await vault1.read.expiry721([bragNFT.address, token721_1]), initExp721_1 + 2000n);
+
+    // Mismatched array revert test
+    await assert.rejects(
+      vault1.write.batchExtendExhibition721([[bragNFT.address], [token721_0, token721_1], 2000n], { account: user.account }),
+      /Mismatched arrays/
+    );
+
+    // Non-owner revert test
+    await assert.rejects(
+      vault1.write.batchExtendExhibition721([[bragNFT.address, bragNFT.address], [token721_0, token721_1], 2000n], { account: user2.account }),
+      /Not the owner/
+    );
+
+    // 2. ERC1155 setup
+    const token1155_0 = 10n;
+    const token1155_1 = 11n;
+    await mock1155.write.mint([user.account.address, token1155_0, 5n], { account: owner.account });
+    await mock1155.write.mint([user.account.address, token1155_1, 5n], { account: owner.account });
+
+    const data1155 = encodeAbiParameters(parseAbiParameters('uint256'), [dur721]);
+    await mock1155.write.safeTransferFrom([user.account.address, vault1.address, token1155_0, 5n, data1155], { account: user.account });
+    await mock1155.write.safeTransferFrom([user.account.address, vault1.address, token1155_1, 5n, data1155], { account: user.account });
+
+    const initExp1155_0 = await vault1.read.expiry1155([mock1155.address, token1155_0, user.account.address]);
+    const initExp1155_1 = await vault1.read.expiry1155([mock1155.address, token1155_1, user.account.address]);
+
+    // Batch extend 1155 by 3000s
+    await vault1.write.batchExtendExhibition1155([[mock1155.address, mock1155.address], [token1155_0, token1155_1], 3000n], { account: user.account });
+
+    assert.equal(await vault1.read.expiry1155([mock1155.address, token1155_0, user.account.address]), initExp1155_0 + 3000n);
+    assert.equal(await vault1.read.expiry1155([mock1155.address, token1155_1, user.account.address]), initExp1155_1 + 3000n);
+
+    // Mismatched array revert test for 1155
+    await assert.rejects(
+      vault1.write.batchExtendExhibition1155([[mock1155.address], [token1155_0, token1155_1], 3000n], { account: user.account }),
+      /Mismatched arrays/
+    );
+
+    // Non-owner revert test for 1155
+    await assert.rejects(
+      vault1.write.batchExtendExhibition1155([[mock1155.address, mock1155.address], [token1155_0, token1155_1], 3000n], { account: user2.account }),
+      /No balance/
+    );
+  });
+
 });
