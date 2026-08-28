@@ -357,8 +357,8 @@ async function handleStatusChange(address) {
     }
 }
 
-async function setupEventListeners() {
-    if (!isMain) return;
+async function setupEventListeners(force = false) {
+    if (!isMain && !force) return;
     const bragAddress = getContractAddress('BragNFT');
     if (bragAddress) {
         console.log(`Setting up event listener for BragNFT at ${bragAddress}`);
@@ -576,7 +576,21 @@ export const handleRequest = async (req, res) => {
 
 const server = http.createServer(handleRequest);
 
-export { pendingTokens, mappings, handleSummonCommand, getOwnershipStatus };
+export {
+    pendingTokens,
+    mappings,
+    handleSummonCommand,
+    getOwnershipStatus,
+    setupWss,
+    sendMinecraftCommand,
+    handleStatusChange,
+    setupEventListeners,
+    publicClient,
+    activePlayers,
+    serverSockets,
+    serverConfigs,
+    statusCache
+};
 
 async function fetchWithRetry(fn, label, maxRetries = 3) {
     for (let i = 0; i < maxRetries; i++) {
