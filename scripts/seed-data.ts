@@ -183,7 +183,8 @@ async function main() {
         { message: "Echoes of Charity (Audio)", uri: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", onChain: false },
         { message: "Dimensional Giving (3D)", uri: "https://modelviewer.dev/shared-assets/models/Astronaut.glb", onChain: true },
         { message: "Dynamic Impact (GIF)", uri: "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==", onChain: true },
-        { message: "Crystal Clear Support (WebP)", uri: "https://www.gstatic.com/webp/gallery/1.webp", onChain: false }
+        { message: "Crystal Clear Support (WebP)", uri: "https://www.gstatic.com/webp/gallery/1.webp", onChain: false },
+        { message: "Minecraft Castle Structure (.mcstructure)", uri: "https://raw.githubusercontent.com/brag-ecosystem/assets/main/sample_castle.mcstructure", onChain: false }
     ];
 
     const currentNextTokenId = await publicClient.readContract({
