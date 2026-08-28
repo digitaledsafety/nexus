@@ -153,7 +153,13 @@ export MANAGER_API_URL="http://your-manager-api:9003"
 
 ## 4. Seeding Test Data
 
-Jumpstart your local environment with realistic data (minted NFTs, active vaults, and marketplace offers). **Note:** `npm run env:init` already performs local seeding.
+Jumpstart your local environment with realistic data (minted NFTs, active vaults, and marketplace offers). **Note:** Contracts must be deployed before seeding (e.g. `npm run deploy:local` for local seeding, or `npm run env:init` which handles deployment and local seeding automatically).
+
+```shell
+# Deploy locally then seed local data
+npm run deploy:local
+npm run seed:local
+```
 
 ### Sepolia Seeding (Gasless)
 To test the full account abstraction flow on the Sepolia testnet:

@@ -148,6 +148,12 @@ async function main() {
     const marketplaceAddr = deployment["AppModule#NFTMarketplace"];
     const registryAddr = deployment["AppModule#ExhibitRegistry"];
 
+    // Validate that contracts are deployed at specified addresses
+    const bragNFTCode = await publicClient.getBytecode({ address: bragNFTAddr });
+    if (!bragNFTCode || bragNFTCode === "0x") {
+        throw new Error(`No contract code found at address ${bragNFTAddr} on chain ${chainId}. Please run "npm run deploy:local" (or deploy to the target network) before seeding.`);
+    }
+
     const bragNFTArtifact = JSON.parse(fs.readFileSync(path.join(process.cwd(), "artifacts/contracts/BragNFT.sol/BragNFT.json"), "utf8"));
 
     const donationAmount = isSepolia ? 0n : parseEther("0.1");
