@@ -20,6 +20,28 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: 'npm'
+
+      - name: Cache Hardhat compiler
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/hardhat-nodejs
+          key: ${{ runner.os }}-hardhat-compiler-${{ hashFiles('hardhat.config.ts') }}
+          restore-keys: |
+            ${{ runner.os }}-hardhat-compiler-
+
+      - name: Pre-seed Hardhat compiler cache
+        run: |
+          mkdir -p ~/.cache/hardhat-nodejs/compilers-v3/linux-amd64
+          if [ ! -f ~/.cache/hardhat-nodejs/compilers-v3/linux-amd64/solc-linux-amd64-v0.8.28+commit.7893614a ]; then
+            echo "Downloading solc 0.8.28 from GitHub mirror..."
+            curl -L https://raw.githubusercontent.com/ethereum/solc-bin/gh-pages/linux-amd64/solc-linux-amd64-v0.8.28+commit.7893614a -o ~/.cache/hardhat-nodejs/compilers-v3/linux-amd64/solc-linux-amd64-v0.8.28+commit.7893614a
+            chmod +x ~/.cache/hardhat-nodejs/compilers-v3/linux-amd64/solc-linux-amd64-v0.8.28+commit.7893614a
+          fi
+          if [ ! -f ~/.cache/hardhat-nodejs/compilers-v3/linux-amd64/list.json ]; then
+            echo "Downloading compiler list from GitHub mirror..."
+            curl -L https://raw.githubusercontent.com/ethereum/solc-bin/gh-pages/linux-amd64/list.json -o ~/.cache/hardhat-nodejs/compilers-v3/linux-amd64/list.json
+          fi
 
       - name: Install dependencies
         run: npm install
