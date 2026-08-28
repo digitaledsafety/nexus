@@ -32,5 +32,8 @@
         "module_name": "@minecraft/server",
         "version": "2.9.0"
       }
+    ],
+    "capabilities": [
+       "script_eval"
     ]
   }
