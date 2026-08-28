@@ -357,8 +357,8 @@ async function handleStatusChange(address) {
     }
 }
 
-async function setupEventListeners() {
-    if (!isMain) return;
+async function setupEventListeners(force = false) {
+    if (!isMain && !force) return;
     const bragAddress = getContractAddress('BragNFT');
     if (bragAddress) {
         console.log(`Setting up event listener for BragNFT at ${bragAddress}`);
@@ -584,6 +584,8 @@ export {
     setupWss,
     sendMinecraftCommand,
     handleStatusChange,
+    setupEventListeners,
+    publicClient,
     activePlayers,
     serverSockets,
     serverConfigs,

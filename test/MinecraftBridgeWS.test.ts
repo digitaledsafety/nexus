@@ -8,6 +8,9 @@ import {
     statusCache,
     handleStatusChange,
     sendMinecraftCommand,
+    setupEventListeners,
+    publicClient,
+    serverConfigs,
     pendingTokens
 } from "../scripts/nft-bridge.js";
 
@@ -70,7 +73,6 @@ describe("Minecraft Bridge WebSocket Logic Unit Tests", () => {
         mappings.set(xuid, testAddress);
         activePlayers.set(xuid, { serverId: "server-1", playerName: "Alex" });
 
-        // Force wallet balance for tests without RPC dependency
         statusCache.set(testAddress.toLowerCase(), {
             walletNfts: [{ tokenId: "10", location: "Wallet" }],
             vaults: {}
@@ -81,7 +83,6 @@ describe("Minecraft Bridge WebSocket Logic Unit Tests", () => {
         assert.ok(mockWs.sentMessages.length >= 1);
         const commandLines = mockWs.sentMessages.map((m) => m.body.commandLine);
 
-        // When RPC returns empty walletNfts, handleStatusChange correctly issues remove tag or add tag depending on holder status
         assert.ok(
             commandLines.some((cmd) => cmd.includes('tag "Alex"'))
         );
@@ -97,7 +98,6 @@ describe("Minecraft Bridge WebSocket Logic Unit Tests", () => {
         mappings.set(xuid, testAddress);
         activePlayers.set(xuid, { serverId: "server-1", playerName: "Bob" });
 
-        // Cache empty NFT status
         statusCache.set(testAddress.toLowerCase(), {
             walletNfts: [],
             vaults: {}
@@ -114,5 +114,53 @@ describe("Minecraft Bridge WebSocket Logic Unit Tests", () => {
                 cmd.includes("You no longer hold a qualifying NFT for this server.")
             )
         );
+    });
+
+    it("should trigger real-time WebSocket updates when blockchain event logs arrive via setupEventListeners", async () => {
+        const mockWs = new MockWebSocket();
+        serverSockets.set("server-1", mockWs as any);
+
+        const testAddress = "0x1111222233334444555566667777888899990000";
+        const xuid = "xuid-event-player";
+
+        mappings.set(xuid, testAddress);
+        activePlayers.set(xuid, { serverId: "server-1", playerName: "Charlie" });
+
+        // Pre-populate status cache
+        statusCache.set(testAddress.toLowerCase(), {
+            walletNfts: [{ tokenId: "100", location: "Wallet" }],
+            vaults: {}
+        });
+
+        // Set up mock vault in serverConfigs to test watchEvent for vaults as well
+        serverConfigs["server-1"].vaultAddress = "0xVaultAddress000000000000000000000000000";
+
+        const watchedEvents: Array<{ address: string; onLogs: Function }> = [];
+        (publicClient as any).watchEvent = (params: any) => {
+            watchedEvents.push(params);
+        };
+
+        // Temporarily set CONTRACT_ADDRESS_BRAGNFT so getContractAddress('BragNFT') resolves
+        process.env.CONTRACT_ADDRESS_BRAGNFT = "0xBragNFTAddress000000000000000000000000000";
+
+        await setupEventListeners(true);
+
+        assert.ok(watchedEvents.length > 0, "Expected event listeners to be registered");
+
+        // Simulate incoming Transfer event log for testAddress
+        const transferListener = watchedEvents.find(
+            (e) => e.address === process.env.CONTRACT_ADDRESS_BRAGNFT
+        );
+        assert.ok(transferListener, "Transfer event listener should be registered");
+
+        transferListener.onLogs([
+            { args: { from: "0x0000000000000000000000000000000000000000", to: testAddress, tokenId: 100n } }
+        ]);
+
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        assert.ok(mockWs.sentMessages.length >= 1);
+        const commandLines = mockWs.sentMessages.map((m) => m.body.commandLine);
+        assert.ok(commandLines.some((cmd) => cmd.includes('tag "Charlie"')));
     });
 });
