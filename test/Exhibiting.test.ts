@@ -137,6 +137,44 @@ describe("Exhibiting System", async function () {
     assert.equal(await bragNFT.read.ownerOf([tokenId]), getAddress(user.account.address));
   });
 
+  it("Should move batch ERC721 for single contract with moveBatch721 and moveBatch721WithDuration", async function () {
+    const { bragNFT, vault1, vault2, user } = await deployContracts();
+    const publicClient = await viem.getPublicClient();
+
+    await bragNFT.write.donate(["move batch 1", ""], { account: user.account, value: parseEther("0.1") });
+    await bragNFT.write.donate(["move batch 2", ""], { account: user.account, value: parseEther("0.1") });
+    await bragNFT.write.donate(["move batch 3", ""], { account: user.account, value: parseEther("0.1") });
+    await bragNFT.write.donate(["move batch 4", ""], { account: user.account, value: parseEther("0.1") });
+
+    // Exhibit tokens 0, 1, 2, 3 to vault1
+    await bragNFT.write.safeTransferFrom([user.account.address, vault1.address, 0n], { account: user.account });
+    await bragNFT.write.safeTransferFrom([user.account.address, vault1.address, 1n], { account: user.account });
+    await bragNFT.write.safeTransferFrom([user.account.address, vault1.address, 2n], { account: user.account });
+    await bragNFT.write.safeTransferFrom([user.account.address, vault1.address, 3n], { account: user.account });
+
+    // Move 0 & 1 via moveBatch721 (no duration)
+    await vault1.write.moveBatch721([bragNFT.address, [0n, 1n], vault2.address], { account: user.account });
+    assert.equal(await vault2.read.owner721([bragNFT.address, 0n]), getAddress(user.account.address));
+    assert.equal(await vault2.read.owner721([bragNFT.address, 1n]), getAddress(user.account.address));
+
+    // Move 2 & 3 via moveBatch721WithDuration (1 hour duration)
+    await vault1.write.moveBatch721WithDuration([bragNFT.address, [2n, 3n], vault2.address, 3600n], { account: user.account });
+    assert.equal(await vault2.read.owner721([bragNFT.address, 2n]), getAddress(user.account.address));
+    assert.equal(await vault2.read.owner721([bragNFT.address, 3n]), getAddress(user.account.address));
+
+    // Tokens 2 & 3 should be locked in vault2
+    await assert.rejects(
+      vault2.write.withdraw721([bragNFT.address, 2n], { account: user.account }),
+      /Exhibition not yet expired/
+    );
+
+    // Increase time and withdraw 2 & 3
+    await publicClient.request({ method: "evm_increaseTime" as any, params: [3601] });
+    await publicClient.request({ method: "evm_mine" as any, params: [] });
+    await vault2.write.withdraw721([bragNFT.address, 2n], { account: user.account });
+    assert.equal(await bragNFT.read.ownerOf([2n]), getAddress(user.account.address));
+  });
+
   it("Should NOT allow moving to unverified vault", async function () {
     const { bragNFT, vault1, user, user2 } = await deployContracts();
 
