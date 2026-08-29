@@ -11,7 +11,8 @@ import {
     setupEventListeners,
     publicClient,
     serverConfigs,
-    pendingTokens
+    pendingTokens,
+    setupWss
 } from "../scripts/nft-bridge.js";
 
 class MockWebSocket extends EventEmitter {
@@ -31,6 +32,10 @@ class MockWebSocket extends EventEmitter {
         this.readyState = 3; // CLOSED
         this.emit("close");
     }
+}
+
+class MockServer extends EventEmitter {
+    clients = new Set();
 }
 
 describe("Minecraft Bridge WebSocket Logic Unit Tests", () => {
@@ -162,5 +167,37 @@ describe("Minecraft Bridge WebSocket Logic Unit Tests", () => {
         assert.ok(mockWs.sentMessages.length >= 1);
         const commandLines = mockWs.sentMessages.map((m) => m.body.commandLine);
         assert.ok(commandLines.some((cmd) => cmd.includes('tag "Charlie"')));
+    });
+
+    it("should handle prefixed PlayerMessage commands like '[Server] say nexus:register'", async () => {
+        const mockWss = new MockServer();
+        setupWss(mockWss as any);
+
+        const mockWs = new MockWebSocket();
+        mockWss.emit("connection", mockWs, { socket: { remoteAddress: "127.0.0.1" } });
+
+        // First handshake with server-1
+        mockWs.emit("message", JSON.stringify({
+            body: {
+                eventName: "PlayerMessage",
+                properties: { Message: "[Server] say nexus:handshake server-1" }
+            }
+        }));
+
+        assert.strictEqual(serverSockets.get("server-1"), mockWs as any);
+
+        // Send nexus:register command prefixed with "[Server] say "
+        mockWs.emit("message", JSON.stringify({
+            body: {
+                eventName: "PlayerMessage",
+                properties: { Message: '[Server] say nexus:register test-xuid-prefixed server-1 "Test Player"' }
+            }
+        }));
+
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // Verify that server-1 received tellraw response with registration URL
+        const commandLines = mockWs.sentMessages.filter(m => m.body && m.body.commandLine).map((m) => m.body.commandLine);
+        assert.ok(commandLines.some((cmd) => cmd.includes("To link your wallet, visit this URL:")));
     });
 });
