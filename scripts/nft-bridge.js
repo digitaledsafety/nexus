@@ -1,6 +1,7 @@
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { createPublicClient, http as viemHttp, getContract, verifyMessage, parseAbiItem, getAddress } from 'viem';
 import { mainnet, localhost, sepolia } from 'viem/chains';
 import { WebSocketServer } from 'ws';
@@ -9,7 +10,8 @@ import { randomUUID } from 'node:crypto';
 const PORT = 9000;
 const WS_PORT = 9001;
 const CHAIN_ID = process.env.CHAIN_ID ? parseInt(process.env.CHAIN_ID) : 31337;
-const isMain = process.argv[1] && (path.resolve(process.argv[1]) === path.resolve('scripts/nft-bridge.js'));
+const __filename = fileURLToPath(import.meta.url);
+const isMain = process.argv[1] && (path.resolve(process.argv[1]) === __filename);
 const MAPPINGS_FILE = path.join(process.cwd(), 'mappings.json');
 const CONFIG_FILE = path.join(process.cwd(), 'bridge-config.json');
 
@@ -166,8 +168,24 @@ if (isMain) {
 }
 
 function setupWss(wss) {
+wss.on('headers', (headers, req) => {
+    const remoteIp = req.socket.remoteAddress;
+    const userAgent = req.headers['user-agent'] || 'N/A';
+    const protocol = req.headers['sec-websocket-protocol'] || 'N/A';
+    console.log(`[WS Upgrade] Incoming handshake headers from ${remoteIp} (URL: ${req.url}, User-Agent: ${userAgent}, Subprotocol: ${protocol})`);
+});
+
 wss.on('connection', (ws, req) => {
-    console.log(`Minecraft server connected from ${req.socket.remoteAddress}`);
+    const remoteIp = req.socket.remoteAddress;
+    const origin = req.headers.origin || 'N/A';
+    const host = req.headers.host || 'N/A';
+    const userAgent = req.headers['user-agent'] || 'N/A';
+    const protocol = req.headers['sec-websocket-protocol'] || 'N/A';
+    console.log(`[WS Connect] Connection established from ${remoteIp} (URL: ${req.url}, Host: ${host}, Origin: ${origin}, User-Agent: ${userAgent}, Protocol: ${protocol})`);
+
+    ws.on('error', (err) => {
+        console.error(`[WS Error] Socket error for connection from ${remoteIp}:`, err.message);
+    });
 
     // In a real scenario, the first message from the server would identify which serverId it is.
     // For now, we'll assign the first connection to server-1, second to server-2, etc. or use a handshake.
