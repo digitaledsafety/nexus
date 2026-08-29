@@ -146,4 +146,60 @@ describe("NFTMarketplace Fixed-Price Listings", async function () {
       /Price mismatch/
     );
   });
+
+  it("Should allow updating target buyer with overloaded updateListing", async function () {
+    await bragNFT.write.donate(["Target buyer test", "uri"], { value: 1n });
+    const tokenId = 4n;
+    await bragNFT.write.approve([marketplace.address, tokenId]);
+    await marketplace.write.createListing([bragNFT.address, tokenId, 1n, parseEther("10")]);
+
+    // Update listing to target buyer specifically
+    await marketplace.write.updateListing([bragNFT.address, tokenId, 1n, parseEther("12"), buyer.account.address]);
+
+    const listing = await marketplace.read.listings([bragNFT.address, tokenId, owner.account.address]);
+    assert.equal(listing[1], parseEther("12"));
+    assert.equal(listing[3], getAddress(buyer.account.address));
+  });
+
+  it("Should allow batch updating listings and batch updating private listings", async function () {
+    await bragNFT.write.donate(["Batch update 1", "uri"], { value: 1n });
+    await bragNFT.write.donate(["Batch update 2", "uri"], { value: 1n });
+    const tokenId1 = 5n;
+    const tokenId2 = 6n;
+
+    await bragNFT.write.approve([marketplace.address, tokenId1]);
+    await bragNFT.write.approve([marketplace.address, tokenId2]);
+
+    await marketplace.write.createListing([bragNFT.address, tokenId1, 1n, parseEther("10")]);
+    await marketplace.write.createListing([bragNFT.address, tokenId2, 1n, parseEther("15")]);
+
+    // Batch update public listings
+    await marketplace.write.batchUpdateListings([
+      [bragNFT.address, bragNFT.address],
+      [tokenId1, tokenId2],
+      [1n, 1n],
+      [parseEther("11"), parseEther("16")]
+    ]);
+
+    const updated1 = await marketplace.read.listings([bragNFT.address, tokenId1, owner.account.address]);
+    const updated2 = await marketplace.read.listings([bragNFT.address, tokenId2, owner.account.address]);
+    assert.equal(updated1[1], parseEther("11"));
+    assert.equal(updated2[1], parseEther("16"));
+
+    // Batch update private listings
+    await marketplace.write.batchUpdatePrivateListings([
+      [bragNFT.address, bragNFT.address],
+      [tokenId1, tokenId2],
+      [1n, 1n],
+      [parseEther("12"), parseEther("17")],
+      [buyer.account.address, buyer.account.address]
+    ]);
+
+    const privateUpdated1 = await marketplace.read.listings([bragNFT.address, tokenId1, owner.account.address]);
+    const privateUpdated2 = await marketplace.read.listings([bragNFT.address, tokenId2, owner.account.address]);
+    assert.equal(privateUpdated1[1], parseEther("12"));
+    assert.equal(privateUpdated1[3], getAddress(buyer.account.address));
+    assert.equal(privateUpdated2[1], parseEther("17"));
+    assert.equal(privateUpdated2[3], getAddress(buyer.account.address));
+  });
 });
