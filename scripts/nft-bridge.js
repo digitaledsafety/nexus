@@ -177,8 +177,11 @@ wss.on('connection', (ws, req) => {
 
             // Handle Minecraft Bedrock Handshake via PlayerMessage
             if (msg.body && msg.body.eventName === 'PlayerMessage') {
-                const message = msg.body.properties.Message;
+                let message = msg.body.properties.Message;
                 if (!message) return;
+
+                // Clean/strip prefixes added by Minecraft say / chat commands, e.g., "[Server] ", "say ", etc.
+                message = message.replace(/^(?:\[[^\]]+\]\s*|<[^>]+>\s*|say\s+)+/i, '').trim();
 
                 if (message.startsWith('nexus:handshake ') || message.startsWith('!handshake ')) {
                     const serverId = message.split(' ')[1];
