@@ -21,7 +21,7 @@ describe('Minecraft Addon Validation', () => {
         it('should require @minecraft/server-net dependency', () => {
             const netDep = manifest.dependencies.find((dep: any) => dep.module_name === '@minecraft/server-net');
             assert.ok(netDep, '@minecraft/server-net dependency missing');
-            assert.strictEqual(netDep.version, '1.0.0-beta.1.26.50-preview.27');
+            assert.strictEqual(netDep.version, '1.0.0-beta');
         });
 
         it('should have min_engine_version [1, 21, 0] or higher', () => {
