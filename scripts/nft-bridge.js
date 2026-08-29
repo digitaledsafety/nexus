@@ -1,6 +1,7 @@
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { createPublicClient, http as viemHttp, getContract, verifyMessage, parseAbiItem, getAddress } from 'viem';
 import { mainnet, localhost, sepolia } from 'viem/chains';
 import { WebSocketServer } from 'ws';
@@ -9,7 +10,8 @@ import { randomUUID } from 'node:crypto';
 const PORT = 9000;
 const WS_PORT = 9001;
 const CHAIN_ID = process.env.CHAIN_ID ? parseInt(process.env.CHAIN_ID) : 31337;
-const isMain = process.argv[1] && (path.resolve(process.argv[1]) === path.resolve('scripts/nft-bridge.js'));
+const __filename = fileURLToPath(import.meta.url);
+const isMain = process.argv[1] && (path.resolve(process.argv[1]) === __filename);
 const MAPPINGS_FILE = path.join(process.cwd(), 'mappings.json');
 const CONFIG_FILE = path.join(process.cwd(), 'bridge-config.json');
 
