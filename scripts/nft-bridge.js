@@ -166,8 +166,24 @@ if (isMain) {
 }
 
 function setupWss(wss) {
+wss.on('headers', (headers, req) => {
+    const remoteIp = req.socket.remoteAddress;
+    const userAgent = req.headers['user-agent'] || 'N/A';
+    const protocol = req.headers['sec-websocket-protocol'] || 'N/A';
+    console.log(`[WS Upgrade] Incoming handshake headers from ${remoteIp} (URL: ${req.url}, User-Agent: ${userAgent}, Subprotocol: ${protocol})`);
+});
+
 wss.on('connection', (ws, req) => {
-    console.log(`Minecraft server connected from ${req.socket.remoteAddress}`);
+    const remoteIp = req.socket.remoteAddress;
+    const origin = req.headers.origin || 'N/A';
+    const host = req.headers.host || 'N/A';
+    const userAgent = req.headers['user-agent'] || 'N/A';
+    const protocol = req.headers['sec-websocket-protocol'] || 'N/A';
+    console.log(`[WS Connect] Connection established from ${remoteIp} (URL: ${req.url}, Host: ${host}, Origin: ${origin}, User-Agent: ${userAgent}, Protocol: ${protocol})`);
+
+    ws.on('error', (err) => {
+        console.error(`[WS Error] Socket error for connection from ${remoteIp}:`, err.message);
+    });
 
     // In a real scenario, the first message from the server would identify which serverId it is.
     // For now, we'll assign the first connection to server-1, second to server-2, etc. or use a handshake.
