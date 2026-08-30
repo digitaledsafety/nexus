@@ -30,6 +30,17 @@ function sendBridgeMessage(message) {
     }
 }
 
+function kickPlayer(playerName, reason = "NFT Bridge connection required.") {
+    system.run(() => {
+        try {
+            const target = playerName ? `"${playerName}"` : "@a";
+            world.getDimension("overworld").runCommand(`kick ${target} ${reason}`);
+        } catch (e) {
+            console.warn(`[NFT] Failed to kick player (${playerName ?? "@a"}): ${e}`);
+        }
+    });
+}
+
 function processIncomingMessage(msg) {
     if (!msg) return;
 
@@ -53,36 +64,54 @@ async function initiateBridgeConnection() {
         activeSocket = null;
     }
 
-    try {
-        if (!websocket) {
-            console.warn("[NFT] @minecraft/server-net websocket is not available.");
-            return;
+    system.run(async () => {
+        try {
+            if (!websocket) {
+                console.warn("[NFT] @minecraft/server-net websocket is not available.");
+                kickPlayer(null, "NFT Bridge connection unavailable.");
+                return;
+            }
+
+            const client = await websocket.connect(WS_URL);
+            activeSocket = client;
+            console.warn(`[NFT] Connected to NFT bridge at ${WS_URL}`);
+
+            sendBridgeMessage(`nexus:handshake ${SERVER_ID}`);
+
+            if (client.afterEvents && client.afterEvents.message) {
+                client.afterEvents.message.subscribe((event) => {
+                    try {
+                        const data = JSON.parse(event.message);
+                        processIncomingMessage(data);
+                    } catch (e) {
+                        console.warn(`[NFT] Error parsing bridge message: ${e}`);
+                    }
+                });
+            }
+
+            if (client.afterEvents && client.afterEvents.close) {
+                client.afterEvents.close.subscribe(() => {
+                    console.warn("[NFT] Bridge WebSocket connection closed.");
+                    activeSocket = null;
+                    kickPlayer(null, "NFT Bridge connection lost.");
+                });
+            }
+        } catch (e) {
+            console.warn(`[NFT] Connection/Handshake failed: ${e}`);
+            activeSocket = null;
+            kickPlayer(null, "NFT Bridge connection failed.");
         }
-
-        const client = await websocket.connect(WS_URL);
-        activeSocket = client;
-        console.warn(`[NFT] Connected to NFT bridge at ${WS_URL}`);
-
-        sendBridgeMessage(`nexus:handshake ${SERVER_ID}`);
-
-        if (client.afterEvents && client.afterEvents.message) {
-            client.afterEvents.message.subscribe((event) => {
-                try {
-                    const data = JSON.parse(event.message);
-                    processIncomingMessage(data);
-                } catch (e) {
-                    console.warn(`[NFT] Error parsing bridge message: ${e}`);
-                }
-            });
-        }
-    } catch (e) {
-        console.warn(`[NFT] Connection/Handshake failed: ${e}`);
-    }
+    });
 }
 
 async function checkNftStatus(player) {
     const platformId = player?.xuid || player?.id;
     if (!player || !platformId) return;
+
+    if (!activeSocket) {
+        kickPlayer(player.name, "NFT Bridge connection required.");
+        return;
+    }
 
     system.run(() => {
         sendBridgeMessage(`nexus:check ${platformId} ${SERVER_ID} "${player.name}"`);
@@ -97,7 +126,11 @@ world.afterEvents.worldLoad.subscribe(() => {
 // 2. Player Spawn Listener
 world.afterEvents.playerSpawn.subscribe((event) => {
     if (event.initialSpawn) {
-        checkNftStatus(event.player);
+        if (!activeSocket) {
+            kickPlayer(event.player?.name, "NFT Bridge connection required.");
+        } else {
+            checkNftStatus(event.player);
+        }
     }
 });
 
@@ -171,23 +204,6 @@ if (system.beforeEvents && system.beforeEvents.startup) {
                 if (player?.sendMessage) {
                     player.sendMessage(`§6[Nexus]§r Contract Address: §f${NEXUS_ADDRESS}§r`);
                 }
-                return { status: CustomCommandStatus ? CustomCommandStatus.Success : 1 };
-            }
-        );
-
-        customCommandRegistry.registerCommand(
-            {
-                name: "nexus:reconnect",
-                description: "Reconnect to the NFT bridge server",
-                permissionLevel: CommandPermissionLevel ? CommandPermissionLevel.Any : "Any",
-                cheatsRequired: false
-            },
-            (origin) => {
-                const player = origin.initiator ?? origin.sourceEntity;
-                if (player?.sendMessage) {
-                    player.sendMessage("§bAttempting to reconnect to bridge...§r");
-                }
-                initiateBridgeConnection();
                 return { status: CustomCommandStatus ? CustomCommandStatus.Success : 1 };
             }
         );

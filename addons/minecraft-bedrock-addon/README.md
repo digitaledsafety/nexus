@@ -114,7 +114,6 @@ In the Minecraft server or world settings, ensure **Beta APIs** is enabled. This
 ### 5. Verify In-Game Commands
 Once connected to the server, players can interact with the bridge using the custom commands registered by the addon:
 * `/nexus:contract`: Displays the connected Nexus NFT smart contract address in chat.
-* `/nexus:reconnect`: Forces a WebSocket reconnection and handshake between Minecraft and the NFT bridge server.
 * `/nexus:register`: Generates an Xbox Live XUID registration link to link your Ethereum wallet.
 * `/nexus:my_nfts`: Queries the bridge for the player's held NFTs and updates in-game tags (`nft_holder`).
 
@@ -131,7 +130,7 @@ The resource pack uses the `subpacks` feature to offer configuration options.
 The behavior pack uses `@minecraft/server` and `@minecraft/server-net` to:
 *   Listen for `playerSpawn` events.
 *   Trigger WebSocket/HTTP commands to the bridge.
-*   Apply tags and handle custom commands (`/nexus:register`, `/nexus:my_nfts`, `/nexus:contract`, `/nexus:reconnect`).
+*   Apply tags and handle custom commands (`/nexus:register`, `/nexus:my_nfts`, `/nexus:contract`).
 
 ---
 

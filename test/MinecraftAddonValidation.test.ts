@@ -128,7 +128,7 @@ describe('Minecraft Addon Validation', () => {
         });
     });
 
-    describe('Custom Commands (main.js)', () => {
+    describe('Custom Commands and Connection Security (main.js)', () => {
         const mainJsPath = path.join(BEHAVIOR_PATH, 'scripts/main.js');
         const mainJsContent = fs.readFileSync(mainJsPath, 'utf8');
 
@@ -136,6 +136,20 @@ describe('Minecraft Addon Validation', () => {
             assert.ok(mainJsContent.includes('nexus:summon'), 'nexus:summon missing from main.js');
             assert.ok(mainJsContent.includes('Summon an owned structure NFT into the world'), 'nexus:summon description missing');
             assert.ok(mainJsContent.includes('sendBridgeMessage'), 'sendBridgeMessage trigger missing');
+        });
+
+        it('should NOT register debug nexus:reconnect custom command', () => {
+            assert.ok(!mainJsContent.includes('nexus:reconnect'), 'nexus:reconnect command should be removed from main.js');
+        });
+
+        it('should defer websocket.connect within system.run to prevent restricted execution errors', () => {
+            assert.ok(mainJsContent.includes('system.run(async () =>'), 'websocket connection logic must be wrapped in system.run');
+            assert.ok(mainJsContent.includes('websocket.connect(WS_URL)'), 'websocket.connect must be present');
+        });
+
+        it('should kick players when WebSocket bridge connection is missing or lost', () => {
+            assert.ok(mainJsContent.includes('kickPlayer'), 'kickPlayer function missing from main.js');
+            assert.ok(mainJsContent.includes('runCommand(`kick'), 'kick command invocation missing from main.js');
         });
     });
 
