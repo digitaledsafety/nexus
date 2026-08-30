@@ -15,6 +15,7 @@ const CONFIG_FILE = path.join(process.cwd(), 'bridge-config.json');
 
 // --- Configuration ---
 let serverConfigs = {
+    "local-dev": { vaultAddress: null, name: "Nexus Staging" },
     "server-1": { vaultAddress: null, name: "Survival" },
     "server-2": { vaultAddress: null, name: "Creative" }
 };
