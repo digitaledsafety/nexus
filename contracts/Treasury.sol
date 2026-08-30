@@ -175,10 +175,9 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
     }
 
     /**
-     * @dev Approve an existing proposal.
+     * @dev Internal function to approve a proposal.
      */
-    function approve(uint256 proposalId, uint256 nonce) public onlyOwner(nonce) {
-        address owner = _getMsgSender(nonce);
+    function _approve(uint256 proposalId, address owner) internal {
         if (proposalId >= proposalCount) revert ProposalNotFound();
 
         Proposal storage p = proposals[proposalId];
@@ -190,6 +189,25 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
         p.approvalCount++;
 
         emit Approved(proposalId, owner);
+    }
+
+    /**
+     * @dev Approve an existing proposal.
+     */
+    function approve(uint256 proposalId, uint256 nonce) public onlyOwner(nonce) {
+        address owner = _getMsgSender(nonce);
+        _approve(proposalId, owner);
+    }
+
+    /**
+     * @dev Batch approve multiple proposals.
+     */
+    function batchApprove(uint256[] calldata proposalIds, uint256 nonce) external onlyOwner(nonce) {
+        address owner = _getMsgSender(nonce);
+        for (uint256 i = 0; i < proposalIds.length; ) {
+            _approve(proposalIds[i], owner);
+            unchecked { i++; }
+        }
     }
 
     /**
@@ -248,10 +266,9 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
     }
 
     /**
-     * @dev Cancel a proposal (only by proposer or via treasury execution).
+     * @dev Internal function to cancel a proposal.
      */
-    function cancel(uint256 proposalId, uint256 nonce) external {
-        address caller = _getMsgSender(nonce);
+    function _cancel(uint256 proposalId, address caller) internal {
         if (proposalId >= proposalCount) revert ProposalNotFound();
 
         Proposal storage p = proposals[proposalId];
@@ -264,6 +281,25 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
 
         p.canceled = true;
         emit Canceled(proposalId);
+    }
+
+    /**
+     * @dev Cancel a proposal (only by proposer or via treasury execution).
+     */
+    function cancel(uint256 proposalId, uint256 nonce) public {
+        address caller = _getMsgSender(nonce);
+        _cancel(proposalId, caller);
+    }
+
+    /**
+     * @dev Batch cancel multiple proposals.
+     */
+    function batchCancel(uint256[] calldata proposalIds, uint256 nonce) external {
+        address caller = _getMsgSender(nonce);
+        for (uint256 i = 0; i < proposalIds.length; ) {
+            _cancel(proposalIds[i], caller);
+            unchecked { i++; }
+        }
     }
 
     /**
