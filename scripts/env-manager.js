@@ -27,7 +27,7 @@ export const services = {
     },
     frontend: {
         command: 'npx',
-        args: ['serve', 'frontend', '-p', '3001'],
+        args: ['serve', 'frontend', '-p', '3000'],
         process: null,
         status: 'stopped',
         logs: []
