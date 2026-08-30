@@ -182,21 +182,6 @@ function registerCustomCommands(registry: MockCustomCommandRegistry, world: any 
         }
     );
 
-    registry.registerCommand(
-        {
-            name: "nexus:reconnect",
-            description: "Reconnect to the NFT bridge server",
-            permissionLevel: "Any",
-            cheatsRequired: false
-        },
-        (origin: any) => {
-            const player = origin.initiator ?? origin.sourceEntity;
-            if (player?.sendMessage) {
-                player.sendMessage("§bAttempting to reconnect to bridge...§r");
-            }
-            return { status: 1 };
-        }
-    );
 
     registry.registerCommand(
         {
