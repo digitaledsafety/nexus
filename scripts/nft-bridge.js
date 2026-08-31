@@ -73,8 +73,11 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
          return { isHolder: false, address: addressToCheck };
     }
 
-    let status = await fetchCurrentStatus(addressToCheck);
-    statusCache.set(addressToCheck.toLowerCase(), status);
+    let status = statusCache.get(addressToCheck.toLowerCase());
+    if (!status) {
+        status = await fetchCurrentStatus(addressToCheck);
+        statusCache.set(addressToCheck.toLowerCase(), status);
+    }
 
     const serverConfig = serverConfigs[serverId];
     const vaultAddr = (serverConfig && serverConfig.vaultAddress) ? serverConfig.vaultAddress.toLowerCase() : null;
@@ -123,7 +126,8 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
     }
 
     const mediaUrl = matchingNft.animation_url || matchingNft.image;
-    if (!mediaUrl || (!mediaUrl.toLowerCase().endsWith('.mcstructure') && !mediaUrl.toLowerCase().includes('.mcstructure'))) {
+    const isMcStructure = matchingNft.mcstructure || (mediaUrl && (mediaUrl.toLowerCase().endsWith('.mcstructure') || mediaUrl.toLowerCase().includes('.mcstructure')));
+    if (!mediaUrl || !isMcStructure) {
         sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] Selected NFT #${matchingNft.tokenId} is not a valid .mcstructure object.§r"}]}`);
         return { success: false, reason: "not_mcstructure" };
     }
@@ -447,6 +451,7 @@ export const handleRequest = async (req, res) => {
             }
 
             mappings.set(pending.platformId, address);
+            pendingTokens.delete(token);
             saveMappings();
             res.writeHead(200);
             res.end(JSON.stringify({ success: true, platformId: pending.platformId, address }));
@@ -580,6 +585,8 @@ const server = http.createServer(handleRequest);
 export {
     pendingTokens,
     mappings,
+    getPlatformStatus,
+    createRegistrationToken,
     handleSummonCommand,
     getOwnershipStatus,
     setupWss,
