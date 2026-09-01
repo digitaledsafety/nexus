@@ -42,6 +42,22 @@ contract BragToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessContr
         _mint(to, amount);
     }
 
+    /**
+     * @dev Mints new tokens to multiple recipients. Restricted to MINTER_ROLE.
+     */
+    function batchMint(address[] calldata recipients, uint256[] calldata amounts) external onlyRole(MINTER_ROLE) {
+        require(recipients.length == amounts.length, "Mismatched arrays");
+        uint256 total = 0;
+        for (uint256 i = 0; i < amounts.length; i++) {
+            total += amounts[i];
+        }
+        require(totalSupply() + total <= maxSupply, "Exceeds maxSupply");
+
+        for (uint256 i = 0; i < recipients.length; i++) {
+            _mint(recipients[i], amounts[i]);
+        }
+    }
+
     // The following functions are overrides required by Solidity.
 
     function _update(address from, address to, uint256 value)
