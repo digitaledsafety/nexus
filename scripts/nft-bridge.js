@@ -53,7 +53,15 @@ function saveMappings() {
 // --- Core Logic ---
 async function getPlatformStatus(platformId) {
     const linkedAddress = mappings.get(platformId);
-    return { linked: !!linkedAddress, address: linkedAddress || null, uuid: platformId };
+    let linkedPlatforms = [];
+    if (linkedAddress) {
+        for (const [pid, addr] of mappings.entries()) {
+            if (addr && addr.toLowerCase() === linkedAddress.toLowerCase()) {
+                linkedPlatforms.push(pid);
+            }
+        }
+    }
+    return { linked: !!linkedAddress, address: linkedAddress || null, uuid: platformId, linkedPlatforms };
 }
 
 async function createRegistrationToken(platformId) {
@@ -84,11 +92,21 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
     const inVault = vaultAddr ? (status.vaults[vaultAddr]?.length > 0) : false;
     const inWallet = status.walletNfts.length > 0;
 
+    let linkedPlatforms = [];
+    if (addressToCheck && addressToCheck.startsWith('0x') && addressToCheck.length === 42) {
+        for (const [pid, addr] of mappings.entries()) {
+            if (addr && addr.toLowerCase() === addressToCheck.toLowerCase()) {
+                linkedPlatforms.push(pid);
+            }
+        }
+    }
+
     return {
         isHolder: inVault || inWallet,
         inVault,
         inWallet,
         address: addressToCheck,
+        linkedPlatforms,
         nfts: [...status.walletNfts, ...(vaultAddr ? (status.vaults[vaultAddr] || []) : [])]
     };
 }
@@ -465,7 +483,7 @@ export const handleRequest = async (req, res) => {
 
             if (uuid && serverId && playerName) {
                 // If this is the first time we see this connection, try to bind the socket if it's generic
-                if (!serverSockets.has(serverId) && wss.clients.size > 0) {
+                if (!serverSockets.has(serverId) && wss && wss.clients && wss.clients.size > 0) {
                     // For local mock testing, we'll just take the first available socket if not bound
                     const firstSocket = Array.from(wss.clients)[0];
                     serverSockets.set(serverId, firstSocket);
