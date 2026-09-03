@@ -18,6 +18,12 @@ describe('Minecraft Addon Validation', () => {
             assert.strictEqual(serverDep.version, '2.9.0');
         });
 
+        it('should require @minecraft/server-net dependency', () => {
+            const netDep = manifest.dependencies.find((dep: any) => dep.module_name === '@minecraft/server-net');
+            assert.ok(netDep, '@minecraft/server-net dependency missing');
+            assert.strictEqual(netDep.version, '1.0.0-beta');
+        });
+
         it('should have min_engine_version [1, 21, 0] or higher', () => {
             const version = manifest.header.min_engine_version;
             assert.ok(Array.isArray(version));
@@ -66,8 +72,6 @@ describe('Minecraft Addon Validation', () => {
         it('should have a sound variant that returns a string result (Fix for "Expected a string result")', () => {
             const cowSound = soundsJson.entity_sounds.entities.cow;
             const variant = cowSound.variant;
-            // The variant in sounds.json for entity_sounds must be a Molang expression that resolves to a string key in entity_sounds.json or a hardcoded string.
-            // Our fix uses: "query.property('minecraft:sound_variant') == 0 ? 'default' : 'default'"
             assert.ok(typeof variant === 'string');
             assert.ok(variant.includes("'"), 'Molang expression should return a string literal (quoted)');
         });
@@ -124,14 +128,28 @@ describe('Minecraft Addon Validation', () => {
         });
     });
 
-    describe('Custom Commands (main.js)', () => {
+    describe('Custom Commands and Connection Security (main.js)', () => {
         const mainJsPath = path.join(BEHAVIOR_PATH, 'scripts/main.js');
         const mainJsContent = fs.readFileSync(mainJsPath, 'utf8');
 
-        it('should register nexus:summon custom command', () => {
+        it('should register nexus:summon custom command using script websocket bridge', () => {
             assert.ok(mainJsContent.includes('nexus:summon'), 'nexus:summon missing from main.js');
             assert.ok(mainJsContent.includes('Summon an owned structure NFT into the world'), 'nexus:summon description missing');
-            assert.ok(mainJsContent.includes('say nexus:summon'), 'nexus:summon chat command trigger missing');
+            assert.ok(mainJsContent.includes('sendBridgeMessage'), 'sendBridgeMessage trigger missing');
+        });
+
+        it('should NOT register debug nexus:reconnect custom command', () => {
+            assert.ok(!mainJsContent.includes('nexus:reconnect'), 'nexus:reconnect command should be removed from main.js');
+        });
+
+        it('should defer websocket.connect within system.run to prevent restricted execution errors', () => {
+            assert.ok(mainJsContent.includes('system.run(async () =>'), 'websocket connection logic must be wrapped in system.run');
+            assert.ok(mainJsContent.includes('websocket.connect(WS_URL)'), 'websocket.connect must be present');
+        });
+
+        it('should kick players when WebSocket bridge connection is missing or lost', () => {
+            assert.ok(mainJsContent.includes('kickPlayer'), 'kickPlayer function missing from main.js');
+            assert.ok(mainJsContent.includes('runCommand(`kick'), 'kick command invocation missing from main.js');
         });
     });
 
@@ -153,10 +171,8 @@ describe('Minecraft Addon Validation', () => {
 
         it('should reject non-existent targets when target is specified', async () => {
             const { handleSummonCommand, mappings } = await import('../scripts/nft-bridge.js');
-            // Mock status in cache for user with a vault entry
             const addr = "0x2222222222222222222222222222222222222222";
             mappings.set("xuid_with_vault", addr);
-            // We can invoke handleSummonCommand for a target not in the vault
             const res = await handleSummonCommand("99999", "xuid_with_vault", "server-1", "TestPlayer");
             assert.strictEqual(res.success, false);
             assert.strictEqual(res.reason, "not_in_vault");

@@ -15,6 +15,7 @@ const CONFIG_FILE = path.join(process.cwd(), 'bridge-config.json');
 
 // --- Configuration ---
 let serverConfigs = {
+    "local-dev": { vaultAddress: null, name: "Nexus Staging" },
     "server-1": { vaultAddress: null, name: "Survival" },
     "server-2": { vaultAddress: null, name: "Creative" }
 };
@@ -52,7 +53,15 @@ function saveMappings() {
 // --- Core Logic ---
 async function getPlatformStatus(platformId) {
     const linkedAddress = mappings.get(platformId);
-    return { linked: !!linkedAddress, address: linkedAddress || null, uuid: platformId };
+    let linkedPlatforms = [];
+    if (linkedAddress) {
+        for (const [pid, addr] of mappings.entries()) {
+            if (addr && addr.toLowerCase() === linkedAddress.toLowerCase()) {
+                linkedPlatforms.push(pid);
+            }
+        }
+    }
+    return { linked: !!linkedAddress, address: linkedAddress || null, uuid: platformId, linkedPlatforms };
 }
 
 async function createRegistrationToken(platformId) {
@@ -72,19 +81,32 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
          return { isHolder: false, address: addressToCheck };
     }
 
-    let status = await fetchCurrentStatus(addressToCheck);
-    statusCache.set(addressToCheck.toLowerCase(), status);
+    let status = statusCache.get(addressToCheck.toLowerCase());
+    if (!status) {
+        status = await fetchCurrentStatus(addressToCheck);
+        statusCache.set(addressToCheck.toLowerCase(), status);
+    }
 
     const serverConfig = serverConfigs[serverId];
     const vaultAddr = (serverConfig && serverConfig.vaultAddress) ? serverConfig.vaultAddress.toLowerCase() : null;
     const inVault = vaultAddr ? (status.vaults[vaultAddr]?.length > 0) : false;
     const inWallet = status.walletNfts.length > 0;
 
+    let linkedPlatforms = [];
+    if (addressToCheck && addressToCheck.startsWith('0x') && addressToCheck.length === 42) {
+        for (const [pid, addr] of mappings.entries()) {
+            if (addr && addr.toLowerCase() === addressToCheck.toLowerCase()) {
+                linkedPlatforms.push(pid);
+            }
+        }
+    }
+
     return {
         isHolder: inVault || inWallet,
         inVault,
         inWallet,
         address: addressToCheck,
+        linkedPlatforms,
         nfts: [...status.walletNfts, ...(vaultAddr ? (status.vaults[vaultAddr] || []) : [])]
     };
 }
@@ -122,7 +144,8 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
     }
 
     const mediaUrl = matchingNft.animation_url || matchingNft.image;
-    if (!mediaUrl || (!mediaUrl.toLowerCase().endsWith('.mcstructure') && !mediaUrl.toLowerCase().includes('.mcstructure'))) {
+    const isMcStructure = matchingNft.mcstructure || (mediaUrl && (mediaUrl.toLowerCase().endsWith('.mcstructure') || mediaUrl.toLowerCase().includes('.mcstructure')));
+    if (!mediaUrl || !isMcStructure) {
         sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] Selected NFT #${matchingNft.tokenId} is not a valid .mcstructure object.§r"}]}`);
         return { success: false, reason: "not_mcstructure" };
     }
@@ -446,6 +469,7 @@ export const handleRequest = async (req, res) => {
             }
 
             mappings.set(pending.platformId, address);
+            pendingTokens.delete(token);
             saveMappings();
             res.writeHead(200);
             res.end(JSON.stringify({ success: true, platformId: pending.platformId, address }));
@@ -459,7 +483,7 @@ export const handleRequest = async (req, res) => {
 
             if (uuid && serverId && playerName) {
                 // If this is the first time we see this connection, try to bind the socket if it's generic
-                if (!serverSockets.has(serverId) && wss.clients.size > 0) {
+                if (!serverSockets.has(serverId) && wss && wss.clients && wss.clients.size > 0) {
                     // For local mock testing, we'll just take the first available socket if not bound
                     const firstSocket = Array.from(wss.clients)[0];
                     serverSockets.set(serverId, firstSocket);
@@ -579,6 +603,8 @@ const server = http.createServer(handleRequest);
 export {
     pendingTokens,
     mappings,
+    getPlatformStatus,
+    createRegistrationToken,
     handleSummonCommand,
     getOwnershipStatus,
     setupWss,
