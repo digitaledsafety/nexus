@@ -99,4 +99,59 @@ describe("Marketplace Batch Operations", async function () {
       /Mismatched arrays/
     );
   });
+
+  it("Should batch update listings and private listings", async function () {
+    const { marketplace, bragNFT, seller, buyer } = await deployAll();
+
+    // Mint 2 NFTs to seller and create listings
+    await bragNFT.write.donate(["nft1", ""], { account: seller.account, value: parseEther("0.1") });
+    await bragNFT.write.donate(["nft2", ""], { account: seller.account, value: parseEther("0.1") });
+
+    await marketplace.write.createListing([bragNFT.address, 0n, 1n, parseEther("1")], { account: seller.account });
+    await marketplace.write.createListing([bragNFT.address, 1n, 1n, parseEther("2")], { account: seller.account });
+
+    // Batch update public listings
+    await marketplace.write.batchUpdateListings(
+      [[bragNFT.address, bragNFT.address], [0n, 1n], [1n, 1n], [parseEther("1.5"), parseEther("2.5")]],
+      { account: seller.account }
+    );
+
+    const listing1 = await marketplace.read.listings([bragNFT.address, 0n, seller.account.address]);
+    const listing2 = await marketplace.read.listings([bragNFT.address, 1n, seller.account.address]);
+    assert.equal(listing1[1], parseEther("1.5"));
+    assert.equal(listing2[1], parseEther("2.5"));
+
+    // Batch update private listings
+    await marketplace.write.batchUpdatePrivateListings(
+      [[bragNFT.address, bragNFT.address], [0n, 1n], [1n, 1n], [parseEther("3"), parseEther("4")], [buyer.account.address, buyer.account.address]],
+      { account: seller.account }
+    );
+
+    const privateListing1 = await marketplace.read.listings([bragNFT.address, 0n, seller.account.address]);
+    const privateListing2 = await marketplace.read.listings([bragNFT.address, 1n, seller.account.address]);
+    assert.equal(privateListing1[1], parseEther("3"));
+    assert.equal(privateListing1[3], getAddress(buyer.account.address));
+    assert.equal(privateListing2[1], parseEther("4"));
+    assert.equal(privateListing2[3], getAddress(buyer.account.address));
+  });
+
+  it("Should revert batchUpdateListings and batchUpdatePrivateListings on array mismatch", async function () {
+    const { marketplace, bragNFT, seller, buyer } = await deployAll();
+
+    await assert.rejects(
+      marketplace.write.batchUpdateListings(
+        [[bragNFT.address], [0n, 1n], [1n], [parseEther("1")]],
+        { account: seller.account }
+      ),
+      /Mismatched arrays/
+    );
+
+    await assert.rejects(
+      marketplace.write.batchUpdatePrivateListings(
+        [[bragNFT.address], [0n], [1n], [parseEther("1")], [buyer.account.address, buyer.account.address]],
+        { account: seller.account }
+      ),
+      /Mismatched arrays/
+    );
+  });
 });

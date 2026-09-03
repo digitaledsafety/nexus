@@ -146,4 +146,37 @@ describe("NFTMarketplace Fixed-Price Listings", async function () {
       /Price mismatch/
     );
   });
+
+  it("Should allow updating a listing with private buyer", async function () {
+    await bragNFT.write.donate(["Private Buyer Update Test", "uri4"], { value: 1n });
+    const tokenId = 4n;
+    await bragNFT.write.approve([marketplace.address, tokenId]);
+    await marketplace.write.createListing([bragNFT.address, tokenId, 1n, parseEther("10")]);
+
+    // Update listing to set a private buyer
+    await marketplace.write.updateListing([
+      bragNFT.address,
+      tokenId,
+      1n,
+      parseEther("15"),
+      buyer.account.address
+    ]);
+
+    const listing = await marketplace.read.listings([bragNFT.address, tokenId, owner.account.address]);
+    assert.equal(listing[1], parseEther("15"));
+    assert.equal(listing[3], getAddress(buyer.account.address));
+
+    // Clear private buyer back to zero address
+    await marketplace.write.updateListing([
+      bragNFT.address,
+      tokenId,
+      1n,
+      parseEther("12"),
+      "0x0000000000000000000000000000000000000000"
+    ]);
+
+    const updatedListing = await marketplace.read.listings([bragNFT.address, tokenId, owner.account.address]);
+    assert.equal(updatedListing[1], parseEther("12"));
+    assert.equal(updatedListing[3], "0x0000000000000000000000000000000000000000");
+  });
 });
