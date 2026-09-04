@@ -193,6 +193,16 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
     }
 
     /**
+     * @dev Approve multiple existing proposals.
+     */
+    function batchApprove(uint256[] calldata proposalIds, uint256 nonce) external {
+        for (uint256 i = 0; i < proposalIds.length; ) {
+            approve(proposalIds[i], nonce);
+            unchecked { i++; }
+        }
+    }
+
+    /**
      * @dev Execute a proposal that has reached the threshold.
      */
     function executeProposal(uint256 proposalId) external payable {
@@ -250,7 +260,7 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
     /**
      * @dev Cancel a proposal (only by proposer or via treasury execution).
      */
-    function cancel(uint256 proposalId, uint256 nonce) external {
+    function cancel(uint256 proposalId, uint256 nonce) public {
         address caller = _getMsgSender(nonce);
         if (proposalId >= proposalCount) revert ProposalNotFound();
 
@@ -264,6 +274,16 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
 
         p.canceled = true;
         emit Canceled(proposalId);
+    }
+
+    /**
+     * @dev Cancel multiple existing proposals.
+     */
+    function batchCancel(uint256[] calldata proposalIds, uint256 nonce) external {
+        for (uint256 i = 0; i < proposalIds.length; ) {
+            cancel(proposalIds[i], nonce);
+            unchecked { i++; }
+        }
     }
 
     /**
