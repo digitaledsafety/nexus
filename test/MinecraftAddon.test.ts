@@ -32,10 +32,16 @@ const mockSystem = {
 class MockWebSocketClient {
     sentMessages: string[] = [];
     messageSubscribers: Function[] = [];
+    closeSubscribers: Function[] = [];
     afterEvents = {
         message: {
             subscribe: (fn: Function) => {
                 this.messageSubscribers.push(fn);
+            }
+        },
+        close: {
+            subscribe: (fn: Function) => {
+                this.closeSubscribers.push(fn);
             }
         }
     };
@@ -44,11 +50,21 @@ class MockWebSocketClient {
         this.sentMessages.push(data);
     }
 
-    close() {}
+    close() {
+        for (const sub of this.closeSubscribers) {
+            sub();
+        }
+    }
 
     simulateIncomingMessage(data: any) {
         for (const sub of this.messageSubscribers) {
             sub({ message: JSON.stringify(data) });
+        }
+    }
+
+    simulateClose() {
+        for (const sub of this.closeSubscribers) {
+            sub();
         }
     }
 }
@@ -93,6 +109,15 @@ function sendBridgeMessage(message: string) {
     return true;
 }
 
+function kickPlayer(playerName: string | null, reason = "NFT Bridge connection required.", world: any = mockWorld, system: any = mockSystem) {
+    system.run(() => {
+        try {
+            const target = playerName ? `"${playerName}"` : "@a";
+            world.getDimension("overworld").runCommand(`kick ${target} ${reason}`);
+        } catch (e) {}
+    });
+}
+
 function processIncomingMessage(msg: any, world: any = mockWorld) {
     if (!msg) return;
     if (msg.body && msg.body.commandLine) {
@@ -103,12 +128,60 @@ function processIncomingMessage(msg: any, world: any = mockWorld) {
     }
 }
 
-async function checkNftStatus(player: any, system: any = mockSystem) {
+async function checkNftStatus(player: any, system: any = mockSystem, world: any = mockWorld) {
     const platformId = player?.xuid || player?.id;
     if (!player || !platformId) return;
 
+    if (!activeSocket) {
+        kickPlayer(player.name, "NFT Bridge connection required.", world, system);
+        return;
+    }
+
     system.run(() => {
         sendBridgeMessage(`nexus:check ${platformId} ${SERVER_ID} "${player.name}"`);
+    });
+}
+
+function handlePlayerSpawn(event: any, system: any = mockSystem, world: any = mockWorld) {
+    if (event.initialSpawn) {
+        if (!activeSocket) {
+            kickPlayer(event.player?.name, "NFT Bridge connection required.", world, system);
+        } else {
+            checkNftStatus(event.player, system, world);
+        }
+    }
+}
+
+async function initiateBridgeConnection(websocketModule: any = null, wsUrl = "ws://localhost:9001", system: any = mockSystem, world: any = mockWorld) {
+    if (activeSocket) {
+        try {
+            activeSocket.close();
+        } catch (e) {}
+        activeSocket = null;
+    }
+
+    await system.run(async () => {
+        try {
+            if (!websocketModule) {
+                kickPlayer(null, "NFT Bridge connection unavailable.", world, system);
+                return;
+            }
+
+            const client = await websocketModule.connect(wsUrl);
+            activeSocket = client;
+
+            sendBridgeMessage(`nexus:handshake ${SERVER_ID}`);
+
+            if (client.afterEvents && client.afterEvents.close) {
+                client.afterEvents.close.subscribe(() => {
+                    activeSocket = null;
+                    kickPlayer(null, "NFT Bridge connection lost.", world, system);
+                });
+            }
+        } catch (e) {
+            activeSocket = null;
+            kickPlayer(null, "NFT Bridge connection failed.", world, system);
+        }
     });
 }
 
@@ -233,8 +306,8 @@ describe('Minecraft Custom Commands & Direct Script WebSocket Logic', () => {
         registerCustomCommands(registry, mockWorld);
     });
 
-    describe('checkNftStatus', () => {
-        it('should send nexus:check payload through direct script WebSocket client', async () => {
+    describe('checkNftStatus & Kick Behavior', () => {
+        it('should send nexus:check payload through direct script WebSocket client when connected', async () => {
             await checkNftStatus(mockPlayer);
 
             assert.strictEqual(activeSocket!.sentMessages.length, 1);
@@ -248,6 +321,75 @@ describe('Minecraft Custom Commands & Direct Script WebSocket Logic', () => {
 
             const sent = JSON.parse(activeSocket!.sentMessages[0]);
             assert.strictEqual(sent.body.properties.Message, `nexus:check test-xuid server-1 "Player Name With Spaces"`);
+        });
+
+        it('should kick player when checkNftStatus is called and websocket connection is null', async () => {
+            activeSocket = null;
+            await checkNftStatus(mockPlayer);
+
+            assert.strictEqual(mockDimension.runCommand.mock.calls.length, 1);
+            assert.strictEqual(
+                mockDimension.runCommand.mock.calls[0].arguments[0],
+                'kick "test-player" NFT Bridge connection required.'
+            );
+        });
+
+        it('should kick player on player spawn when activeSocket is null', () => {
+            activeSocket = null;
+            handlePlayerSpawn({ initialSpawn: true, player: mockPlayer });
+
+            assert.strictEqual(mockDimension.runCommand.mock.calls.length, 1);
+            assert.strictEqual(
+                mockDimension.runCommand.mock.calls[0].arguments[0],
+                'kick "test-player" NFT Bridge connection required.'
+            );
+        });
+
+        it('should kick all players when websocket module is missing on connection initiation', async () => {
+            activeSocket = null;
+            await initiateBridgeConnection(null);
+
+            assert.strictEqual(mockDimension.runCommand.mock.calls.length, 1);
+            assert.strictEqual(
+                mockDimension.runCommand.mock.calls[0].arguments[0],
+                'kick @a NFT Bridge connection unavailable.'
+            );
+        });
+
+        it('should kick all players when websocket connection fails during connection initiation', async () => {
+            activeSocket = null;
+            const failingWebsocketModule = {
+                connect: async () => {
+                    throw new Error("Connection refused");
+                }
+            };
+            await initiateBridgeConnection(failingWebsocketModule);
+
+            assert.strictEqual(mockDimension.runCommand.mock.calls.length, 1);
+            assert.strictEqual(
+                mockDimension.runCommand.mock.calls[0].arguments[0],
+                'kick @a NFT Bridge connection failed.'
+            );
+        });
+
+        it('should kick all players when websocket connection closes', async () => {
+            const client = new MockWebSocketClient();
+            const websocketModule = {
+                connect: async () => client
+            };
+
+            await initiateBridgeConnection(websocketModule);
+            assert.strictEqual(activeSocket, client);
+
+            // Simulate websocket closure event
+            client.simulateClose();
+
+            assert.strictEqual(activeSocket, null);
+            assert.strictEqual(mockDimension.runCommand.mock.calls.length, 1);
+            assert.strictEqual(
+                mockDimension.runCommand.mock.calls[0].arguments[0],
+                'kick @a NFT Bridge connection lost.'
+            );
         });
     });
 
