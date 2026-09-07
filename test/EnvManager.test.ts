@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it, beforeEach, afterEach } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
-import { prepareAddon, ROOT } from "../scripts/env-manager.js";
+import { prepareAddon, isSepolia, getAppEnv, ROOT } from "../scripts/env-manager.js";
 
 describe("Environment Manager Logic", () => {
     const configJsPath = path.join(ROOT, "addons", "minecraft-bedrock-addon", "development_behavior_packs", "behavior_pack_sample", "scripts", "config.js");
     const mockDeploymentPath = path.join(ROOT, "ignition", "deployments", "chain-31337");
     const mockAddressesFile = path.join(mockDeploymentPath, "deployed_addresses.json");
+    const mockSepoliaDeploymentPath = path.join(ROOT, "ignition", "deployments", "chain-11155111");
+    const mockSepoliaAddressesFile = path.join(mockSepoliaDeploymentPath, "deployed_addresses.json");
 
     const resetConfigToDefaults = () => {
         const defaultContent = 'export const WS_URL = "ws://127.0.0.1:9001";\nexport const SERVER_ID = "local-dev";\nexport const NEXUS_ADDRESS = "0x0000000000000000000000000000000000000000";\n';
@@ -25,6 +27,7 @@ describe("Environment Manager Logic", () => {
 
         // Clear environment variables
         delete process.env.APP_ENV;
+        delete process.env.HARDHAT_NETWORK;
         delete process.env.STAGING_BRIDGE_URL;
         delete process.env.STAGING_BRAGNFT_ADDRESS;
         delete process.env.SERVER_ID;
@@ -70,6 +73,35 @@ describe("Environment Manager Logic", () => {
         assert.ok(content.includes('export const WS_URL = "wss://staging-bridge.example.com";'));
         assert.ok(content.includes('export const SERVER_ID = "staging-server";'));
         assert.ok(content.includes('export const NEXUS_ADDRESS = "0xSTAGING_NEXUS_ADDRESS";'));
+    });
+
+    it("should recognize sepolia environment and prepare addon with sepolia deployment address", async () => {
+        if (!fs.existsSync(mockSepoliaDeploymentPath)) {
+            fs.mkdirSync(mockSepoliaDeploymentPath, { recursive: true });
+        }
+        fs.writeFileSync(mockSepoliaAddressesFile, JSON.stringify({
+            "AppModule#BragNFT": "0xSEPOLIA_NEXUS_ADDRESS"
+        }));
+
+        process.env.APP_ENV = "sepolia";
+        assert.equal(getAppEnv(), "sepolia");
+        assert.equal(isSepolia(), true);
+
+        await prepareAddon();
+
+        const content = fs.readFileSync(configJsPath, "utf8");
+        assert.ok(content.includes('export const NEXUS_ADDRESS = "0xSEPOLIA_NEXUS_ADDRESS";'));
+
+        // Clean up sepolia mock
+        if (fs.existsSync(mockSepoliaAddressesFile)) {
+            fs.unlinkSync(mockSepoliaAddressesFile);
+        }
+    });
+
+    it("should recognize HARDHAT_NETWORK=sepolia as sepolia environment", () => {
+        process.env.HARDHAT_NETWORK = "sepolia";
+        assert.equal(getAppEnv(), "sepolia");
+        assert.equal(isSepolia(), true);
     });
 
     it("should import configuration constants in main.js from config.js", () => {
