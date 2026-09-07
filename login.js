@@ -1,5 +1,3 @@
-const API_BASE = 'http://localhost:9000';
-
 async function initLogin() {
     const btnSiwe = document.getElementById('btnSiwe');
     if (!btnSiwe) return;
@@ -49,7 +47,8 @@ async function initLogin() {
             if (token) {
                 console.log('Attempting to link account with token:', token);
                 try {
-                    const linkRes = await fetch(`${API_BASE}/verify-link`, {
+                    const fetchFn = typeof fetchBridgeEndpoint === 'function' ? fetchBridgeEndpoint : (path, opts) => fetch(`http://localhost:9000${path}`, opts);
+                    const linkRes = await fetchFn('/verify-link', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ token, address, message, signature })
