@@ -105,6 +105,25 @@ To point your local environment to staging services (shared bridge, shared manag
     ```
     This will verify connectivity to the staging manager and prepare the NFT addon with staging configurations.
 
+### 6. Adding the Nexus Custom Network to Your Wallet (MetaMask)
+
+When running the local environment (`npm run env:init` or `npm run env:start`), Nexus spins up a local EVM blockchain network via Hardhat on port `8545`. To interact with the web dApp, sign transactions, or manage local contracts using an EVM Web3 wallet (such as MetaMask), you must add the custom network to your wallet.
+
+#### Custom Network Parameters
+*   **Network Name:** `Nexus Devnet` (or `Hardhat Local`)
+*   **New RPC URL:** `http://127.0.0.1:8545` (or `http://localhost:8545`)
+*   **Chain ID:** `31337` (Hexadecimal: `0x7A69`)
+*   **Currency Symbol:** `ETH`
+*   **Block Explorer URL:** *(Leave blank)*
+
+#### Step-by-Step Setup Guide (MetaMask)
+1.  Open the **MetaMask** extension in your browser.
+2.  Click the network selection dropdown menu at the top left of the wallet window.
+3.  Click **Add network** -> **Add a network manually**.
+4.  Enter the custom network parameters listed above.
+5.  Click **Save** and select **Nexus Devnet** as your active network.
+6.  **Importing Test Accounts:** To perform transactions, import a pre-funded test account into MetaMask using one of the private keys printed in the terminal during `npm run env:init` (for example: `0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80`).
+
 ---
 
 ## 3. Configuration & Integration
