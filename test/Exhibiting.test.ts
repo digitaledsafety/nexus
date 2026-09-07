@@ -252,4 +252,81 @@ describe("Exhibiting System", async function () {
     assert.ok(expiry3 > expiry1);
   });
 
+  it("Should batch move ERC721 with duration and enforce time-lock", async function () {
+    const { bragNFT, vault1, vault2, user } = await deployContracts();
+    const publicClient = await viem.getPublicClient();
+
+    // Mint two NFTs
+    await bragNFT.write.donate(["batch move 1", ""], { account: user.account, value: parseEther("0.1") });
+    await bragNFT.write.donate(["batch move 2", ""], { account: user.account, value: parseEther("0.1") });
+    const tokenId0 = 0n;
+    const tokenId1 = 1n;
+
+    // Exhibit both to Vault 1
+    await bragNFT.write.safeTransferFrom([user.account.address, vault1.address, tokenId0], { account: user.account });
+    await bragNFT.write.safeTransferFrom([user.account.address, vault1.address, tokenId1], { account: user.account });
+
+    // Batch move both to Vault 2 with 1 hour duration
+    const duration = 3600n;
+    await vault1.write.batchMove721WithDuration([[bragNFT.address, bragNFT.address], [tokenId0, tokenId1], vault2.address, duration], { account: user.account });
+
+    // Verify ownership in Vault 2
+    assert.equal(await vault2.read.owner721([bragNFT.address, tokenId0]), getAddress(user.account.address));
+    assert.equal(await vault2.read.owner721([bragNFT.address, tokenId1]), getAddress(user.account.address));
+
+    // Should fail to withdraw early from Vault 2
+    await assert.rejects(
+      vault2.write.withdraw721([bragNFT.address, tokenId0], { account: user.account }),
+      /Exhibition not yet expired/
+    );
+
+    // Increase time
+    await publicClient.request({ method: "evm_increaseTime" as any, params: [3601] });
+    await publicClient.request({ method: "evm_mine" as any, params: [] });
+
+    // Should succeed now
+    await vault2.write.withdraw721([bragNFT.address, tokenId0], { account: user.account });
+    await vault2.write.withdraw721([bragNFT.address, tokenId1], { account: user.account });
+    assert.equal(await bragNFT.read.ownerOf([tokenId0]), getAddress(user.account.address));
+    assert.equal(await bragNFT.read.ownerOf([tokenId1]), getAddress(user.account.address));
+  });
+
+  it("Should batch move ERC1155 with duration and enforce time-lock", async function () {
+    const { mock1155, vault1, vault2, user, owner } = await deployContracts();
+    const publicClient = await viem.getPublicClient();
+
+    const tokenId1 = 1n;
+    const tokenId2 = 2n;
+    await mock1155.write.mint([user.account.address, tokenId1, 10n], { account: owner.account });
+    await mock1155.write.mint([user.account.address, tokenId2, 10n], { account: owner.account });
+
+    // Exhibit to Vault 1
+    await mock1155.write.safeTransferFrom([user.account.address, vault1.address, tokenId1, 5n, "0x"], { account: user.account });
+    await mock1155.write.safeTransferFrom([user.account.address, vault1.address, tokenId2, 5n, "0x"], { account: user.account });
+
+    // Batch move to Vault 2 with 1 hour duration
+    const duration = 3600n;
+    await vault1.write.batchMove1155WithDuration([[mock1155.address, mock1155.address], [tokenId1, tokenId2], [5n, 5n], vault2.address, duration], { account: user.account });
+
+    // Verify balances in Vault 2
+    assert.equal(await vault2.read.balances1155([mock1155.address, tokenId1, user.account.address]), 5n);
+    assert.equal(await vault2.read.balances1155([mock1155.address, tokenId2, user.account.address]), 5n);
+
+    // Should fail early
+    await assert.rejects(
+      vault2.write.withdraw1155([mock1155.address, tokenId1, 5n], { account: user.account }),
+      /Exhibition not yet expired/
+    );
+
+    // Increase time
+    await publicClient.request({ method: "evm_increaseTime" as any, params: [3601] });
+    await publicClient.request({ method: "evm_mine" as any, params: [] });
+
+    // Success
+    await vault2.write.withdraw1155([mock1155.address, tokenId1, 5n], { account: user.account });
+    await vault2.write.withdraw1155([mock1155.address, tokenId2, 5n], { account: user.account });
+    assert.equal(await mock1155.read.balanceOf([user.account.address, tokenId1]), 10n);
+    assert.equal(await mock1155.read.balanceOf([user.account.address, tokenId2]), 10n);
+  });
+
 });
