@@ -88,7 +88,63 @@ Once running, the interactive gallery and manager are available at `http://local
     +-----------------------+          +-----------------------+
 ```
 
-### 5. Running in Staging Mode
+### 5. Running in Sepolia Environment Mode (Gasless Deployment & Orchestration)
+
+To deploy contracts gaslessly to the Sepolia testnet or run the ecosystem targeting Sepolia instead of the local Hardhat network, set `APP_ENV=sepolia` (or `HARDHAT_NETWORK=sepolia`) and pass the necessary Alchemy Smart Account and Sepolia private key environment variables.
+
+#### Required Environment Variables for Sepolia
+*   `APP_ENV`: Set to `sepolia` (or pass `HARDHAT_NETWORK=sepolia`).
+*   `ALCHEMY_API_KEY`: Your Alchemy API key (enables ERC-4337 Account Abstraction & gasless bundling).
+*   `ALCHEMY_GAS_POLICY_ID`: Your Alchemy Gas Manager Policy ID (sponsors user operation gas fees).
+*   `SEPOLIA_PRIVATE_KEY`: Private key of the deployer/owner account (0x-prefixed).
+*   `SEPOLIA_BUYER_PRIVATE_KEY`: Private key of a second test account (required for `seed:sepolia` market offer setup).
+
+#### Optional Override Environment Variables
+*   `SEPOLIA_RPC_URL`: Custom Sepolia RPC endpoint URL (defaults to `https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}`).
+*   `WS_URL`: Custom WebSocket URL for Minecraft bridge connection in Bedrock addon `config.js` (defaults to `ws://127.0.0.1:9001`).
+*   `SERVER_ID`: Minecraft server identifier in Bedrock addon `config.js` (defaults to `local-dev`).
+*   `CONTRACT_ADDRESS_BRAGNFT`: Override address for the `BragNFT` contract (if omitted, `env:init` automatically uses the address deployed from `ignition/deployments/chain-11155111/deployed_addresses.json`).
+
+#### 1. Standalone Gasless Smart Contract Deployment
+To deploy `BragNFT`, `BragToken`, `NFTMarketplace`, `ExhibitRegistry`, and `Treasury` to Sepolia via ERC-4337 Smart Accounts (Alchemy Gas Manager) without spending native Sepolia ETH:
+
+```shell
+APP_ENV=sepolia \
+HARDHAT_NETWORK=sepolia \
+ALCHEMY_API_KEY="your-alchemy-api-key" \
+ALCHEMY_GAS_POLICY_ID="your-gas-policy-id" \
+SEPOLIA_PRIVATE_KEY="0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" \
+npm run deploy:sepolia:gasless
+```
+
+#### 2. Complete Sepolia Environment Initialization (`npm run env:init`)
+Running `npm run env:init` with `APP_ENV=sepolia` will automatically:
+1. Trigger gasless contract deployment to Sepolia (`deploy:sepolia:gasless`).
+2. Seed initial test NFTs, deploy 5 `ExhibitVaults`, and set up marketplace offers on Sepolia (`seed:sepolia`).
+3. Prepare the Bedrock Minecraft add-on `config.js` using the Sepolia `BragNFT` address (`ignition/deployments/chain-11155111/deployed_addresses.json`).
+4. Clone and set up the `bedrock-server-manager` dependency and inject the add-on.
+5. Launch the bridge and frontend services in the background.
+
+```shell
+APP_ENV=sepolia \
+HARDHAT_NETWORK=sepolia \
+ALCHEMY_API_KEY="your-alchemy-api-key" \
+ALCHEMY_GAS_POLICY_ID="your-gas-policy-id" \
+SEPOLIA_PRIVATE_KEY="0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" \
+SEPOLIA_BUYER_PRIVATE_KEY="0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890" \
+npm run env:init
+```
+
+#### 3. Resuming Sepolia Environment Services (`npm run env:start`)
+When contracts and test data have already been initialized on Sepolia, start the background services (`nft-bridge.js`, frontend `serve`, and `bedrock-server-manager`) without re-deploying or re-seeding contracts:
+
+```shell
+APP_ENV=sepolia \
+HARDHAT_NETWORK=sepolia \
+npm run env:start
+```
+
+### 6. Running in Staging Mode
 
 To point your local environment to staging services (shared bridge, shared manager, and Sepolia contracts):
 
@@ -105,7 +161,7 @@ To point your local environment to staging services (shared bridge, shared manag
     ```
     This will verify connectivity to the staging manager and prepare the NFT addon with staging configurations.
 
-### 6. Adding the Nexus Custom Network to Your Wallet (MetaMask)
+### 7. Adding the Nexus Custom Network to Your Wallet (MetaMask)
 
 When running the local environment (`npm run env:init` or `npm run env:start`), Nexus spins up a local EVM blockchain network via Hardhat on port `8545`. To interact with the web dApp, sign transactions, or manage local contracts using an EVM Web3 wallet (such as MetaMask), you must add the custom network to your wallet.
 
