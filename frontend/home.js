@@ -38,8 +38,11 @@ async function refreshHomeStats() {
         const current = await bragNFT.totalSupply();
         const remaining = total.sub(current);
 
-        document.getElementById('nftsTotal').innerText = total.toString();
-        document.getElementById('nftsRemaining').innerText = remaining.toString();
+        const totalEl = document.getElementById('nftsTotal');
+        if (totalEl) totalEl.innerText = total.toString();
+
+        const remainingEl = document.getElementById('nftsRemaining');
+        if (remainingEl) remainingEl.innerText = remaining.toString();
 
         // Raised Stats
         const treasuryAddr = await bragNFT.treasury();
@@ -48,8 +51,11 @@ async function refreshHomeStats() {
             const ethVal = parseFloat(ethers.utils.formatEther(balance));
             const usdVal = ethVal * ethPrice;
 
-            document.getElementById('totalRaisedETH').innerText = ethVal.toFixed(4);
-            document.getElementById('totalRaisedUSD').innerText = `$${usdVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            const totalRaisedETHEl = document.getElementById('totalRaisedETH');
+            if (totalRaisedETHEl) totalRaisedETHEl.innerText = ethVal.toFixed(4);
+
+            const totalRaisedUSDEl = document.getElementById('totalRaisedUSD');
+            if (totalRaisedUSDEl) totalRaisedUSDEl.innerText = `$${usdVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         }
 
         // Contract Link
@@ -72,18 +78,25 @@ function setupHomeListeners() {
             tierBtns.forEach(b => b.classList.remove('active', 'border-indigo-500', 'bg-indigo-500/10'));
             btn.classList.add('active', 'border-indigo-500', 'bg-indigo-500/10');
             selectedUsdAmount = parseFloat(btn.dataset.usd);
-            document.getElementById('customAmount').value = '';
+            const customInput = document.getElementById('customAmount');
+            if (customInput) customInput.value = '';
             updateHomeConversion();
         });
     });
 
-    document.getElementById('customAmount').addEventListener('input', (e) => {
-        tierBtns.forEach(b => b.classList.remove('active', 'border-indigo-500', 'bg-indigo-500/10'));
-        selectedUsdAmount = parseFloat(e.target.value) || 0;
-        updateHomeConversion();
-    });
+    const customAmountInput = document.getElementById('customAmount');
+    if (customAmountInput) {
+        customAmountInput.addEventListener('input', (e) => {
+            tierBtns.forEach(b => b.classList.remove('active', 'border-indigo-500', 'bg-indigo-500/10'));
+            selectedUsdAmount = parseFloat(e.target.value) || 0;
+            updateHomeConversion();
+        });
+    }
 
-    document.getElementById('btnDonateETH').addEventListener('click', donateETH);
+    const btnDonateETH = document.getElementById('btnDonateETH');
+    if (btnDonateETH) {
+        btnDonateETH.addEventListener('click', donateETH);
+    }
 }
 
 function updateDynamicRewards() {
@@ -98,12 +111,19 @@ function updateDynamicRewards() {
 
 function updateHomeConversion() {
     const ethDisplay = document.getElementById('ethConversion');
+    if (!ethDisplay) return;
+
     if (selectedUsdAmount > 0 && ethPrice > 0) {
         const eth = selectedUsdAmount / ethPrice;
         const ethStr = eth.toFixed(4);
         const bragAmount = (selectedUsdAmount * 1000000).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2});
-        document.getElementById('ethAmount').innerText = ethStr;
-        document.getElementById('bragRewardAmount').innerText = bragAmount;
+
+        const ethAmountEl = document.getElementById('ethAmount');
+        if (ethAmountEl) ethAmountEl.innerText = ethStr;
+
+        const bragRewardEl = document.getElementById('bragRewardAmount');
+        if (bragRewardEl) bragRewardEl.innerText = bragAmount;
+
         ethDisplay.classList.remove('hidden');
     } else {
         ethDisplay.classList.add('hidden');
@@ -133,26 +153,41 @@ async function donateETH() {
         showModal("Minting in Progress", "Please confirm the transaction in your wallet and wait for blockchain confirmation.");
 
         const tx = await bragNFT["donate(string,string,bool)"]("Home Page Donation", "", false, { value: ethValue });
-        document.getElementById('statusDesc').innerText = "Transaction sent! Waiting for block confirmation...";
+        const statusDescEl = document.getElementById('statusDesc');
+        if (statusDescEl) statusDescEl.innerText = "Transaction sent! Waiting for block confirmation...";
 
         const receipt = await tx.wait();
         handleHomeSuccess(receipt);
     } catch (e) {
         console.error(e);
         showModal("Donation Failed", e.reason || e.message || "Transaction failed.");
-        document.getElementById('statusIcon').innerHTML = '<i class="fas fa-times text-white"></i>';
-        document.getElementById('statusIcon').classList.replace('brag-gradient', 'bg-red-500');
+        const statusIconEl = document.getElementById('statusIcon');
+        if (statusIconEl) {
+            statusIconEl.innerHTML = '<i class="fas fa-times text-white"></i>';
+            statusIconEl.classList.replace('brag-gradient', 'bg-red-500');
+        }
     }
 }
 
 function showModal(title, desc) {
-    document.getElementById('modalStatus').classList.remove('hidden');
-    document.getElementById('statusTitle').innerText = title;
-    document.getElementById('statusDesc').innerText = desc;
-    document.getElementById('statusIcon').innerHTML = '<i class="fas fa-spinner fa-spin text-white"></i>';
-    document.getElementById('statusIcon').classList.add('brag-gradient');
-    document.getElementById('statusIcon').classList.remove('bg-red-500', 'bg-green-500');
-    document.getElementById('statusActions').classList.add('hidden');
+    const modalStatus = document.getElementById('modalStatus');
+    if (modalStatus) modalStatus.classList.remove('hidden');
+
+    const statusTitle = document.getElementById('statusTitle');
+    if (statusTitle) statusTitle.innerText = title;
+
+    const statusDesc = document.getElementById('statusDesc');
+    if (statusDesc) statusDesc.innerText = desc;
+
+    const statusIcon = document.getElementById('statusIcon');
+    if (statusIcon) {
+        statusIcon.innerHTML = '<i class="fas fa-spinner fa-spin text-white"></i>';
+        statusIcon.classList.add('brag-gradient');
+        statusIcon.classList.remove('bg-red-500', 'bg-green-500');
+    }
+
+    const statusActions = document.getElementById('statusActions');
+    if (statusActions) statusActions.classList.add('hidden');
 }
 
 let lastReceipt = null;
@@ -160,21 +195,35 @@ let lastReceipt = null;
 function handleHomeSuccess(receipt) {
     lastReceipt = receipt;
     const bragAmount = (selectedUsdAmount * 1000000).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2});
-    document.getElementById('statusTitle').innerText = "Impact Verified!";
-    document.getElementById('statusDesc').innerHTML = `Your contribution has been recorded. You've minted a unique AI NFT and received <span class="text-indigo-400 font-black">${bragAmount} BRAG</span> tokens. Thank you!`;
-    document.getElementById('statusIcon').innerHTML = '<i class="fas fa-check text-white"></i>';
-    document.getElementById('statusIcon').classList.replace('brag-gradient', 'bg-emerald-500');
-    document.getElementById('statusActions').classList.remove('hidden');
+
+    const statusTitle = document.getElementById('statusTitle');
+    if (statusTitle) statusTitle.innerText = "Impact Verified!";
+
+    const statusDesc = document.getElementById('statusDesc');
+    if (statusDesc) statusDesc.innerHTML = `Your contribution has been recorded. You've minted a unique AI NFT and received <span class="text-indigo-400 font-black">${bragAmount} BRAG</span> tokens. Thank you!`;
+
+    const statusIcon = document.getElementById('statusIcon');
+    if (statusIcon) {
+        statusIcon.innerHTML = '<i class="fas fa-check text-white"></i>';
+        statusIcon.classList.replace('brag-gradient', 'bg-emerald-500');
+    }
+
+    const statusActions = document.getElementById('statusActions');
+    if (statusActions) statusActions.classList.remove('hidden');
 
     const explorerUrl = network?.chainId === 11155111 ? "https://sepolia.etherscan.io/tx/" : "https://etherscan.io/tx/";
-    document.getElementById('txExplorerLink').href = explorerUrl + receipt.transactionHash;
-    document.getElementById('btnDownloadReceipt').onclick = generateHomePDF;
+    const txExplorerLink = document.getElementById('txExplorerLink');
+    if (txExplorerLink) txExplorerLink.href = explorerUrl + receipt.transactionHash;
+
+    const btnDownloadReceipt = document.getElementById('btnDownloadReceipt');
+    if (btnDownloadReceipt) btnDownloadReceipt.onclick = generateHomePDF;
 
     refreshHomeStats();
 }
 
 function closeModal() {
-    document.getElementById('modalStatus').classList.add('hidden');
+    const modalStatus = document.getElementById('modalStatus');
+    if (modalStatus) modalStatus.classList.add('hidden');
 }
 
 async function generateHomePDF() {
@@ -204,4 +253,3 @@ async function generateHomePDF() {
 
     doc.save(`Brag_Receipt_${lastReceipt.transactionHash.substring(0, 8)}.pdf`);
 }
-
