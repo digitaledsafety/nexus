@@ -180,6 +180,7 @@ if (system.beforeEvents && system.beforeEvents.startup) {
                     return { status: CustomCommandStatus ? CustomCommandStatus.Failure : 0 };
                 }
 
+                console.warn(`[NFT] Running nexus:my_nfts for player: ${player.name} (${platformId}), Server: ${SERVER_ID}, Contract: ${NEXUS_ADDRESS}`);
                 player.sendMessage("§bFetching your NFTs...§r");
 
                 system.run(() => {

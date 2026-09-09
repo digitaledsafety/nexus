@@ -168,6 +168,35 @@ describe("Sepolia Mode (/nexus:my_nfts) Test Suite", () => {
         assert.ok(commandLines.length > 0, "Bridge should respond with commands to Minecraft server");
 
         assert.ok(
+            commandLines.some((cmd) => cmd.includes("[Nexus Ownership Debug]")),
+            "Output should contain debug header '[Nexus Ownership Debug]'"
+        );
+        assert.ok(
+            commandLines.some((cmd) => cmd.includes("User:") && cmd.includes(playerName)),
+            "Output should display user name"
+        );
+        assert.ok(
+            commandLines.some((cmd) => cmd.includes("Linked Wallet:") && cmd.includes(testAddress)),
+            "Output should display linked wallet address"
+        );
+        assert.ok(
+            commandLines.some((cmd) => cmd.includes("Network:")),
+            "Output should display current network"
+        );
+        assert.ok(
+            commandLines.some((cmd) => cmd.includes("RPC URL:")),
+            "Output should display RPC URL"
+        );
+        assert.ok(
+            commandLines.some((cmd) => cmd.includes("BragNFT Contract:")),
+            "Output should display BragNFT contract address"
+        );
+        assert.ok(
+            commandLines.some((cmd) => cmd.includes("Vault Contract:")),
+            "Output should display Vault contract address"
+        );
+
+        assert.ok(
             commandLines.some((cmd) => cmd.includes("Your NFTs:")),
             "Output should contain header 'Your NFTs:'"
         );
