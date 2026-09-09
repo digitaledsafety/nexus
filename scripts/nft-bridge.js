@@ -8,7 +8,9 @@ import { randomUUID } from 'node:crypto';
 
 const PORT = 9000;
 const WS_PORT = 9001;
-const CHAIN_ID = process.env.CHAIN_ID ? parseInt(process.env.CHAIN_ID) : 31337;
+const CHAIN_ID = process.env.CHAIN_ID
+    ? parseInt(process.env.CHAIN_ID)
+    : ((process.env.APP_ENV === 'sepolia' || process.env.HARDHAT_NETWORK === 'sepolia') ? 11155111 : 31337);
 const isMain = process.argv[1] && (path.resolve(process.argv[1]) === path.resolve('scripts/nft-bridge.js'));
 const MAPPINGS_FILE = path.join(process.cwd(), 'mappings.json');
 const CONFIG_FILE = path.join(process.cwd(), 'bridge-config.json');
@@ -88,7 +90,10 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
     }
 
     const serverConfig = serverConfigs[serverId];
-    const vaultAddr = (serverConfig && serverConfig.vaultAddress) ? serverConfig.vaultAddress.toLowerCase() : null;
+    const defaultVaultAddr = getContractAddress('ExhibitVault');
+    const vaultAddr = (serverConfig && serverConfig.vaultAddress)
+        ? serverConfig.vaultAddress.toLowerCase()
+        : (defaultVaultAddr ? defaultVaultAddr.toLowerCase() : null);
     const inVault = vaultAddr ? (status.vaults[vaultAddr]?.length > 0) : false;
     const inWallet = status.walletNfts.length > 0;
 
@@ -333,7 +338,9 @@ const BRAG_ABI = [
 ];
 
 const chain = CHAIN_ID === 31337 ? localhost : sepolia;
-const RPC_URL = process.env.RPC_URL || (CHAIN_ID === 31337 ? 'http://127.0.0.1:8545' : undefined);
+const RPC_URL = process.env.RPC_URL || process.env.SEPOLIA_RPC_URL || (CHAIN_ID === 11155111
+    ? (process.env.ALCHEMY_API_KEY ? `https://eth-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}` : 'https://rpc.ankr.com/eth_sepolia')
+    : 'http://127.0.0.1:8545');
 if (isMain) console.log(`Bridge using RPC_URL: ${RPC_URL} for Chain ID: ${CHAIN_ID}`);
 
 async function handleStatusChange(address) {
@@ -646,17 +653,76 @@ async function fetchCurrentStatus(address) {
             }), `balanceOf(${address})`);
 
             if (balance > 0n) {
-                walletNfts.push({ tokenId: "any", location: "Wallet", nftContract: bragAddress });
+                let foundTokens = false;
+                try {
+                    const total = await fetchWithRetry(() => publicClient.readContract({
+                        address: bragAddress,
+                        abi: [parseAbiItem('function nextTokenId() view returns (uint256)')],
+                        functionName: 'nextTokenId'
+                    }), 'nextTokenId()');
+
+                    const maxCheck = Number(total);
+                    for (let i = 0; i < maxCheck; i++) {
+                        try {
+                            const owner = await publicClient.readContract({
+                                address: bragAddress,
+                                abi: [parseAbiItem('function ownerOf(uint256) view returns (address)')],
+                                functionName: 'ownerOf',
+                                args: [BigInt(i)]
+                            });
+                            if (owner.toLowerCase() === address.toLowerCase()) {
+                                foundTokens = true;
+                                let media = { image: null, animation_url: null };
+                                try {
+                                    const uri = await publicClient.readContract({
+                                        address: bragAddress,
+                                        abi: [parseAbiItem('function tokenURI(uint256) view returns (string)')],
+                                        functionName: 'tokenURI',
+                                        args: [BigInt(i)]
+                                    });
+                                    if (uri.startsWith('data:application/json;base64,')) {
+                                        const json = JSON.parse(Buffer.from(uri.split(',')[1], 'base64').toString());
+                                        media.image = json.image;
+                                        media.animation_url = json.animation_url;
+                                    }
+                                } catch (e) {}
+
+                                walletNfts.push({
+                                    tokenId: i.toString(),
+                                    location: "Wallet",
+                                    nftContract: bragAddress,
+                                    image: media.image,
+                                    animation_url: media.animation_url
+                                });
+                            }
+                        } catch (e) {}
+                    }
+                } catch (e) {}
+
+                if (!foundTokens) {
+                    walletNfts.push({ tokenId: "any", location: "Wallet", nftContract: bragAddress });
+                }
             }
         } catch (e) {
             console.error(`Error checking balance for ${address}:`, e.message);
         }
     }
 
+    const defaultVault = getContractAddress('ExhibitVault');
+    const activeConfigs = { ...serverConfigs };
+    if (defaultVault) {
+        for (const [id, cfg] of Object.entries(activeConfigs)) {
+            if (!cfg.vaultAddress) {
+                activeConfigs[id] = { ...cfg, vaultAddress: defaultVault };
+            }
+        }
+    }
+
     const vaults = {};
-    for (const config of Object.values(serverConfigs)) {
+    for (const config of Object.values(activeConfigs)) {
         if (!config.vaultAddress) continue;
         const vaultAddr = config.vaultAddress.toLowerCase();
+        if (vaults[vaultAddr]) continue;
         vaults[vaultAddr] = [];
 
         try {
