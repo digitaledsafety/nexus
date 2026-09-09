@@ -726,51 +726,57 @@ async function fetchCurrentStatus(address) {
         vaults[vaultAddr] = [];
 
         try {
-            // Check for exhibited BragNFTs in this vault
-            // We use getLogs to find tokens the user has exhibited
-            const logs = await fetchWithRetry(() => publicClient.getLogs({
-                address: vaultAddr,
-                event: parseAbiItem('event Exhibited721(address indexed nftContract, uint256 indexed tokenId, address indexed owner, string location, uint256 expiry)'),
-                args: { owner: address },
-                fromBlock: 0n
-            }), `getLogs(${vaultAddr})`);
+            // Check for exhibited BragNFTs in this vault via direct contract state read owner721
+            if (bragAddress) {
+                let maxCheck = 0;
+                try {
+                    const total = await fetchWithRetry(() => publicClient.readContract({
+                        address: bragAddress,
+                        abi: [parseAbiItem('function nextTokenId() view returns (uint256)')],
+                        functionName: 'nextTokenId'
+                    }), 'nextTokenId()');
+                    maxCheck = Number(total);
+                } catch (e) {
+                    maxCheck = 100; // Fallback bound
+                }
 
-            // For each token, verify it's still in the vault
-            for (const log of logs) {
-                const { nftContract, tokenId } = log.args;
-                const currentOwner = await fetchWithRetry(() => publicClient.readContract({
-                    address: vaultAddr,
-                    abi: [parseAbiItem('function owner721(address, uint256) view returns (address)')],
-                    functionName: 'owner721',
-                    args: [nftContract, tokenId]
-                }), `owner721(${vaultAddr}, ${tokenId})`);
-
-                if (currentOwner.toLowerCase() === address.toLowerCase()) {
-                    let media = { image: null, animation_url: null };
+                for (let i = 0; i < maxCheck; i++) {
                     try {
-                        const uri = await fetchWithRetry(() => publicClient.readContract({
-                            address: nftContract,
-                            abi: [parseAbiItem('function tokenURI(uint256) view returns (string)')],
-                            functionName: 'tokenURI',
-                            args: [tokenId]
-                        }), `tokenURI(${nftContract}, ${tokenId})`);
+                        const currentOwner = await publicClient.readContract({
+                            address: vaultAddr,
+                            abi: [parseAbiItem('function owner721(address, uint256) view returns (address)')],
+                            functionName: 'owner721',
+                            args: [bragAddress, BigInt(i)]
+                        });
 
-                        if (uri.startsWith('data:application/json;base64,')) {
-                            const json = JSON.parse(Buffer.from(uri.split(',')[1], 'base64').toString());
-                            media.image = json.image;
-                            media.animation_url = json.animation_url;
+                        if (currentOwner.toLowerCase() === address.toLowerCase()) {
+                            let media = { image: null, animation_url: null };
+                            try {
+                                const uri = await publicClient.readContract({
+                                    address: bragAddress,
+                                    abi: [parseAbiItem('function tokenURI(uint256) view returns (string)')],
+                                    functionName: 'tokenURI',
+                                    args: [BigInt(i)]
+                                });
+
+                                if (uri.startsWith('data:application/json;base64,')) {
+                                    const json = JSON.parse(Buffer.from(uri.split(',')[1], 'base64').toString());
+                                    media.image = json.image;
+                                    media.animation_url = json.animation_url;
+                                }
+                            } catch (e) {
+                                console.error(`Error fetching tokenURI for ${bragAddress} #${i}:`, e.message);
+                            }
+
+                            vaults[vaultAddr].push({
+                                tokenId: i.toString(),
+                                nftContract: bragAddress,
+                                location: config.name,
+                                image: media.image,
+                                animation_url: media.animation_url
+                            });
                         }
-                    } catch (e) {
-                        console.error(`Error fetching tokenURI for ${nftContract} #${tokenId}:`, e.message);
-                    }
-
-                    vaults[vaultAddr].push({
-                        tokenId: tokenId.toString(),
-                        nftContract,
-                        location: config.name,
-                        image: media.image,
-                        animation_url: media.animation_url
-                    });
+                    } catch (e) {}
                 }
             }
         } catch (e) {
