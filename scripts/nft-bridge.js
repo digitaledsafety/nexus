@@ -247,6 +247,31 @@ wss.on('connection', (ws, req) => {
                             sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§e====================================§r"}]}`);
                         } else if (command === 'my_nfts') {
                             const data = await getOwnershipStatus(platformId, serverId, playerName);
+                            const bragAddress = getContractAddress('BragNFT');
+                            const serverConfig = serverConfigs[serverId];
+                            const defaultVaultAddr = getContractAddress('ExhibitVault');
+                            const vaultAddr = (serverConfig && serverConfig.vaultAddress)
+                                ? serverConfig.vaultAddress
+                                : defaultVaultAddr;
+                            const networkName = chain?.name || (CHAIN_ID === 11155111 ? 'Sepolia' : 'Localhost');
+
+                            console.log(`[nexus:my_nfts] Debug Info for player ${playerName} (${platformId}):`);
+                            console.log(`  - Server ID: ${serverId}`);
+                            console.log(`  - Linked Address: ${data.address || 'Unlinked'}`);
+                            console.log(`  - Network: ${networkName} (Chain ID: ${CHAIN_ID})`);
+                            console.log(`  - RPC URL: ${RPC_URL}`);
+                            console.log(`  - BragNFT Contract: ${bragAddress || 'N/A'}`);
+                            console.log(`  - Vault Contract: ${vaultAddr || 'N/A'}`);
+                            console.log(`  - Is Holder: ${data.isHolder} (Wallet: ${data.inWallet}, Vault: ${data.inVault})`);
+
+                            sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§7[Nexus Ownership Debug]§r"}]}`);
+                            sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§7User: §f${playerName} §7(XUID: §f${platformId}§7)§r"}]}`);
+                            sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§7Linked Wallet: §f${data.address || 'None'}§r"}]}`);
+                            sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§7Network: §f${networkName} (Chain ID: ${CHAIN_ID})§r"}]}`);
+                            sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§7RPC URL: §f${RPC_URL}§r"}]}`);
+                            sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§7BragNFT Contract: §f${bragAddress || 'N/A'}§r"}]}`);
+                            sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§7Vault Contract: §f${vaultAddr || 'N/A'}§r"}]}`);
+
                             if (data.isHolder && data.nfts && data.nfts.length > 0) {
                                 sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§eYour NFTs:§r"}]}`);
                                 for (const nft of data.nfts) {
