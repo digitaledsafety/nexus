@@ -118,7 +118,7 @@ describe("Sepolia Mode (/nexus:my_nfts) Test Suite", () => {
         assert.ok(tokenIds.includes("1"));
     });
 
-    it("should process nexus:my_nfts message over WebSocket and output held Sepolia NFTs", async () => {
+    it("should process nexus:summon list message over WebSocket and output held Sepolia NFTs", async () => {
         const bridge = await import("../scripts/nft-bridge.js");
 
         const mockWs = new MockWebSocket();
@@ -146,13 +146,13 @@ describe("Sepolia Mode (/nexus:my_nfts) Test Suite", () => {
             vaults: {}
         });
 
-        // Simulate incoming nexus:my_nfts WS message from Minecraft server
+        // Simulate incoming nexus:summon list WS message from Minecraft server
         const incomingPayload = JSON.stringify({
             header: { version: 1, messagePurpose: "event" },
             body: {
                 eventName: "PlayerMessage",
                 properties: {
-                    Message: `nexus:my_nfts ${xuid} server-1 "${playerName}"`
+                    Message: `nexus:summon list ${xuid} server-1 "${playerName}"`
                 }
             }
         });
@@ -168,16 +168,16 @@ describe("Sepolia Mode (/nexus:my_nfts) Test Suite", () => {
         assert.ok(commandLines.length > 0, "Bridge should respond with commands to Minecraft server");
 
         assert.ok(
-            commandLines.some((cmd) => cmd.includes("Your NFTs:")),
-            "Output should contain header 'Your NFTs:'"
+            commandLines.some((cmd) => cmd.includes("Your Available NFTs:")),
+            "Output should contain header 'Your Available NFTs:'"
         );
         assert.ok(
-            commandLines.some((cmd) => cmd.includes("ID #42 (Wallet)")),
-            "Output should display NFT ID #42 (Wallet)"
+            commandLines.some((cmd) => cmd.includes("NFT #42 (Wallet)")),
+            "Output should display NFT #42 (Wallet)"
         );
     });
 
-    it("should handle unlinked or non-holder player gracefully for nexus:my_nfts in Sepolia mode", async () => {
+    it("should handle unlinked or non-holder player gracefully for nexus:summon list in Sepolia mode", async () => {
         const bridge = await import("../scripts/nft-bridge.js");
 
         const mockWs = new MockWebSocket();
@@ -196,7 +196,7 @@ describe("Sepolia Mode (/nexus:my_nfts) Test Suite", () => {
             body: {
                 eventName: "PlayerMessage",
                 properties: {
-                    Message: `nexus:my_nfts ${xuid} server-1 "${playerName}"`
+                    Message: `nexus:summon list ${xuid} server-1 "${playerName}"`
                 }
             }
         });
@@ -210,8 +210,8 @@ describe("Sepolia Mode (/nexus:my_nfts) Test Suite", () => {
             .map((m) => m.body.commandLine);
 
         assert.ok(
-            commandLines.some((cmd) => cmd.includes("No NFTs found in your linked wallet.")),
-            "Output should warn that no NFTs were found"
+            commandLines.some((cmd) => cmd.includes("No NFTs found") || cmd.includes("link your wallet") || cmd.includes("To link your wallet")),
+            "Output should provide registration/linking or warn no NFTs found"
         );
     });
 });

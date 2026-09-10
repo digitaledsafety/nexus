@@ -68,18 +68,14 @@ async function initLogin() {
             if (isPreauth) {
                 console.log('Attempting pre-authorization for address:', address);
                 try {
-                    const statementPreauth = `Pre-authorize automated BRAG fee payment and NFT vault transfers for address: ${address}`;
-                    const msgPreauth = `${domain} wants you to pre-authorize in-game summoning:\n${address}\n\n${statementPreauth}\n\nURI: ${origin}\nVersion: 1\nChain ID: ${network.chainId}\nIssued At: ${new Date().toISOString()}`;
-                    const sigPreauth = await signer.signMessage(msgPreauth);
-
                     const fetchFn = typeof fetchBridgeEndpoint === 'function' ? fetchBridgeEndpoint : (path, opts) => fetch(`http://localhost:9000${path}`, opts);
                     const preauthRes = await fetchFn('/verify-preauth', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ address, bragApproved: true, nftApproved: true, message: msgPreauth, signature: sigPreauth })
+                        body: JSON.stringify({ address, bragApproved: true, nftApproved: true, message, signature })
                     });
                     if (preauthRes.ok) {
-                        alert('In-game automated summoning successfully pre-authorized!');
+                        alert(token ? 'Account linked & in-game automated summoning successfully pre-authorized!' : 'In-game automated summoning successfully pre-authorized!');
                     } else {
                         const err = await preauthRes.json();
                         alert('Pre-authorization failed: ' + err.error);

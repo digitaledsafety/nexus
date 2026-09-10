@@ -186,58 +186,6 @@ async function initiateBridgeConnection(websocketModule: any = null, wsUrl = "ws
 }
 
 function registerCustomCommands(registry: MockCustomCommandRegistry, world: any = mockWorld, system: any = mockSystem) {
-    registry.registerCommand(
-        {
-            name: "nexus:register",
-            description: "Request registration link for NFT bridge",
-            permissionLevel: "Any",
-            cheatsRequired: false
-        },
-        (origin: any) => {
-            const player = origin.initiator ?? origin.sourceEntity;
-            const platformId = player?.xuid || player?.id;
-            if (!player || !platformId) {
-                player?.sendMessage?.("§cYou must be signed in to Xbox Live to register.§r");
-                return { status: 0 };
-            }
-            player.sendMessage("§bRequesting registration link...§r");
-
-            system.run(() => {
-                const sent = sendBridgeMessage(`nexus:register ${platformId} ${SERVER_ID} "${player.name}"`);
-                if (!sent) {
-                    player.sendMessage("§cBridge server is offline.§r");
-                }
-            });
-            return { status: 1 };
-        }
-    );
-
-    registry.registerCommand(
-        {
-            name: "nexus:my_nfts",
-            description: "Fetch and display your NFTs",
-            permissionLevel: "Any",
-            cheatsRequired: false
-        },
-        (origin: any) => {
-            const player = origin.initiator ?? origin.sourceEntity;
-            const platformId = player?.xuid || player?.id;
-            if (!player || !platformId) {
-                player?.sendMessage?.("§cYou must be signed in to Xbox Live to view your NFTs.§r");
-                return { status: 0 };
-            }
-
-            player.sendMessage("§bFetching your NFTs...§r");
-
-            system.run(() => {
-                const sent = sendBridgeMessage(`nexus:my_nfts ${platformId} ${SERVER_ID} "${player.name}"`);
-                if (!sent) {
-                    player.sendMessage("§cBridge server error.§r");
-                }
-            });
-            return { status: 1 };
-        }
-    );
 
     registry.registerCommand(
         {
@@ -394,27 +342,6 @@ describe('Minecraft Custom Commands & Direct Script WebSocket Logic', () => {
     });
 
     describe('custom commands execution', () => {
-        it('should execute nexus:my_nfts custom command over script WebSocket', () => {
-            const origin = { sourceEntity: mockPlayer };
-            registry.executeCommand("nexus:my_nfts", origin);
-
-            assert.strictEqual(activeSocket!.sentMessages.length, 1);
-            const sent = JSON.parse(activeSocket!.sentMessages[0]);
-            assert.strictEqual(sent.body.properties.Message, `nexus:my_nfts test-xuid server-1 "test-player"`);
-            assert.strictEqual(mockPlayer.sendMessage.mock.calls.length, 1);
-            assert.strictEqual(mockPlayer.sendMessage.mock.calls[0].arguments[0], "§bFetching your NFTs...§r");
-        });
-
-        it('should execute nexus:register custom command over script WebSocket', () => {
-            const origin = { sourceEntity: mockPlayer };
-            registry.executeCommand("nexus:register", origin);
-
-            assert.strictEqual(activeSocket!.sentMessages.length, 1);
-            const sent = JSON.parse(activeSocket!.sentMessages[0]);
-            assert.strictEqual(sent.body.properties.Message, `nexus:register test-xuid server-1 "test-player"`);
-            assert.strictEqual(mockPlayer.sendMessage.mock.calls.length, 1);
-            assert.strictEqual(mockPlayer.sendMessage.mock.calls[0].arguments[0], "§bRequesting registration link...§r");
-        });
 
         it('should execute nexus:summon custom command over script WebSocket', () => {
             const origin = { sourceEntity: mockPlayer };

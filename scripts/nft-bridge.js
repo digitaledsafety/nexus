@@ -171,8 +171,14 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
 async function handleSummonCommand(target, platformId, serverId, playerName) {
     const platformStatus = await getPlatformStatus(platformId);
     if (!platformStatus.linked) {
-        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] You must link your wallet first using /nexus:register.§r"}]}`);
-        return { success: false, reason: "unlinked" };
+        const regData = await createRegistrationToken(platformId);
+        const registrationUrl = `http://localhost:3000?token=${regData.token}&preauth=true`;
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§e====================================§r"}]}`);
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§aTo link your wallet & authorize summoning, visit:§r"}]}`);
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§f${registrationUrl}§r"}]}`);
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§7(This single link connects your account & pre-authorizes summoning)§r"}]}`);
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§e====================================§r"}]}`);
+        return { success: false, reason: "unlinked", registrationUrl };
     }
 
     const ownership = await getOwnershipStatus(platformId, serverId, playerName);
@@ -194,13 +200,21 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
     }
 
     const cleanTarget = target ? target.replace(/^#/, '').toLowerCase() : '';
-    let matchingNft = target
-        ? allNfts.find(nft =>
-            nft.tokenId.toString().toLowerCase() === cleanTarget ||
-            (nft.animation_url && nft.animation_url.toLowerCase().includes(cleanTarget)) ||
-            (nft.image && nft.image.toLowerCase().includes(cleanTarget))
-          )
-        : (currentVaultNfts[0] || allNfts[0]);
+
+    if (!target || cleanTarget === 'list') {
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§e[Nexus] Your Available NFTs:§r"}]}`);
+        for (const nft of allNfts) {
+            sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§b- NFT #${nft.tokenId} (${nft.location || 'Wallet'})§r"}]}`);
+        }
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§aUse /nexus:summon <tokenId> to summon an NFT into this realm!§r"}]}`);
+        return { success: true, action: "listed", nfts: allNfts };
+    }
+
+    let matchingNft = allNfts.find(nft =>
+        nft.tokenId.toString().toLowerCase() === cleanTarget ||
+        (nft.animation_url && nft.animation_url.toLowerCase().includes(cleanTarget)) ||
+        (nft.image && nft.image.toLowerCase().includes(cleanTarget))
+    );
 
     if (!matchingNft) {
         sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] NFT structure target '${target}' not found in your vault exhibition.§r"}]}`);
