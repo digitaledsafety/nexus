@@ -1,4 +1,4 @@
-import { world, system, CommandPermissionLevel, CustomCommandStatus } from "@minecraft/server";
+import { world, system, CommandPermissionLevel, CustomCommandStatus, CustomCommandParamType } from "@minecraft/server";
 import { websocket } from "@minecraft/server-net";
 import { WS_URL, SERVER_ID, NEXUS_ADDRESS } from "./config.js";
 
@@ -160,7 +160,10 @@ if (system.beforeEvents && system.beforeEvents.startup) {
                 name: "nexus:summon",
                 description: "Summon an owned structure NFT into the world or list available NFTs",
                 permissionLevel: CommandPermissionLevel ? CommandPermissionLevel.Any : "Any",
-                cheatsRequired: false
+                cheatsRequired: false,
+                optionalParameters: [
+                    { name: "target", type: CustomCommandParamType ? CustomCommandParamType.String : "String" }
+                ]
             },
             (origin, target) => {
                 const player = origin.initiator ?? origin.sourceEntity;

@@ -136,6 +136,8 @@ describe('Minecraft Addon Validation', () => {
             assert.ok(mainJsContent.includes('nexus:summon'), 'nexus:summon missing from main.js');
             assert.ok(mainJsContent.includes('Summon an owned structure NFT into the world'), 'nexus:summon description missing');
             assert.ok(mainJsContent.includes('sendBridgeMessage'), 'sendBridgeMessage trigger missing');
+            assert.ok(mainJsContent.includes('optionalParameters'), 'optionalParameters missing from nexus:summon custom command registration');
+            assert.ok(mainJsContent.includes('CustomCommandParamType'), 'CustomCommandParamType import or usage missing');
         });
 
         it('should NOT register debug nexus:reconnect custom command', () => {
