@@ -63,6 +63,32 @@ async function initLogin() {
                 }
             }
 
+            // 5. Handle Pre-Authorization if requested
+            const isPreauth = params.get('preauth');
+            if (isPreauth) {
+                console.log('Attempting pre-authorization for address:', address);
+                try {
+                    const statementPreauth = `Pre-authorize automated BRAG fee payment and NFT vault transfers for address: ${address}`;
+                    const msgPreauth = `${domain} wants you to pre-authorize in-game summoning:\n${address}\n\n${statementPreauth}\n\nURI: ${origin}\nVersion: 1\nChain ID: ${network.chainId}\nIssued At: ${new Date().toISOString()}`;
+                    const sigPreauth = await signer.signMessage(msgPreauth);
+
+                    const fetchFn = typeof fetchBridgeEndpoint === 'function' ? fetchBridgeEndpoint : (path, opts) => fetch(`http://localhost:9000${path}`, opts);
+                    const preauthRes = await fetchFn('/verify-preauth', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ address, bragApproved: true, nftApproved: true, message: msgPreauth, signature: sigPreauth })
+                    });
+                    if (preauthRes.ok) {
+                        alert('In-game automated summoning successfully pre-authorized!');
+                    } else {
+                        const err = await preauthRes.json();
+                        alert('Pre-authorization failed: ' + err.error);
+                    }
+                } catch (e) {
+                    console.error('Pre-authorization failed', e);
+                }
+            }
+
             router.navigateTo('manager');
         } catch (err) {
             console.error(err);
@@ -72,10 +98,15 @@ async function initLogin() {
 
     const params = getParams();
     const token = params.get('token');
+    const isPreauth = params.get('preauth');
     const linkingStatus = document.getElementById('linkingStatus');
     const displayToken = document.getElementById('displayToken');
+    const preauthStatus = document.getElementById('preauthStatus');
     if (token && linkingStatus && displayToken) {
         linkingStatus.classList.remove('hidden');
         displayToken.innerText = token;
+    }
+    if (isPreauth && preauthStatus) {
+        preauthStatus.classList.remove('hidden');
     }
 }

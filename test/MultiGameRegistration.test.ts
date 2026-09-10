@@ -10,7 +10,9 @@ import {
     serverConfigs,
     serverSockets,
     handleSummonCommand,
-    getPlatformStatus
+    getPlatformStatus,
+    setPreAuthorization,
+    preAuthorizations
 } from "../scripts/nft-bridge.js";
 
 class MockResponse extends EventEmitter {
@@ -214,38 +216,26 @@ describe("Multi-Game User Registration & Vault Exclusivity Test Suite", () => {
             const resServer1 = await handleSummonCommand("101", platformId, "server-1", "MinecraftPlayer");
             assert.strictEqual(resServer1.success, true);
             assert.strictEqual(resServer1.tokenId, "101");
+            assert.strictEqual(resServer1.alreadyInVault, true);
 
-            // 2. Attempt summon on Server 2 (Vault B does not hold NFT) -> REJECTED (vault exclusivity)
-            const resServer2 = await handleSummonCommand("101", platformId, "server-2", "RobloxPlayer");
-            assert.strictEqual(resServer2.success, false);
-            assert.strictEqual(resServer2.reason, "not_in_vault");
+            // 2. Attempt summon on Server 2 without pre-authorization -> REJECTED (preauth required)
+            preAuthorizations.delete(account.address.toLowerCase());
+            const resServer2NoPreauth = await handleSummonCommand("101", platformId, "server-2", "RobloxPlayer");
+            assert.strictEqual(resServer2NoPreauth.success, false);
+            assert.strictEqual(resServer2NoPreauth.reason, "preauth_required");
 
-            // 3. Move/Exhibit NFT into Server 2's Vault B
-            statusCache.set(account.address.toLowerCase(), {
-                walletNfts: [],
-                vaults: {
-                    [vaultA]: [], // No longer in Vault A
-                    [vaultB]: [
-                        {
-                            tokenId: "101",
-                            nftContract: "0xBragNFTAddress",
-                            location: "Roblox / Digital Education Safety Hub",
-                            image: "http://example.com/nft.png",
-                            animation_url: "http://example.com/model.mcstructure"
-                        }
-                    ]
-                }
-            });
+            // 3. Set pre-authorization and attempt summon on Server 2 -> Automated transfer & payment
+            setPreAuthorization(account.address, { bragApproved: true, nftApproved: true });
+            const resServer2WithPreauth = await handleSummonCommand("101", platformId, "server-2", "RobloxPlayer");
+            assert.strictEqual(resServer2WithPreauth.success, true);
+            assert.strictEqual(resServer2WithPreauth.tokenId, "101");
+            assert.strictEqual(resServer2WithPreauth.feePaid, "10");
 
-            // 4. Attempt summon on Server 1 -> REJECTED (no longer in Vault A)
-            const resServer1After = await handleSummonCommand("101", platformId, "server-1", "MinecraftPlayer");
-            assert.strictEqual(resServer1After.success, false);
-            assert.strictEqual(resServer1After.reason, "not_in_vault");
-
-            // 5. Attempt summon on Server 2 -> SUCCESS
+            // 4. Attempt summon on Server 2 again -> Already in Vault (single-summon / in-vault)
             const resServer2After = await handleSummonCommand("101", platformId, "server-2", "RobloxPlayer");
             assert.strictEqual(resServer2After.success, true);
             assert.strictEqual(resServer2After.tokenId, "101");
+            assert.strictEqual(resServer2After.alreadyInVault, true);
         });
 
         it("should reject summon attempt if user is unlinked", async () => {
