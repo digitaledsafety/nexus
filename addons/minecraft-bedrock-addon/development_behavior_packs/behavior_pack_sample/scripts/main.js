@@ -141,59 +141,6 @@ if (system.beforeEvents && system.beforeEvents.startup) {
 
         customCommandRegistry.registerCommand(
             {
-                name: "nexus:register",
-                description: "Request registration link for NFT bridge",
-                permissionLevel: CommandPermissionLevel ? CommandPermissionLevel.Any : "Any",
-                cheatsRequired: false
-            },
-            (origin) => {
-                const player = origin.initiator ?? origin.sourceEntity;
-                const platformId = player?.xuid || player?.id;
-                if (!player || !platformId) {
-                    player?.sendMessage?.("§cYou must be signed in to Xbox Live to register.§r");
-                    return { status: CustomCommandStatus ? CustomCommandStatus.Failure : 0 };
-                }
-                player.sendMessage("§bRequesting registration link...§r");
-
-                system.run(() => {
-                    const sent = sendBridgeMessage(`nexus:register ${platformId} ${SERVER_ID} "${player.name}"`);
-                    if (!sent) {
-                        player.sendMessage("§cBridge server is offline.§r");
-                    }
-                });
-                return { status: CustomCommandStatus ? CustomCommandStatus.Success : 1 };
-            }
-        );
-
-        customCommandRegistry.registerCommand(
-            {
-                name: "nexus:my_nfts",
-                description: "Fetch and display your NFTs",
-                permissionLevel: CommandPermissionLevel ? CommandPermissionLevel.Any : "Any",
-                cheatsRequired: false
-            },
-            (origin) => {
-                const player = origin.initiator ?? origin.sourceEntity;
-                const platformId = player?.xuid || player?.id;
-                if (!player || !platformId) {
-                    player?.sendMessage?.("§cYou must be signed in to Xbox Live to view your NFTs.§r");
-                    return { status: CustomCommandStatus ? CustomCommandStatus.Failure : 0 };
-                }
-
-                player.sendMessage("§bFetching your NFTs...§r");
-
-                system.run(() => {
-                    const sent = sendBridgeMessage(`nexus:my_nfts ${platformId} ${SERVER_ID} "${player.name}"`);
-                    if (!sent) {
-                        player.sendMessage("§cBridge server error.§r");
-                    }
-                });
-                return { status: CustomCommandStatus ? CustomCommandStatus.Success : 1 };
-            }
-        );
-
-        customCommandRegistry.registerCommand(
-            {
                 name: "nexus:contract",
                 description: "Display the Nexus contract address",
                 permissionLevel: CommandPermissionLevel ? CommandPermissionLevel.Any : "Any",
@@ -211,7 +158,7 @@ if (system.beforeEvents && system.beforeEvents.startup) {
         customCommandRegistry.registerCommand(
             {
                 name: "nexus:summon",
-                description: "Summon an owned structure NFT into the world",
+                description: "Summon an owned structure NFT into the world or list available NFTs",
                 permissionLevel: CommandPermissionLevel ? CommandPermissionLevel.Any : "Any",
                 cheatsRequired: false
             },
@@ -223,15 +170,11 @@ if (system.beforeEvents && system.beforeEvents.startup) {
                     return { status: CustomCommandStatus ? CustomCommandStatus.Failure : 0 };
                 }
 
-                if (!target) {
-                    player.sendMessage("§cUsage: /nexus:summon <tokenId_or_name>§r");
-                    return { status: CustomCommandStatus ? CustomCommandStatus.Failure : 0 };
-                }
-
-                player.sendMessage(`§bRequesting structure summon for ${target}...§r`);
+                const targetArg = target || "list";
+                player.sendMessage(`§bRequesting structure summon for ${targetArg}...§r`);
 
                 system.run(() => {
-                    const sent = sendBridgeMessage(`nexus:summon ${target} ${platformId} ${SERVER_ID} "${player.name}"`);
+                    const sent = sendBridgeMessage(`nexus:summon ${targetArg} ${platformId} ${SERVER_ID} "${player.name}"`);
                     if (!sent) {
                         player.sendMessage("§cBridge server error.§r");
                     }

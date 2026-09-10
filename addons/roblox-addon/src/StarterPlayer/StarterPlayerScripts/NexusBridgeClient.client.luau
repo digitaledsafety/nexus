@@ -9,8 +9,6 @@ local NexusBridgeConfig = require(ReplicatedStorage:WaitForChild("NexusBridgeCon
 
 local LocalPlayer = Players.LocalPlayer
 
-local registerEvent = ReplicatedStorage:WaitForChild(NexusBridgeConfig.REMOTE_EVENTS.REGISTER) :: RemoteEvent
-local myNftsEvent = ReplicatedStorage:WaitForChild(NexusBridgeConfig.REMOTE_EVENTS.MY_NFTS) :: RemoteEvent
 local summonEvent = ReplicatedStorage:WaitForChild(NexusBridgeConfig.REMOTE_EVENTS.SUMMON) :: RemoteEvent
 local notificationEvent = ReplicatedStorage:WaitForChild(NexusBridgeConfig.REMOTE_EVENTS.NOTIFICATION) :: RemoteEvent
 

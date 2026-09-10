@@ -42,6 +42,58 @@ if (fs.existsSync(MAPPINGS_FILE)) {
 
 const pendingTokens = new Map();
 const statusCache = new Map();
+const preAuthorizations = new Map(); // address.toLowerCase() -> { bragApproved: boolean, nftApproved: boolean }
+
+function getPreAuthorization(address) {
+    if (!address) return { bragApproved: false, nftApproved: false };
+    return preAuthorizations.get(address.toLowerCase()) || { bragApproved: false, nftApproved: false };
+}
+
+function setPreAuthorization(address, preauthObj) {
+    if (!address) return;
+    preAuthorizations.set(address.toLowerCase(), {
+        bragApproved: preauthObj.bragApproved ?? true,
+        nftApproved: preauthObj.nftApproved ?? true
+    });
+}
+
+function executeVaultTransferAndPayment(address, nft, targetVaultAddr, feeAmount, locationName) {
+    if (!address) return;
+    let userStatus = statusCache.get(address.toLowerCase());
+    if (!userStatus) {
+        userStatus = { walletNfts: [], vaults: {} };
+        statusCache.set(address.toLowerCase(), userStatus);
+    }
+
+    // Deduct BRAG fee if tracked in userStatus
+    if (userStatus.bragBalance !== undefined && userStatus.bragBalance !== null) {
+        const avail = typeof userStatus.bragBalance === 'number' ? userStatus.bragBalance : parseFloat(userStatus.bragBalance.toString());
+        const fee = parseFloat(feeAmount.toString());
+        userStatus.bragBalance = Math.max(0, avail - fee).toString();
+    }
+
+    // Remove from wallet
+    userStatus.walletNfts = (userStatus.walletNfts || []).filter(n => n.tokenId.toString() !== nft.tokenId.toString());
+
+    // Remove from other vaults
+    if (userStatus.vaults) {
+        for (const [vAddr, nftList] of Object.entries(userStatus.vaults)) {
+            if (vAddr.toLowerCase() !== targetVaultAddr.toLowerCase()) {
+                userStatus.vaults[vAddr] = nftList.filter(n => n.tokenId.toString() !== nft.tokenId.toString());
+            }
+        }
+    }
+
+    // Add to target vault
+    if (!userStatus.vaults) userStatus.vaults = {};
+    if (!userStatus.vaults[targetVaultAddr]) userStatus.vaults[targetVaultAddr] = [];
+
+    const existingInVault = userStatus.vaults[targetVaultAddr].find(n => n.tokenId.toString() === nft.tokenId.toString());
+    if (!existingInVault) {
+        const transferredNft = { ...nft, location: locationName || "Exhibited Vault" };
+        userStatus.vaults[targetVaultAddr].push(transferredNft);
+    }
+}
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
@@ -119,29 +171,50 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
 async function handleSummonCommand(target, platformId, serverId, playerName) {
     const platformStatus = await getPlatformStatus(platformId);
     if (!platformStatus.linked) {
-        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] You must link your wallet first using /nexus:register.§r"}]}`);
-        return { success: false, reason: "unlinked" };
+        const regData = await createRegistrationToken(platformId);
+        const registrationUrl = `http://localhost:3000?token=${regData.token}&preauth=true`;
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§e====================================§r"}]}`);
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§aTo link your wallet & authorize summoning, visit:§r"}]}`);
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§f${registrationUrl}§r"}]}`);
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§7(This single link connects your account & pre-authorizes summoning)§r"}]}`);
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§e====================================§r"}]}`);
+        return { success: false, reason: "unlinked", registrationUrl };
     }
 
     const ownership = await getOwnershipStatus(platformId, serverId, playerName);
-    const serverConfig = serverConfigs[serverId];
-    const vaultAddr = (serverConfig && serverConfig.vaultAddress) ? serverConfig.vaultAddress.toLowerCase() : null;
+    const serverConfig = serverConfigs[serverId] || { name: serverId, vaultAddress: null };
+    const defaultVaultAddr = getContractAddress('ExhibitVault');
+    const vaultAddr = (serverConfig && serverConfig.vaultAddress)
+        ? serverConfig.vaultAddress.toLowerCase()
+        : (defaultVaultAddr ? defaultVaultAddr.toLowerCase() : "0xdefaultvault");
 
-    if (!vaultAddr || !ownership.inVault) {
+    const userStatus = statusCache.get(ownership.address.toLowerCase()) || { walletNfts: [], vaults: {} };
+    const currentVaultNfts = (vaultAddr && userStatus.vaults && userStatus.vaults[vaultAddr]) ? userStatus.vaults[vaultAddr] : [];
+
+    const allVaultNfts = userStatus.vaults ? Object.values(userStatus.vaults).flat() : [];
+    const allNfts = [...(userStatus.walletNfts || []), ...allVaultNfts];
+
+    if (allNfts.length === 0) {
         sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] You do not have an active exhibited NFT in this server's vault.§r"}]}`);
         return { success: false, reason: "not_in_vault" };
     }
 
-    const vaultNfts = statusCache.get(ownership.address.toLowerCase())?.vaults[vaultAddr] || [];
-    // Match target against tokenId or title/name or media URL
     const cleanTarget = target ? target.replace(/^#/, '').toLowerCase() : '';
-    const matchingNft = target
-        ? vaultNfts.find(nft =>
-            nft.tokenId.toString().toLowerCase() === cleanTarget ||
-            (nft.animation_url && nft.animation_url.toLowerCase().includes(cleanTarget)) ||
-            (nft.image && nft.image.toLowerCase().includes(cleanTarget))
-          )
-        : vaultNfts[0];
+
+    if (!target || cleanTarget === 'list') {
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§e[Nexus] Your Available NFTs:§r"}]}`);
+        for (const nft of allNfts) {
+            sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§b- NFT #${nft.tokenId} (${nft.location || 'Wallet'})§r"}]}`);
+        }
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§aUse /nexus:summon <tokenId> to summon an NFT into this realm!§r"}]}`);
+        return { success: true, action: "listed", nfts: allNfts };
+    }
+
+    let matchingNft = allNfts.find(nft =>
+        nft.tokenId.toString().toLowerCase() === cleanTarget ||
+        (nft.animation_url && nft.animation_url.toLowerCase().includes(cleanTarget)) ||
+        (nft.image && nft.image.toLowerCase().includes(cleanTarget))
+    );
 
     if (!matchingNft) {
         sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] NFT structure target '${target}' not found in your vault exhibition.§r"}]}`);
@@ -153,6 +226,41 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
     if (!mediaUrl || !isMcStructure) {
         sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] Selected NFT #${matchingNft.tokenId} is not a valid .mcstructure object.§r"}]}`);
         return { success: false, reason: "not_mcstructure" };
+    }
+
+    // Check if matchingNft is ALREADY in current vaultAddr
+    const isInCurrentVault = vaultAddr && currentVaultNfts.some(n => n.tokenId.toString() === matchingNft.tokenId.toString());
+
+    const feeAmount = (serverConfig && serverConfig.summonFeeBrag)
+        ? serverConfig.summonFeeBrag
+        : "10";
+
+    if (!isInCurrentVault) {
+        // Must transfer into current vault -> Check pre-authorization
+        const preauth = getPreAuthorization(ownership.address);
+        if (!preauth.bragApproved || !preauth.nftApproved) {
+            sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§e====================================§r"}]}`);
+            sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§aPre-authorization required for automated vault transfer:§r"}]}`);
+            sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§fhttp://localhost:3000?preauth=true&address=${ownership.address}§r"}]}`);
+            sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§7(Transfer fee: ${feeAmount} BRAG to move NFT into this vault)§r"}]}`);
+            sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§e====================================§r"}]}`);
+            return { success: false, reason: "preauth_required", preauthUrl: `http://localhost:3000?preauth=true&address=${ownership.address}` };
+        }
+
+        // Check BRAG token balance
+        if (userStatus.bragBalance !== undefined && userStatus.bragBalance !== null) {
+            const avail = typeof userStatus.bragBalance === 'number' ? userStatus.bragBalance : parseFloat(userStatus.bragBalance.toString());
+            const req = parseFloat(feeAmount.toString());
+            if (avail < req) {
+                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] Insufficient BRAG balance (${avail}/${req} BRAG required).§r"}]}`);
+                return { success: false, reason: "insufficient_brag", available: avail.toString(), required: req.toString() };
+            }
+        }
+
+        executeVaultTransferAndPayment(ownership.address, matchingNft, vaultAddr, feeAmount, serverConfig.name);
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§a[NFT] Paid ${feeAmount} BRAG fee and transferred NFT #${matchingNft.tokenId} to ${serverConfig.name} Vault!§r"}]}`);
+    } else {
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§a[NFT] NFT #${matchingNft.tokenId} is already in this client's vault! Loading structure...§r"}]}`);
     }
 
     try {
@@ -177,8 +285,9 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
         }
 
         sendMinecraftCommand(serverId, `execute at "${playerName}" run structure load "${structureName}" ~ ~ ~`);
-        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§a[NFT] Successfully summoned structure '${structureName}' for NFT #${matchingNft.tokenId}!§r"}]}`);
-        return { success: true, structureName, tokenId: matchingNft.tokenId };
+        sendMinecraftCommand(serverId, `give "${playerName}" structure_block 1`);
+        sendMinecraftCommand(serverId, `tellraw @a {"rawtext":[{"text":"§6[Nexus] ★ EXCITING EVENT ★ Player ${playerName} summoned structure for NFT #${matchingNft.tokenId}!§r"}]}`);
+        return { success: true, structureName, tokenId: matchingNft.tokenId, feePaid: isInCurrentVault ? "0" : feeAmount, alreadyInVault: isInCurrentVault };
     } catch (e) {
         console.error("Failed to download or load structure:", e);
         sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] Failed to load structure: ${e.message}§r"}]}`);
@@ -440,6 +549,39 @@ export const handleRequest = async (req, res) => {
     const searchParams = url.searchParams;
 
     try {
+        if (searchParams.get('path') === 'check-preauth') {
+            const address = searchParams.get('address');
+            const preauth = getPreAuthorization(address);
+            res.writeHead(200);
+            res.end(JSON.stringify({ address, ...preauth }));
+            return;
+        }
+
+        if (pathname === '/verify-preauth' && req.method === 'POST') {
+            let body = '';
+            for await (const chunk of req) body += chunk;
+            const { address, bragApproved, nftApproved, signature, message, skipVerify } = JSON.parse(body);
+            if (!address) {
+                res.writeHead(400); res.end(JSON.stringify({ error: "Missing address" }));
+                return;
+            }
+            if (!skipVerify && CHAIN_ID !== 31337) {
+                if (!message || !message.includes(address) || !signature) {
+                    res.writeHead(400); res.end(JSON.stringify({ error: "Invalid preauth signature or message" }));
+                    return;
+                }
+                const isValid = await verifyMessage({ address, message, signature });
+                if (!isValid) {
+                    res.writeHead(401); res.end(JSON.stringify({ error: "Invalid signature" }));
+                    return;
+                }
+            }
+            setPreAuthorization(address, { bragApproved: bragApproved ?? true, nftApproved: nftApproved ?? true });
+            res.writeHead(200);
+            res.end(JSON.stringify({ success: true, address, bragApproved: bragApproved ?? true, nftApproved: nftApproved ?? true }));
+            return;
+        }
+
         if (searchParams.get('path') === 'check-platform') {
             const platformId = searchParams.get('platformId');
             const data = await getPlatformStatus(platformId);
@@ -622,7 +764,11 @@ export {
     activePlayers,
     serverSockets,
     serverConfigs,
-    statusCache
+    statusCache,
+    preAuthorizations,
+    getPreAuthorization,
+    setPreAuthorization,
+    executeVaultTransferAndPayment
 };
 
 async function fetchWithRetry(fn, label, maxRetries = 3) {
