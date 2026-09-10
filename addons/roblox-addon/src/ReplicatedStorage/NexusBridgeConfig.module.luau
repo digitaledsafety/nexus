@@ -12,8 +12,6 @@ NexusBridgeConfig.MAX_RETRIES = 3                       -- Maximum HTTP retry at
 
 -- RemoteEvent Names
 NexusBridgeConfig.REMOTE_EVENTS = {
-    REGISTER = "NexusRegisterEvent",
-    MY_NFTS = "NexusMyNFTsEvent",
     SUMMON = "NexusSummonEvent",
     NOTIFICATION = "NexusNotificationEvent"
 }
