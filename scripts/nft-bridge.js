@@ -65,6 +65,13 @@ function executeVaultTransferAndPayment(address, nft, targetVaultAddr, feeAmount
         statusCache.set(address.toLowerCase(), userStatus);
     }
 
+    // Deduct BRAG fee if tracked in userStatus
+    if (userStatus.bragBalance !== undefined && userStatus.bragBalance !== null) {
+        const avail = typeof userStatus.bragBalance === 'number' ? userStatus.bragBalance : parseFloat(userStatus.bragBalance.toString());
+        const fee = parseFloat(feeAmount.toString());
+        userStatus.bragBalance = Math.max(0, avail - fee).toString();
+    }
+
     // Remove from wallet
     userStatus.walletNfts = (userStatus.walletNfts || []).filter(n => n.tokenId.toString() !== nft.tokenId.toString());
 
@@ -224,6 +231,16 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
             sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§7(Transfer fee: ${feeAmount} BRAG to move NFT into this vault)§r"}]}`);
             sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§e====================================§r"}]}`);
             return { success: false, reason: "preauth_required", preauthUrl: `http://localhost:3000?preauth=true&address=${ownership.address}` };
+        }
+
+        // Check BRAG token balance
+        if (userStatus.bragBalance !== undefined && userStatus.bragBalance !== null) {
+            const avail = typeof userStatus.bragBalance === 'number' ? userStatus.bragBalance : parseFloat(userStatus.bragBalance.toString());
+            const req = parseFloat(feeAmount.toString());
+            if (avail < req) {
+                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] Insufficient BRAG balance (${avail}/${req} BRAG required).§r"}]}`);
+                return { success: false, reason: "insufficient_brag", available: avail.toString(), required: req.toString() };
+            }
         }
 
         executeVaultTransferAndPayment(ownership.address, matchingNft, vaultAddr, feeAmount, serverConfig.name);
