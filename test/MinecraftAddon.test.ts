@@ -209,7 +209,10 @@ function registerCustomCommands(registry: MockCustomCommandRegistry, world: any 
             name: "nexus:summon",
             description: "Summon an owned structure NFT into the world",
             permissionLevel: "Any",
-            cheatsRequired: false
+            cheatsRequired: false,
+            optionalParameters: [
+                { name: "target", type: "String" }
+            ]
         },
         (origin: any, target?: string) => {
             const player = origin.initiator ?? origin.sourceEntity;
@@ -342,6 +345,14 @@ describe('Minecraft Custom Commands & Direct Script WebSocket Logic', () => {
     });
 
     describe('custom commands execution', () => {
+
+        it('should register nexus:summon with optionalParameters schema', () => {
+            const cmd = registry.commands.get("nexus:summon");
+            assert.ok(cmd, "nexus:summon command should be registered");
+            assert.ok(Array.isArray(cmd.config.optionalParameters), "optionalParameters should be an array");
+            assert.strictEqual(cmd.config.optionalParameters.length, 1);
+            assert.strictEqual(cmd.config.optionalParameters[0].name, "target");
+        });
 
         it('should execute nexus:summon custom command over script WebSocket', () => {
             const origin = { sourceEntity: mockPlayer };
