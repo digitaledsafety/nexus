@@ -126,6 +126,8 @@ describe("Refinement & New Features", async function () {
                 "https://example.com/video.mp4",
                 "https://example.com/model.glb",
                 "https://example.com/scene.GLTF",
+                "https://example.com/castle.mcstructure",
+                "https://example.com/castle.MCSTRUCTURE?v=1",
                 "data:audio/mp3;base64,AAA",
                 "data:video/webm;base64,BBB",
                 "data:image/gif;base64,CCC"
