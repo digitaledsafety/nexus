@@ -221,9 +221,19 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
         return { success: false, reason: "nft_not_found" };
     }
 
-    const mediaUrl = matchingNft.animation_url || matchingNft.image;
-    const isMcStructure = matchingNft.mcstructure || (mediaUrl && (mediaUrl.toLowerCase().endsWith('.mcstructure') || mediaUrl.toLowerCase().includes('.mcstructure')));
-    if (!mediaUrl || !isMcStructure) {
+    const checkMcStructure = (url) => url && typeof url === 'string' && (
+        url.toLowerCase().endsWith('.mcstructure') ||
+        url.toLowerCase().includes('.mcstructure') ||
+        url.toLowerCase().includes('mcstructure')
+    );
+
+    const structureUrl = checkMcStructure(matchingNft.animation_url)
+        ? matchingNft.animation_url
+        : (checkMcStructure(matchingNft.image) ? matchingNft.image : (matchingNft.animation_url || matchingNft.image));
+
+    const isMcStructure = Boolean(matchingNft.mcstructure || checkMcStructure(matchingNft.animation_url) || checkMcStructure(matchingNft.image) || checkMcStructure(structureUrl));
+
+    if (!structureUrl || !isMcStructure) {
         sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] Selected NFT #${matchingNft.tokenId} is not a valid .mcstructure object.§r"}]}`);
         return { success: false, reason: "not_mcstructure" };
     }
@@ -272,11 +282,11 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
         const structureName = `nft_${matchingNft.tokenId}`;
         const structureFilePath = path.join(structuresDir, `${structureName}.mcstructure`);
 
-        if (mediaUrl.startsWith('data:')) {
-            const base64Data = mediaUrl.split(',')[1];
+        if (structureUrl.startsWith('data:')) {
+            const base64Data = structureUrl.split(',')[1];
             fs.writeFileSync(structureFilePath, Buffer.from(base64Data, 'base64'));
-        } else if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
-            const response = await fetch(mediaUrl);
+        } else if (structureUrl.startsWith('http://') || structureUrl.startsWith('https://')) {
+            const response = await fetch(structureUrl);
             const arrayBuffer = await response.arrayBuffer();
             fs.writeFileSync(structureFilePath, Buffer.from(arrayBuffer));
         } else {
