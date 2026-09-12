@@ -646,5 +646,43 @@ function updateCartUI() {
 }
 
 
+/**
+ * Dynamic Bridge Endpoint Fetcher
+ * Tries window.APP_CONFIG.bridgeUrl, current host on port 9000, localhost:9000, and 127.0.0.1:9000 with fallbacks.
+ */
+async function fetchBridgeEndpoint(path, options = {}) {
+    const candidateUrls = [];
+    if (window.APP_CONFIG && window.APP_CONFIG.bridgeUrl) {
+        candidateUrls.push(window.APP_CONFIG.bridgeUrl);
+    }
+
+    const host = window.location.hostname || 'localhost';
+    const protocol = window.location.protocol.startsWith('https') ? 'https' : 'http';
+
+    candidateUrls.push(`${protocol}://${host}:9000`);
+
+    if (host !== 'localhost') {
+        candidateUrls.push(`${protocol}://localhost:9000`);
+    }
+    if (host !== '127.0.0.1') {
+        candidateUrls.push(`${protocol}://127.0.0.1:9000`);
+    }
+
+    const uniqueUrls = Array.from(new Set(candidateUrls));
+
+    let lastError = null;
+    for (const baseUrl of uniqueUrls) {
+        try {
+            const cleanBase = baseUrl.replace(/\/$/, '');
+            const url = `${cleanBase}${path}`;
+            const res = await fetch(url, options);
+            return res;
+        } catch (e) {
+            lastError = e;
+        }
+    }
+    throw lastError || new Error("Failed to connect to bridge server");
+}
+
 // Global initialization
 window.addEventListener('DOMContentLoaded', initCore);
