@@ -221,4 +221,63 @@ describe("Automated Summon Payment & Critical Test Cases Suite", () => {
         assert.strictEqual(res.available, "3");
         assert.strictEqual(res.required, "10");
     });
+
+    it("5. Reproduction Test: Recognize .mcstructure from Data URIs and non-extension metadata formats", async () => {
+        const platformId = "xuid-data-uri-player";
+        mappings.set(platformId, account.address);
+
+        const currentVault = "0x6666666666666666666666666666666666666666";
+        serverConfigs["server-1"] = { vaultAddress: currentVault, name: "Survival Server", summonFeeBrag: "0" };
+
+        const nftWithDataUri = {
+            tokenId: "888",
+            nftContract: "0xBragNFTAddress",
+            location: "Survival Server",
+            image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA6jnS7gAAAABJRU5ErkJggg==",
+            animation_url: "data:application/octet-stream;base64,TU9DS19NQ1NUUlVDVFVSRV9EQVRB",
+            mime_type: "application/x-minecraft-structure"
+        };
+
+        statusCache.set(account.address.toLowerCase(), {
+            walletNfts: [],
+            bragBalance: "100",
+            vaults: {
+                [currentVault.toLowerCase()]: [nftWithDataUri]
+            }
+        });
+
+        setPreAuthorization(account.address, { bragApproved: true, nftApproved: true });
+
+        const res = await handleSummonCommand("888", platformId, "server-1", "Steve");
+        assert.strictEqual(res.success, true, `Expected summon to succeed for .mcstructure data URI object, but got reason: ${res.reason}`);
+    });
+
+    it("6. Edge Case Test: Recognize .mcstructure when animation_url is undefined and structure URI is stored in image", async () => {
+        const platformId = "xuid-image-only-player";
+        mappings.set(platformId, account.address);
+
+        const currentVault = "0x7777777777777777777777777777777777777777";
+        serverConfigs["server-1"] = { vaultAddress: currentVault, name: "Survival Server", summonFeeBrag: "0" };
+
+        const nftWithImageOnly = {
+            tokenId: "999",
+            nftContract: "0xBragNFTAddress",
+            location: "Survival Server",
+            image: "data:application/octet-stream;base64,TU9DS19NQ1NUUlVDVFVSRV9EQVRB",
+            mime_type: "application/x-minecraft-structure"
+        };
+
+        statusCache.set(account.address.toLowerCase(), {
+            walletNfts: [],
+            bragBalance: "100",
+            vaults: {
+                [currentVault.toLowerCase()]: [nftWithImageOnly]
+            }
+        });
+
+        setPreAuthorization(account.address, { bragApproved: true, nftApproved: true });
+
+        const res = await handleSummonCommand("999", platformId, "server-1", "Steve");
+        assert.strictEqual(res.success, true, `Expected summon to succeed when animation_url is undefined, but got reason: ${res.reason}`);
+    });
 });

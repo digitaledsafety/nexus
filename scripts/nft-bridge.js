@@ -221,17 +221,41 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
         return { success: false, reason: "nft_not_found" };
     }
 
-    const checkMcStructure = (url) => url && typeof url === 'string' && (
-        url.toLowerCase().endsWith('.mcstructure') ||
-        url.toLowerCase().includes('.mcstructure') ||
-        url.toLowerCase().includes('mcstructure')
-    );
+    const checkMcStructure = (str, nftObj) => {
+        if (!str || typeof str !== 'string') return false;
 
-    const structureUrl = checkMcStructure(matchingNft.animation_url)
+        if (nftObj && (
+            nftObj.mcstructure === true ||
+            nftObj.file_type === 'mcstructure' ||
+            nftObj.mime_type === 'application/x-minecraft-structure' ||
+            (typeof nftObj.mime_type === 'string' && nftObj.mime_type.toLowerCase().includes('mcstructure'))
+        )) {
+            return true;
+        }
+
+        const lower = str.toLowerCase();
+
+        return (
+            lower.endsWith('.mcstructure') ||
+            lower.includes('.mcstructure') ||
+            lower.includes('mcstructure') ||
+            lower.startsWith('data:application/octet-stream') ||
+            lower.startsWith('data:application/x-minecraft-structure') ||
+            lower.startsWith('data:model/mcstructure') ||
+            lower.startsWith('data:binary/octet-stream')
+        );
+    };
+
+    const structureUrl = checkMcStructure(matchingNft.animation_url, matchingNft)
         ? matchingNft.animation_url
-        : (checkMcStructure(matchingNft.image) ? matchingNft.image : (matchingNft.animation_url || matchingNft.image));
+        : (checkMcStructure(matchingNft.image, matchingNft) ? matchingNft.image : (matchingNft.animation_url || matchingNft.image));
 
-    const isMcStructure = Boolean(matchingNft.mcstructure || checkMcStructure(matchingNft.animation_url) || checkMcStructure(matchingNft.image) || checkMcStructure(structureUrl));
+    const isMcStructure = Boolean(
+        matchingNft.mcstructure ||
+        checkMcStructure(matchingNft.animation_url, matchingNft) ||
+        checkMcStructure(matchingNft.image, matchingNft) ||
+        checkMcStructure(structureUrl, matchingNft)
+    );
 
     if (!structureUrl || !isMcStructure) {
         sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] Selected NFT #${matchingNft.tokenId} is not a valid .mcstructure object.§r"}]}`);
