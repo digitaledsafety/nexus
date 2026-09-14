@@ -72,13 +72,15 @@ function executeVaultTransferAndPayment(address, nft, targetVaultAddr, feeAmount
         userStatus.bragBalance = Math.max(0, avail - fee).toString();
     }
 
+    const normTargetVaultAddr = targetVaultAddr.toLowerCase();
+
     // Remove from wallet
     userStatus.walletNfts = (userStatus.walletNfts || []).filter(n => n.tokenId.toString() !== nft.tokenId.toString());
 
     // Remove from other vaults
     if (userStatus.vaults) {
         for (const [vAddr, nftList] of Object.entries(userStatus.vaults)) {
-            if (vAddr.toLowerCase() !== targetVaultAddr.toLowerCase()) {
+            if (vAddr.toLowerCase() !== normTargetVaultAddr) {
                 userStatus.vaults[vAddr] = nftList.filter(n => n.tokenId.toString() !== nft.tokenId.toString());
             }
         }
@@ -86,12 +88,12 @@ function executeVaultTransferAndPayment(address, nft, targetVaultAddr, feeAmount
 
     // Add to target vault
     if (!userStatus.vaults) userStatus.vaults = {};
-    if (!userStatus.vaults[targetVaultAddr]) userStatus.vaults[targetVaultAddr] = [];
+    if (!userStatus.vaults[normTargetVaultAddr]) userStatus.vaults[normTargetVaultAddr] = [];
 
-    const existingInVault = userStatus.vaults[targetVaultAddr].find(n => n.tokenId.toString() === nft.tokenId.toString());
+    const existingInVault = userStatus.vaults[normTargetVaultAddr].find(n => n.tokenId.toString() === nft.tokenId.toString());
     if (!existingInVault) {
         const transferredNft = { ...nft, location: locationName || "Exhibited Vault" };
-        userStatus.vaults[targetVaultAddr].push(transferredNft);
+        userStatus.vaults[normTargetVaultAddr].push(transferredNft);
     }
 }
 
@@ -132,7 +134,7 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
     }
 
     if (!addressToCheck || !addressToCheck.startsWith('0x') || addressToCheck.length !== 42) {
-         return { isHolder: false, address: addressToCheck };
+         return { isHolder: false, address: addressToCheck, linked: false, nfts: [] };
     }
 
     let status = statusCache.get(addressToCheck.toLowerCase());
@@ -370,7 +372,16 @@ wss.on('connection', (ws, req) => {
 
                         if (command === 'check') {
                             const platformStatus = await getPlatformStatus(platformId);
-                            if (!platformStatus.linked) return;
+                            if (!platformStatus.linked) {
+                                const regData = await createRegistrationToken(platformId);
+                                const registrationUrl = `http://localhost:3000?token=${regData.token}&preauth=true`;
+                                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§e====================================§r"}]}`);
+                                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§aTo link your wallet & authorize summoning, visit:§r"}]}`);
+                                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§f${registrationUrl}§r"}]}`);
+                                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§7(This single link connects your account & pre-authorizes summoning)§r"}]}`);
+                                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§e====================================§r"}]}`);
+                                return;
+                            }
 
                             const data = await getOwnershipStatus(platformId, serverId, playerName);
                             if (data.isHolder) {
@@ -389,6 +400,18 @@ wss.on('connection', (ws, req) => {
                             sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§7(The link is valid for 10 minutes)§r"}]}`);
                             sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§e====================================§r"}]}`);
                         } else if (command === 'my_nfts') {
+                            const platformStatus = await getPlatformStatus(platformId);
+                            if (!platformStatus.linked) {
+                                const regData = await createRegistrationToken(platformId);
+                                const registrationUrl = `http://localhost:3000?token=${regData.token}&preauth=true`;
+                                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§e====================================§r"}]}`);
+                                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§aTo link your wallet & authorize summoning, visit:§r"}]}`);
+                                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§f${registrationUrl}§r"}]}`);
+                                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§7(This single link connects your account & pre-authorizes summoning)§r"}]}`);
+                                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§e====================================§r"}]}`);
+                                return;
+                            }
+
                             const data = await getOwnershipStatus(platformId, serverId, playerName);
                             if (data.isHolder && data.nfts && data.nfts.length > 0) {
                                 sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§eYour NFTs:§r"}]}`);
