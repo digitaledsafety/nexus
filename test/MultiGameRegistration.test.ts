@@ -246,6 +246,14 @@ describe("Multi-Game User Registration & Vault Exclusivity Test Suite", () => {
             assert.strictEqual(res.reason, "unlinked");
         });
 
+        it("should return isHolder: false and linked: false for unlinked users in getOwnershipStatus", async () => {
+            const { getOwnershipStatus } = await import("../scripts/nft-bridge.js");
+            const res = await getOwnershipStatus("unlinked-xuid-777", "server-1", "UnlinkedPlayer");
+            assert.strictEqual(res.isHolder, false);
+            assert.strictEqual(res.linked, false);
+            assert.deepEqual(res.nfts, []);
+        });
+
         it("should reject summon if media is not a valid structure format", async () => {
             const platformId = "xuid-player-non-structure";
             mappings.set(platformId, account.address);
