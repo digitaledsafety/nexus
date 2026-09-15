@@ -127,6 +127,8 @@ async function createRegistrationToken(platformId) {
 }
 
 async function getOwnershipStatus(uuid, serverId, playerName) {
+    console.log(`[getOwnershipStatus] Request received for uuid='${uuid}', serverId='${serverId}', playerName='${playerName}'`);
+
     const addressToCheck = mappings.get(uuid) || uuid;
 
     if (uuid && serverId && playerName) {
@@ -134,22 +136,49 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
     }
 
     if (!addressToCheck || !addressToCheck.startsWith('0x') || addressToCheck.length !== 42) {
+         console.warn(`[getOwnershipStatus] Unlinked or invalid address resolved for uuid='${uuid}': '${addressToCheck}'`);
          return { isHolder: false, address: addressToCheck, linked: false, nfts: [] };
     }
 
-    let status = statusCache.get(addressToCheck.toLowerCase());
-    if (!status) {
-        status = await fetchCurrentStatus(addressToCheck);
-        statusCache.set(addressToCheck.toLowerCase(), status);
+    console.log(`[getOwnershipStatus] Resolved target wallet address: ${addressToCheck} (mapping lookup for uuid='${uuid}')`);
+
+    // Fetch fresh on-chain status every time to guarantee real-time updates from the blockchain
+    const status = await fetchCurrentStatus(addressToCheck);
+
+    // Preserve in-memory non-blockchain fields (e.g. bragBalance) or mocked/transferred NFTs in statusCache
+    const cachedUser = statusCache.get(addressToCheck.toLowerCase());
+    if (cachedUser) {
+        if (cachedUser.bragBalance !== undefined) {
+            status.bragBalance = cachedUser.bragBalance;
+        }
+        // If fresh on-chain query returned 0 wallet NFTs but statusCache has mocked/transferred wallet NFTs, preserve them
+        if (cachedUser.walletNfts && cachedUser.walletNfts.length > 0 && status.walletNfts.length === 0) {
+            status.walletNfts = cachedUser.walletNfts;
+        }
+        // If fresh on-chain query returned 0 vault NFTs for a vault but statusCache has mocked/transferred vault NFTs, preserve them
+        if (cachedUser.vaults && Object.keys(cachedUser.vaults).length > 0) {
+            for (const [vAddr, nfts] of Object.entries(cachedUser.vaults)) {
+                if ((!status.vaults[vAddr] || status.vaults[vAddr].length === 0) && nfts.length > 0) {
+                    status.vaults[vAddr] = nfts;
+                }
+            }
+        }
     }
+    statusCache.set(addressToCheck.toLowerCase(), status);
 
     const serverConfig = serverConfigs[serverId];
     const defaultVaultAddr = getContractAddress('ExhibitVault');
     const vaultAddr = (serverConfig && serverConfig.vaultAddress)
         ? serverConfig.vaultAddress.toLowerCase()
         : (defaultVaultAddr ? defaultVaultAddr.toLowerCase() : null);
-    const inVault = vaultAddr ? (status.vaults[vaultAddr]?.length > 0) : false;
+
+    const vaultNftsForServer = vaultAddr ? (status.vaults[vaultAddr] || []) : [];
+    const inVault = vaultNftsForServer.length > 0;
     const inWallet = status.walletNfts.length > 0;
+
+    console.log(`[getOwnershipStatus] ServerId='${serverId}' vault address resolved: ${vaultAddr || 'none (no vault configured)'}`);
+    console.log(`[getOwnershipStatus] Address ${addressToCheck} status summary: ` +
+        `walletNfts=${status.walletNfts.length}, vaultNftsForServer=${vaultNftsForServer.length}, totalVaultsTracked=${Object.keys(status.vaults || {}).length}`);
 
     let linkedPlatforms = [];
     if (addressToCheck && addressToCheck.startsWith('0x') && addressToCheck.length === 42) {
@@ -160,13 +189,25 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
         }
     }
 
+    const combinedNfts = [...status.walletNfts, ...vaultNftsForServer];
+    const isHolder = inVault || inWallet;
+
+    console.log(`[getOwnershipStatus] Result for ${addressToCheck}: isHolder=${isHolder}, inVault=${inVault}, inWallet=${inWallet}, returnedNfts=${combinedNfts.length}`);
+    if (combinedNfts.length > 0) {
+        combinedNfts.forEach(nft => {
+            console.log(`[getOwnershipStatus]   - Token ID #${nft.tokenId} (Contract: ${nft.nftContract}, Location: ${nft.location || 'Unknown'}, Media: ${nft.animation_url || nft.image || 'none'})`);
+        });
+    } else {
+        console.log(`[getOwnershipStatus]   - No NFTs found in wallet or for vault address '${vaultAddr}'`);
+    }
+
     return {
-        isHolder: inVault || inWallet,
+        isHolder,
         inVault,
         inWallet,
         address: addressToCheck,
         linkedPlatforms,
-        nfts: [...status.walletNfts, ...(vaultAddr ? (status.vaults[vaultAddr] || []) : [])]
+        nfts: combinedNfts
     };
 }
 
@@ -842,8 +883,10 @@ async function fetchWithRetry(fn, label, maxRetries = 3) {
 }
 
 async function fetchCurrentStatus(address) {
-    console.log(`Fetching current on-chain status for ${address}...`);
+    console.log(`[fetchCurrentStatus] Starting fresh on-chain status fetch for address ${address}...`);
     const bragAddress = getContractAddress('BragNFT');
+    console.log(`[fetchCurrentStatus] Resolved BragNFT contract address: ${bragAddress || 'null (not found)'}`);
+
     let walletNfts = [];
 
     // Check Wallet
@@ -856,6 +899,8 @@ async function fetchCurrentStatus(address) {
                 args: [address]
             }), `balanceOf(${address})`);
 
+            console.log(`[fetchCurrentStatus] On-chain balanceOf(${address}) on BragNFT: ${balance}`);
+
             if (balance > 0n) {
                 let foundTokens = false;
                 try {
@@ -866,6 +911,8 @@ async function fetchCurrentStatus(address) {
                     }), 'nextTokenId()');
 
                     const maxCheck = Number(total);
+                    console.log(`[fetchCurrentStatus] BragNFT nextTokenId: ${maxCheck}. Checking token IDs 0 to ${maxCheck - 1}...`);
+
                     for (let i = 0; i < maxCheck; i++) {
                         try {
                             const owner = await publicClient.readContract({
@@ -876,6 +923,7 @@ async function fetchCurrentStatus(address) {
                             });
                             if (owner.toLowerCase() === address.toLowerCase()) {
                                 foundTokens = true;
+                                console.log(`[fetchCurrentStatus] Direct wallet token match: Token #${i} owned by ${address}`);
                                 let media = { image: null, animation_url: null };
                                 try {
                                     const uri = await publicClient.readContract({
@@ -889,7 +937,9 @@ async function fetchCurrentStatus(address) {
                                         media.image = json.image;
                                         media.animation_url = json.animation_url;
                                     }
-                                } catch (e) {}
+                                } catch (e) {
+                                    console.error(`[fetchCurrentStatus] Error parsing tokenURI for token #${i}:`, e.message);
+                                }
 
                                 walletNfts.push({
                                     tokenId: i.toString(),
@@ -899,20 +949,27 @@ async function fetchCurrentStatus(address) {
                                     animation_url: media.animation_url
                                 });
                             }
-                        } catch (e) {}
+                        } catch (e) {
+                            // Token might be burned or ownerOf reverted
+                        }
                     }
-                } catch (e) {}
+                } catch (e) {
+                    console.error(`[fetchCurrentStatus] Error reading nextTokenId for BragNFT:`, e.message);
+                }
 
                 if (!foundTokens) {
+                    console.warn(`[fetchCurrentStatus] Wallet balance is ${balance}, but explicit token ID matching yielded 0 tokens. Adding fallback entry.`);
                     walletNfts.push({ tokenId: "any", location: "Wallet", nftContract: bragAddress });
                 }
             }
         } catch (e) {
-            console.error(`Error checking balance for ${address}:`, e.message);
+            console.error(`[fetchCurrentStatus] Error checking balance for ${address}:`, e.message);
         }
     }
 
     const defaultVault = getContractAddress('ExhibitVault');
+    console.log(`[fetchCurrentStatus] Resolved default ExhibitVault address: ${defaultVault || 'null (not found)'}`);
+
     const activeConfigs = { ...serverConfigs };
     if (defaultVault) {
         for (const [id, cfg] of Object.entries(activeConfigs)) {
@@ -923,11 +980,13 @@ async function fetchCurrentStatus(address) {
     }
 
     const vaults = {};
-    for (const config of Object.values(activeConfigs)) {
+    for (const [configKey, config] of Object.entries(activeConfigs)) {
         if (!config.vaultAddress) continue;
         const vaultAddr = config.vaultAddress.toLowerCase();
         if (vaults[vaultAddr]) continue;
         vaults[vaultAddr] = [];
+
+        console.log(`[fetchCurrentStatus] Checking ExhibitVault '${vaultAddr}' for server '${config.name}' (${configKey})...`);
 
         try {
             // Check for exhibited BragNFTs in this vault via direct contract state read owner721
@@ -954,6 +1013,7 @@ async function fetchCurrentStatus(address) {
                         });
 
                         if (currentOwner.toLowerCase() === address.toLowerCase()) {
+                            console.log(`[fetchCurrentStatus] Vault exhibition match: Token #${i} in vault ${vaultAddr} belongs to ${address}`);
                             let media = { image: null, animation_url: null };
                             try {
                                 const uri = await publicClient.readContract({
@@ -969,7 +1029,7 @@ async function fetchCurrentStatus(address) {
                                     media.animation_url = json.animation_url;
                                 }
                             } catch (e) {
-                                console.error(`Error fetching tokenURI for ${bragAddress} #${i}:`, e.message);
+                                console.error(`[fetchCurrentStatus] Error fetching tokenURI for token #${i} in vault:`, e.message);
                             }
 
                             vaults[vaultAddr].push({
@@ -980,14 +1040,19 @@ async function fetchCurrentStatus(address) {
                                 animation_url: media.animation_url
                             });
                         }
-                    } catch (e) {}
+                    } catch (e) {
+                        // owner721 revert or zero owner
+                    }
                 }
             }
         } catch (e) {
-            console.error(`Error checking vault ${vaultAddr} for ${address}:`, e.message);
+            console.error(`[fetchCurrentStatus] Error checking vault ${vaultAddr} for ${address}:`, e.message);
         }
+
+        console.log(`[fetchCurrentStatus] Found ${vaults[vaultAddr].length} NFTs in vault '${vaultAddr}' for owner ${address}`);
     }
 
+    console.log(`[fetchCurrentStatus] Completed status fetch for ${address}. Found ${walletNfts.length} wallet NFTs and ${Object.values(vaults).reduce((acc, list) => acc + list.length, 0)} total vault NFTs across ${Object.keys(vaults).length} vaults.`);
     return { walletNfts, vaults };
 }
 
