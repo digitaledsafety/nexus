@@ -197,7 +197,7 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
     const allNfts = [...(userStatus.walletNfts || []), ...allVaultNfts];
 
     if (allNfts.length === 0) {
-        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[Nexus] Account linked (${ownership.address.slice(0, 6)}...${ownership.address.slice(-4)}), but no exhibited NFTs were found in this server's vault (${vaultAddr.address.slice(0, 6)}...${vaultAddr.address.slice(-4)}).§r"}]}`);
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[Nexus] Account linked (${ownership.address.slice(0, 6)}...${ownership.address.slice(-4)}), but no exhibited NFTs were found in this server's vault (${vaultAddr.slice(0, 6)}...${vaultAddr.slice(-4)}).§r"}]}`);
         return { success: false, reason: "not_in_vault" };
     }
 
