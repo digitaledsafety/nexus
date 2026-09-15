@@ -86,6 +86,16 @@ describe("Treasury Multi-sig Smart Wallet", async function () {
       assert.equal(proposal[6], 1n);
     });
 
+    it("Should revert propose if array lengths mismatch", async () => {
+      const target = nonOwner.account.address;
+      const value = parseEther("0.1");
+
+      await assert.rejects(
+        treasury.write.propose([[target, target], [value], ["0x" as `0x${string}`], 0n], { account: owner1.account }),
+        /Mismatched arrays/
+      );
+    });
+
     it("Should allow other owners to approve", async () => {
       await treasury.write.propose([[nonOwner.account.address], [parseEther("0.1")], ["0x" as Hex], 0n], { account: owner1.account });
       await treasury.write.approve([0n, 0n], { account: owner2.account });
