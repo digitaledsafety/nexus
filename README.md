@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Status: Beta](https://img.shields.io/badge/status-beta-orange.svg)
 
-brag.charity is a next-generation NFT ecosystem designed to bridge the gap between blockchain assets and real-world utility—starting with Minecraft. It features gasless transactions, dynamic on-chain metadata, and a secure "Verification Handshake" that lets players bring their digital collections into any game environment.
+brag.charity is a next-generation NFT ecosystem designed to bridge the gap between blockchain assets and real-world utility—supporting Minecraft, Roblox, and engine.digitaleducationsafety.org. It features gasless transactions, dynamic on-chain metadata, single-vault asset exclusivity, and a secure "Verification Handshake" that lets players bring their digital collections into any game environment.
 
 Whether you're building a decentralized gallery, a cross-platform gaming reward system, or a high-fidelity NFT marketplace, brag.charity provides the tools to make it happen.
 
@@ -21,7 +21,7 @@ Whether you're building a decentralized gallery, a cross-platform gaming reward 
 
 1.  **Gasless Experience:** Built-in support for Alchemy Smart Accounts and Paymasters, allowing users to interact with your ecosystem without needing to hold native gas tokens.
 2.  **Dual-State Collectibles:** `BragNFT.sol` implements a "Nexus" architecture that combines tradable art with a soulbound tax receipt. The receipt layer is anchored to the original donor, while the art remains transferable.
-3.  **The "Verification Handshake":** A secure, off-chain identity mapping system (SIWE) that connects Minecraft XUIDs to Ethereum wallets without ever exposing private keys.
+3.  **The "Verification Handshake":** A secure, off-chain identity mapping system (SIWE) that connects game platform IDs (Minecraft Xbox XUIDs, Roblox User IDs, Digital Education Safety Engine IDs) to Ethereum wallets without ever exposing private keys.
 4.  **Exhibit Vaults:** Purpose-built smart contracts for escrowing NFTs. Use them to "display" items in virtual galleries, lock them for in-game perks, or manage them across different web platforms.
 5.  **Multi-Offer Marketplace:** A flexible NFT marketplace that supports multiple simultaneous offers on a single item, including built-in refund protections and token-based trading (`BragToken`).
 6.  **High-Fidelity Frontend:** A complete e-commerce experience including a discovery gallery, detailed product pages with media support (images/audio), and a comprehensive admin manager.
@@ -104,6 +104,25 @@ To point your local environment to staging services (shared bridge, shared manag
     npm run env:init
     ```
     This will verify connectivity to the staging manager and prepare the NFT addon with staging configurations.
+
+### 6. Adding the Nexus Custom Network to Your Wallet (MetaMask)
+
+When running the local environment (`npm run env:init` or `npm run env:start`), Nexus spins up a local EVM blockchain network via Hardhat on port `8545`. To interact with the web dApp, sign transactions, or manage local contracts using an EVM Web3 wallet (such as MetaMask), you must add the custom network to your wallet.
+
+#### Custom Network Parameters
+*   **Network Name:** `Nexus Devnet` (or `Hardhat Local`)
+*   **New RPC URL:** `http://127.0.0.1:8545` (or `http://localhost:8545`)
+*   **Chain ID:** `31337` (Hexadecimal: `0x7A69`)
+*   **Currency Symbol:** `ETH`
+*   **Block Explorer URL:** *(Leave blank)*
+
+#### Step-by-Step Setup Guide (MetaMask)
+1.  Open the **MetaMask** extension in your browser.
+2.  Click the network selection dropdown menu at the top left of the wallet window.
+3.  Click **Add network** -> **Add a network manually**.
+4.  Enter the custom network parameters listed above.
+5.  Click **Save** and select **Nexus Devnet** as your active network.
+6.  **Importing Test Accounts:** To perform transactions, import a pre-funded test account into MetaMask using one of the private keys printed in the terminal during `npm run env:init` (for example: `0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80`).
 
 ---
 

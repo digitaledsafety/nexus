@@ -1,0 +1,8 @@
+{
+  "summonFeeBrag": "10",
+  "servers": {
+    "local-dev": { "vaultAddress": null, "name": "Nexus Staging", "summonFeeBrag": "10" },
+    "minecraft-server-1": { "vaultAddress": null, "name": "Survival", "summonFeeBrag": "10" },
+    "server-2": { "vaultAddress": null, "name": "Creative", "summonFeeBrag": "10" }
+  }
+}

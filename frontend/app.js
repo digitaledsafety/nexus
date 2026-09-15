@@ -134,7 +134,8 @@ function setupManagerListeners() {
                 btnAI.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
                 log('Requesting AI NFT generation...');
 
-                const response = await fetch('http://localhost:9000/generate-nft', {
+                const fetchFn = typeof fetchBridgeEndpoint === 'function' ? fetchBridgeEndpoint : (path, opts) => fetch(`http://localhost:9000${path}`, opts);
+                const response = await fetchFn('/generate-nft', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });

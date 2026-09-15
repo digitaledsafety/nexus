@@ -29,5 +29,8 @@ window.APP_CONFIG = {
         maxFeePerGas: "100000000000", // 100 Gwei
         maxPriorityFeePerGas: "2000000000", // 2 Gwei
         hugeCalldataGasLimit: 25000000 // 25M gas
-    }
+    },
+
+    // Bridge Server HTTP URL (default: auto-detected based on current hostname and port 9000)
+    bridgeUrl: ""
 };
