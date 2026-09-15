@@ -143,11 +143,8 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
         statusCache.set(addressToCheck.toLowerCase(), status);
     }
 
-    const serverConfig = serverConfigs[serverId];
-    const defaultVaultAddr = getContractAddress('ExhibitVault');
-    const vaultAddr = (serverConfig && serverConfig.vaultAddress)
-        ? serverConfig.vaultAddress.toLowerCase()
-        : (defaultVaultAddr ? defaultVaultAddr.toLowerCase() : null);
+    const resolvedVault = getServerVaultAddress(serverId);
+    const vaultAddr = resolvedVault ? resolvedVault.toLowerCase() : null;
     const inVault = vaultAddr ? (status.vaults[vaultAddr]?.length > 0) : false;
     const inWallet = status.walletNfts.length > 0;
 
@@ -185,10 +182,8 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
 
     const ownership = await getOwnershipStatus(platformId, serverId, playerName);
     const serverConfig = serverConfigs[serverId] || { name: serverId, vaultAddress: null };
-    const defaultVaultAddr = getContractAddress('ExhibitVault');
-    const vaultAddr = (serverConfig && serverConfig.vaultAddress)
-        ? serverConfig.vaultAddress.toLowerCase()
-        : (defaultVaultAddr ? defaultVaultAddr.toLowerCase() : "0xdefaultvault");
+    const resolvedVault = getServerVaultAddress(serverId);
+    const vaultAddr = resolvedVault ? resolvedVault.toLowerCase() : "0xdefaultvault";
 
     const userStatus = statusCache.get(ownership.address.toLowerCase()) || { walletNfts: [], vaults: {} };
     const currentVaultNfts = (vaultAddr && userStatus.vaults && userStatus.vaults[vaultAddr]) ? userStatus.vaults[vaultAddr] : [];
@@ -494,10 +489,30 @@ const DEPLOYMENT_PATH = path.join(process.cwd(), 'ignition', 'deployments', `cha
 function getContractAddress(contractName) {
     const envVar = `CONTRACT_ADDRESS_${contractName.toUpperCase()}`;
     if (process.env[envVar]) return process.env[envVar];
+    if (contractName.toUpperCase() === 'EXHIBITVAULT') {
+        if (process.env.VAULT_ADDRESS) return process.env.VAULT_ADDRESS;
+        if (process.env.EXHIBIT_VAULT_ADDRESS) return process.env.EXHIBIT_VAULT_ADDRESS;
+    }
 
     if (!fs.existsSync(DEPLOYMENT_PATH)) return null;
-    const deployments = JSON.parse(fs.readFileSync(DEPLOYMENT_PATH, 'utf8'));
-    return deployments[`AppModule#${contractName}`];
+    try {
+        const deployments = JSON.parse(fs.readFileSync(DEPLOYMENT_PATH, 'utf8'));
+        return deployments[`AppModule#${contractName}`];
+    } catch (e) {
+        return null;
+    }
+}
+
+function getServerVaultAddress(serverId) {
+    if (serverId) {
+        const envKey = `VAULT_ADDRESS_${serverId.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
+        if (process.env[envKey]) return process.env[envKey];
+    }
+    const serverConfig = serverConfigs[serverId];
+    if (serverConfig && serverConfig.vaultAddress) {
+        return serverConfig.vaultAddress;
+    }
+    return getContractAddress('ExhibitVault');
 }
 
 const BRAG_ABI = [
@@ -538,8 +553,8 @@ async function handleStatusChange(address) {
         const status = await fetchCurrentStatus(lowerAddr);
         statusCache.set(lowerAddr, status);
 
-        const serverConfig = serverConfigs[active.serverId];
-        const vaultAddr = (serverConfig && serverConfig.vaultAddress) ? serverConfig.vaultAddress.toLowerCase() : null;
+        const resolvedVault = getServerVaultAddress(active.serverId);
+        const vaultAddr = resolvedVault ? resolvedVault.toLowerCase() : null;
         const inVault = vaultAddr ? (status.vaults[vaultAddr]?.length > 0) : false;
         const inWallet = status.walletNfts.length > 0;
         const isHolder = inVault || inWallet;
@@ -573,8 +588,19 @@ async function setupEventListeners(force = false) {
         });
     }
 
+    const monitoredVaults = new Set();
+    const defaultVault = getContractAddress('ExhibitVault');
+    if (defaultVault) monitoredVaults.add(defaultVault.toLowerCase());
     Object.values(serverConfigs).forEach(config => {
-        if (!config.vaultAddress) return;
+        if (config.vaultAddress) monitoredVaults.add(config.vaultAddress.toLowerCase());
+    });
+    for (const key of Object.keys(process.env)) {
+        if (key.startsWith('VAULT_ADDRESS') || key === 'CONTRACT_ADDRESS_EXHIBITVAULT') {
+            if (process.env[key]) monitoredVaults.add(process.env[key].toLowerCase());
+        }
+    }
+
+    monitoredVaults.forEach(vaultAddr => {
         const events = [
             'event Exhibited721(address indexed nftContract, uint256 indexed tokenId, address indexed owner, string location, uint256 expiry)',
             'event Withdrawn721(address indexed nftContract, uint256 indexed tokenId, address indexed owner)',
@@ -584,7 +610,7 @@ async function setupEventListeners(force = false) {
         ];
         events.forEach(e => {
             publicClient.watchEvent({
-                address: config.vaultAddress,
+                address: vaultAddr,
                 event: parseAbiItem(e),
                 polling: true,
                 onLogs: (logs) => logs.forEach(log => handleStatusChange(log.args.owner))
@@ -814,6 +840,8 @@ export {
     createRegistrationToken,
     handleSummonCommand,
     getOwnershipStatus,
+    getServerVaultAddress,
+    getContractAddress,
     setupWss,
     sendMinecraftCommand,
     handleStatusChange,
@@ -913,24 +941,31 @@ async function fetchCurrentStatus(address) {
     }
 
     const defaultVault = getContractAddress('ExhibitVault');
-    const activeConfigs = { ...serverConfigs };
+    const monitoredVaults = new Map(); // vaultAddr (lowercase) -> location/name
     if (defaultVault) {
-        for (const [id, cfg] of Object.entries(activeConfigs)) {
-            if (!cfg.vaultAddress) {
-                activeConfigs[id] = { ...cfg, vaultAddress: defaultVault };
+        monitoredVaults.set(defaultVault.toLowerCase(), "Exhibited Vault");
+    }
+    for (const [id, cfg] of Object.entries(serverConfigs)) {
+        const vAddr = getServerVaultAddress(id);
+        if (vAddr) {
+            monitoredVaults.set(vAddr.toLowerCase(), cfg.name || id);
+        }
+    }
+    for (const key of Object.keys(process.env)) {
+        if (key.startsWith('VAULT_ADDRESS') || key === 'CONTRACT_ADDRESS_EXHIBITVAULT') {
+            if (process.env[key]) {
+                monitoredVaults.set(process.env[key].toLowerCase(), "Exhibited Vault");
             }
         }
     }
 
     const vaults = {};
-    for (const config of Object.values(activeConfigs)) {
-        if (!config.vaultAddress) continue;
-        const vaultAddr = config.vaultAddress.toLowerCase();
+    for (const [vaultAddr, locationName] of monitoredVaults.entries()) {
         if (vaults[vaultAddr]) continue;
         vaults[vaultAddr] = [];
 
         try {
-            // Check for exhibited BragNFTs in this vault via direct contract state read owner721
+            // Check for exhibited ERC721 tokens (BragNFT) in this vault via owner721
             if (bragAddress) {
                 let maxCheck = 0;
                 try {
@@ -953,7 +988,7 @@ async function fetchCurrentStatus(address) {
                             args: [bragAddress, BigInt(i)]
                         });
 
-                        if (currentOwner.toLowerCase() === address.toLowerCase()) {
+                        if (currentOwner && currentOwner.toLowerCase() === address.toLowerCase()) {
                             let media = { image: null, animation_url: null };
                             try {
                                 const uri = await publicClient.readContract({
@@ -975,9 +1010,34 @@ async function fetchCurrentStatus(address) {
                             vaults[vaultAddr].push({
                                 tokenId: i.toString(),
                                 nftContract: bragAddress,
-                                location: config.name,
+                                location: locationName,
                                 image: media.image,
                                 animation_url: media.animation_url
+                            });
+                        }
+                    } catch (e) {}
+                }
+            }
+
+            // Check for exhibited ERC1155 tokens in this vault via balances1155
+            const mock1155 = getContractAddress('MockERC1155');
+            if (mock1155) {
+                for (let i = 0; i < 20; i++) {
+                    try {
+                        const bal = await publicClient.readContract({
+                            address: vaultAddr,
+                            abi: [parseAbiItem('function balances1155(address, uint256, address) view returns (uint256)')],
+                            functionName: 'balances1155',
+                            args: [mock1155, BigInt(i), address]
+                        });
+
+                        if (bal && bal > 0n) {
+                            vaults[vaultAddr].push({
+                                tokenId: i.toString(),
+                                nftContract: mock1155,
+                                location: locationName,
+                                amount: bal.toString(),
+                                is1155: true
                             });
                         }
                     } catch (e) {}
