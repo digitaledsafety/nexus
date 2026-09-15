@@ -156,7 +156,7 @@ describe("Roblox Addon & N-Platform Integration Test Suite", () => {
             mappings.set(robloxUserId, account.address);
 
             const vaultAddress = "0x2222222222222222222222222222222222222222";
-            statusCache.set(account.address.toLowerCase(), {
+            statusCache.set(account.address, {
                 walletNfts: [],
                 vaults: {
                     [vaultAddress]: [

@@ -61,7 +61,13 @@ async function loadProductData(contractAddr, tokenId) {
         const metadata = await fetchMetadata(tokenURI, tokenId);
         if (!metadata) throw new Error("Metadata parse failed");
 
-        const isNative = contractAddr.toLowerCase() === getDeploymentAddress('BragNFT')?.toLowerCase();
+        const nativeAddr = getDeploymentAddress('BragNFT');
+        let isNative = false;
+        try {
+            isNative = ethers.utils.getAddress(contractAddr) === ethers.utils.getAddress(nativeAddr);
+        } catch (e) {
+            isNative = contractAddr.toLowerCase() === nativeAddr?.toLowerCase();
+        }
 
         // Dual-State Record & Glowing Status
         let record = null;
@@ -77,10 +83,17 @@ async function loadProductData(contractAddr, tokenId) {
                 const taxRecordSection = document.getElementById('taxRecordSection');
                 const topUpSection = document.getElementById('topUpSection');
 
-                const currentAddr = (userAddress || localStorage.getItem('brag_address') || '').toLowerCase();
-                console.log(`Current User: ${currentAddr}`);
+                const currentAddrStr = userAddress || localStorage.getItem('brag_address') || '';
+                console.log(`Current User: ${currentAddrStr}`);
 
-                if (record && record.originalDonor.toLowerCase() === currentAddr) {
+                let isOriginalDonor = false;
+                try {
+                    isOriginalDonor = record && ethers.utils.getAddress(record.originalDonor) === ethers.utils.getAddress(currentAddrStr);
+                } catch (e) {
+                    isOriginalDonor = record && record.originalDonor.toLowerCase() === currentAddrStr.toLowerCase();
+                }
+
+                if (isOriginalDonor) {
                     console.log("Donor match - showing tax section");
                     taxRecordSection.classList.remove('hidden');
                     document.getElementById('taxValue').textContent = `$${(parseFloat(ethers.utils.formatUnits(record.usdValue, 8))).toFixed(2)}`;
@@ -202,7 +215,10 @@ async function loadProductData(contractAddr, tokenId) {
 
         // Detect and display collection name if external
         const externalCollections = CONTRACT_DATA.externalCollections || [];
-        const externalColl = externalCollections.find(c => c.address.toLowerCase() === contractAddr.toLowerCase());
+        const externalColl = externalCollections.find(c => {
+            try { return ethers.utils.getAddress(c.address) === ethers.utils.getAddress(contractAddr); }
+            catch (e) { return c.address.toLowerCase() === contractAddr.toLowerCase(); }
+        });
         if (externalColl) {
             const collBadge = document.createElement('span');
             collBadge.className = 'px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-400 text-[8px] font-black uppercase tracking-widest ml-2';
@@ -224,7 +240,13 @@ async function loadProductData(contractAddr, tokenId) {
 }
 
 function setupProductActions(contractAddr, tokenId, metadata) {
-    const isNative = contractAddr.toLowerCase() === getDeploymentAddress('BragNFT')?.toLowerCase();
+    const nativeAddr = getDeploymentAddress('BragNFT');
+    let isNative = false;
+    try {
+        isNative = ethers.utils.getAddress(contractAddr) === ethers.utils.getAddress(nativeAddr);
+    } catch (e) {
+        isNative = contractAddr.toLowerCase() === nativeAddr?.toLowerCase();
+    }
 
     if (isNative) {
         const btnTopUp = document.getElementById('btnTopUp');
