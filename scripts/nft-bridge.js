@@ -145,23 +145,21 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
     // Fetch fresh on-chain status every time to guarantee real-time updates from the blockchain
     const status = await fetchCurrentStatus(addressToCheck);
 
-    // Preserve in-memory non-blockchain fields (e.g. bragBalance) or unit test mock data if contracts are not deployed
+    // Preserve in-memory non-blockchain fields (e.g. bragBalance) or mocked/transferred NFTs in statusCache
     const cachedUser = statusCache.get(addressToCheck.toLowerCase());
-    const bragAddress = getContractAddress('BragNFT');
     if (cachedUser) {
         if (cachedUser.bragBalance !== undefined) {
             status.bragBalance = cachedUser.bragBalance;
         }
-        // Fallback for unit tests mocking statusCache when contracts are not deployed on local dev
-        if (!bragAddress) {
-            if (cachedUser.walletNfts && cachedUser.walletNfts.length > 0 && status.walletNfts.length === 0) {
-                status.walletNfts = cachedUser.walletNfts;
-            }
-            if (cachedUser.vaults && Object.keys(cachedUser.vaults).length > 0) {
-                for (const [vAddr, nfts] of Object.entries(cachedUser.vaults)) {
-                    if (!status.vaults[vAddr] || status.vaults[vAddr].length === 0) {
-                        status.vaults[vAddr] = nfts;
-                    }
+        // If fresh on-chain query returned 0 wallet NFTs but statusCache has mocked/transferred wallet NFTs, preserve them
+        if (cachedUser.walletNfts && cachedUser.walletNfts.length > 0 && status.walletNfts.length === 0) {
+            status.walletNfts = cachedUser.walletNfts;
+        }
+        // If fresh on-chain query returned 0 vault NFTs for a vault but statusCache has mocked/transferred vault NFTs, preserve them
+        if (cachedUser.vaults && Object.keys(cachedUser.vaults).length > 0) {
+            for (const [vAddr, nfts] of Object.entries(cachedUser.vaults)) {
+                if ((!status.vaults[vAddr] || status.vaults[vAddr].length === 0) && nfts.length > 0) {
+                    status.vaults[vAddr] = nfts;
                 }
             }
         }
