@@ -11,7 +11,10 @@ import {
     setupEventListeners,
     publicClient,
     serverConfigs,
-    pendingTokens
+    pendingTokens,
+    getServerVaultAddress,
+    getContractAddress,
+    getOwnershipStatus
 } from "../scripts/nft-bridge.js";
 
 class MockWebSocket extends EventEmitter {
@@ -162,5 +165,53 @@ describe("Minecraft Bridge WebSocket Logic Unit Tests", () => {
         assert.ok(mockWs.sentMessages.length >= 1);
         const commandLines = mockWs.sentMessages.map((m) => m.body.commandLine);
         assert.ok(commandLines.some((cmd) => cmd.includes('tag "Charlie"')));
+    });
+
+    it("should resolve server vault address from environment variable overrides", () => {
+        const testServerId = "custom-server-99";
+        const envVault = "0x9999888877776666555544443333222211110000";
+
+        process.env.VAULT_ADDRESS_CUSTOM_SERVER_99 = envVault;
+        const resolved = getServerVaultAddress(testServerId);
+        assert.strictEqual(resolved, envVault);
+
+        delete process.env.VAULT_ADDRESS_CUSTOM_SERVER_99;
+    });
+
+    it("should resolve ExhibitVault address from VAULT_ADDRESS or CONTRACT_ADDRESS_EXHIBITVAULT", () => {
+        const globalVault = "0x7777777777777777777777777777777777777777";
+        process.env.VAULT_ADDRESS = globalVault;
+
+        const resolved = getContractAddress("ExhibitVault");
+        assert.strictEqual(resolved, globalVault);
+
+        delete process.env.VAULT_ADDRESS;
+    });
+
+    it("should find owner NFTs when located in proper server vault configured via statusCache or env vault", async () => {
+        const testAddr = "0xAbCdEf0123456789012345678901234567890123";
+        const vaultAddr = "0x1111111111111111111111111111111111111111";
+        const xuid = "xuid-vault-owner-1";
+        const serverId = "survival-realm";
+
+        process.env.VAULT_ADDRESS_SURVIVAL_REALM = vaultAddr;
+        mappings.set(xuid, testAddr);
+
+        statusCache.set(testAddr.toLowerCase(), {
+            walletNfts: [],
+            vaults: {
+                [vaultAddr.toLowerCase()]: [
+                    { tokenId: "42", location: "Survival Realm Vault", nftContract: "0xBrag" }
+                ]
+            }
+        });
+
+        const status = await getOwnershipStatus(xuid, serverId, "VaultPlayer");
+        assert.strictEqual(status.isHolder, true);
+        assert.strictEqual(status.inVault, true);
+        assert.strictEqual(status.nfts.length, 1);
+        assert.strictEqual(status.nfts[0].tokenId, "42");
+
+        delete process.env.VAULT_ADDRESS_SURVIVAL_REALM;
     });
 });
