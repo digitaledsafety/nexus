@@ -38,8 +38,10 @@ async function refreshHomeStats() {
         const current = await bragNFT.totalSupply();
         const remaining = total.sub(current);
 
-        document.getElementById('nftsTotal').innerText = total.toString();
-        document.getElementById('nftsRemaining').innerText = remaining.toString();
+        const nftsTotalEl = document.getElementById('nftsTotal');
+        const nftsRemainingEl = document.getElementById('nftsRemaining');
+        if (nftsTotalEl) nftsTotalEl.innerText = total.toString();
+        if (nftsRemainingEl) nftsRemainingEl.innerText = remaining.toString();
 
         // Raised Stats
         const treasuryAddr = await bragNFT.treasury();
@@ -48,8 +50,10 @@ async function refreshHomeStats() {
             const ethVal = parseFloat(ethers.utils.formatEther(balance));
             const usdVal = ethVal * ethPrice;
 
-            document.getElementById('totalRaisedETH').innerText = ethVal.toFixed(4);
-            document.getElementById('totalRaisedUSD').innerText = `$${usdVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            const totalRaisedETHEl = document.getElementById('totalRaisedETH');
+            const totalRaisedUSDEl = document.getElementById('totalRaisedUSD');
+            if (totalRaisedETHEl) totalRaisedETHEl.innerText = ethVal.toFixed(4);
+            if (totalRaisedUSDEl) totalRaisedUSDEl.innerText = `$${usdVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         }
 
         // Contract Link
@@ -72,18 +76,25 @@ function setupHomeListeners() {
             tierBtns.forEach(b => b.classList.remove('active', 'border-indigo-500', 'bg-indigo-500/10'));
             btn.classList.add('active', 'border-indigo-500', 'bg-indigo-500/10');
             selectedUsdAmount = parseFloat(btn.dataset.usd);
-            document.getElementById('customAmount').value = '';
+            const customInput = document.getElementById('customAmount');
+            if (customInput) customInput.value = '';
             updateHomeConversion();
         });
     });
 
-    document.getElementById('customAmount').addEventListener('input', (e) => {
-        tierBtns.forEach(b => b.classList.remove('active', 'border-indigo-500', 'bg-indigo-500/10'));
-        selectedUsdAmount = parseFloat(e.target.value) || 0;
-        updateHomeConversion();
-    });
+    const customInput = document.getElementById('customAmount');
+    if (customInput) {
+        customInput.addEventListener('input', (e) => {
+            tierBtns.forEach(b => b.classList.remove('active', 'border-indigo-500', 'bg-indigo-500/10'));
+            selectedUsdAmount = parseFloat(e.target.value) || 0;
+            updateHomeConversion();
+        });
+    }
 
-    document.getElementById('btnDonateETH').addEventListener('click', donateETH);
+    const btnDonateETH = document.getElementById('btnDonateETH');
+    if (btnDonateETH) {
+        btnDonateETH.addEventListener('click', donateETH);
+    }
 }
 
 function updateDynamicRewards() {
@@ -98,15 +109,18 @@ function updateDynamicRewards() {
 
 function updateHomeConversion() {
     const ethDisplay = document.getElementById('ethConversion');
+    const ethAmountEl = document.getElementById('ethAmount');
+    const bragRewardAmountEl = document.getElementById('bragRewardAmount');
+
     if (selectedUsdAmount > 0 && ethPrice > 0) {
         const eth = selectedUsdAmount / ethPrice;
         const ethStr = eth.toFixed(4);
         const bragAmount = (selectedUsdAmount * 1000000).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2});
-        document.getElementById('ethAmount').innerText = ethStr;
-        document.getElementById('bragRewardAmount').innerText = bragAmount;
-        ethDisplay.classList.remove('hidden');
+        if (ethAmountEl) ethAmountEl.innerText = ethStr;
+        if (bragRewardAmountEl) bragRewardAmountEl.innerText = bragAmount;
+        if (ethDisplay) ethDisplay.classList.remove('hidden');
     } else {
-        ethDisplay.classList.add('hidden');
+        if (ethDisplay) ethDisplay.classList.add('hidden');
     }
 }
 
