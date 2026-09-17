@@ -163,6 +163,29 @@ describe("Contract Hardening Tests", async function () {
     });
   });
 
+  describe("Marketplace Listing Ownership Checks", () => {
+    it("NFTMarketplace: seller cannot update listing after transferring NFT", async function () {
+      const { marketplace, bragNFT, seller, other } = await setup();
+
+      // Seller mints an NFT
+      await bragNFT.write.donate(["test nft", ""], { account: seller.account, value: parseEther("0.1") });
+      const tokenId = 0n;
+
+      // Seller approves marketplace and creates listing
+      await bragNFT.write.approve([marketplace.address, tokenId], { account: seller.account });
+      await marketplace.write.createListing([bragNFT.address, tokenId, 1n, parseEther("1")], { account: seller.account });
+
+      // Seller transfers NFT to other
+      await bragNFT.write.transferFrom([seller.account.address, other.account.address, tokenId], { account: seller.account });
+
+      // Seller attempts to update listing without owning the NFT -> should revert
+      await assert.rejects(
+        marketplace.write.updateListing([bragNFT.address, tokenId, 1n, parseEther("2")], { account: seller.account }),
+        /You do not own this NFT/
+      );
+    });
+  });
+
   describe("Marketplace Robustness (DoS)", () => {
     it("NFTMarketplace.acceptOffer should NOT fail if royalty recipient reverts on payment (ERC20 payment)", async function () {
       const { marketplace, bragNFT, bragToken, owner, seller, buyer } = await setup();
