@@ -341,16 +341,13 @@ contract NFTMarketplace is ReentrancyGuard, Pausable, AccessControl {
         require(price > 0, "Price must be greater than 0");
         require(amount > 0, "Amount must be greater than 0");
 
-        // Optimization: If price is non-zero in the mapping, the sender is already the seller
-        if (listings[nftContract][tokenId][msg.sender].price == 0) {
-            if (IERC165(nftContract).supportsInterface(type(IERC721).interfaceId)) {
-                require(amount == 1, "ERC721 listing must have amount 1");
-                require(IERC721(nftContract).ownerOf(tokenId) == msg.sender, "You do not own this NFT");
-            } else if (IERC165(nftContract).supportsInterface(type(IERC1155).interfaceId)) {
-                require(IERC1155(nftContract).balanceOf(msg.sender, tokenId) >= amount, "Insufficient balance");
-            } else {
-                revert("Unsupported NFT type");
-            }
+        if (IERC165(nftContract).supportsInterface(type(IERC721).interfaceId)) {
+            require(amount == 1, "ERC721 listing must have amount 1");
+            require(IERC721(nftContract).ownerOf(tokenId) == msg.sender, "You do not own this NFT");
+        } else if (IERC165(nftContract).supportsInterface(type(IERC1155).interfaceId)) {
+            require(IERC1155(nftContract).balanceOf(msg.sender, tokenId) >= amount, "Insufficient balance");
+        } else {
+            revert("Unsupported NFT type");
         }
 
         listings[nftContract][tokenId][msg.sender] = Listing({
