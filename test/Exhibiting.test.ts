@@ -215,6 +215,53 @@ describe("Exhibiting System", async function () {
     assert.equal(recordedOwner, getAddress(user.account.address));
   });
 
+  it("Should batch move ERC721 and ERC1155 tokens with duration", async function () {
+    const { bragNFT, mock1155, vault1, vault2, user, owner } = await deployContracts();
+    const publicClient = await viem.getPublicClient();
+
+    // Setup 2 ERC721s
+    await bragNFT.write.donate(["b1", ""], { account: user.account, value: parseEther("0.1") });
+    await bragNFT.write.donate(["b2", ""], { account: user.account, value: parseEther("0.1") });
+
+    await bragNFT.write.safeTransferFrom([user.account.address, vault1.address, 0n], { account: user.account });
+    await bragNFT.write.safeTransferFrom([user.account.address, vault1.address, 1n], { account: user.account });
+
+    // Batch move ERC721 with 1 hour duration
+    await vault1.write.batchMove721WithDuration([[bragNFT.address, bragNFT.address], [0n, 1n], vault2.address, 3600n], { account: user.account });
+
+    // Verify locked in vault2
+    await assert.rejects(
+      vault2.write.withdraw721([bragNFT.address, 0n], { account: user.account }),
+      /Exhibition not yet expired/
+    );
+
+    // Setup ERC1155
+    await mock1155.write.mint([user.account.address, 10n, 5n], { account: owner.account });
+    await mock1155.write.mint([user.account.address, 11n, 5n], { account: owner.account });
+
+    await mock1155.write.safeTransferFrom([user.account.address, vault1.address, 10n, 5n, "0x"], { account: user.account });
+    await mock1155.write.safeTransferFrom([user.account.address, vault1.address, 11n, 5n, "0x"], { account: user.account });
+
+    // Batch move ERC1155 with 1 hour duration
+    await vault1.write.batchMove1155WithDuration([[mock1155.address, mock1155.address], [10n, 11n], [5n, 5n], vault2.address, 3600n], { account: user.account });
+
+    // Verify locked in vault2
+    await assert.rejects(
+      vault2.write.withdraw1155([mock1155.address, 10n, 5n], { account: user.account }),
+      /Exhibition not yet expired/
+    );
+
+    // Fast forward time
+    await publicClient.request({ method: "evm_increaseTime" as any, params: [3601] });
+    await publicClient.request({ method: "evm_mine" as any, params: [] });
+
+    // Should succeed after expiry
+    await vault2.write.withdraw721([bragNFT.address, 0n], { account: user.account });
+    await vault2.write.withdraw1155([mock1155.address, 10n, 5n], { account: user.account });
+    assert.equal(await bragNFT.read.ownerOf([0n]), getAddress(user.account.address));
+    assert.equal(await mock1155.read.balanceOf([user.account.address, 10n]), 5n);
+  });
+
   it("Should only increase expiry on subsequent deposits", async function () {
     const { bragNFT, vault1, user } = await deployContracts();
     const publicClient = await viem.getPublicClient();
