@@ -429,4 +429,48 @@ contract ExhibitVault is ERC721Holder, ERC1155Holder, ReentrancyGuard, AccessCon
         emit Exhibited1155(nftContract, tokenId, msg.sender, balances1155[nftContract][tokenId][msg.sender], location, expiry1155[nftContract][tokenId][msg.sender]);
     }
 
+    /**
+     * @dev Batch extend exhibition duration for multiple ERC721 tokens.
+     */
+    function batchExtendExhibition721(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256[] calldata durations) external nonReentrant {
+        require(nftContracts.length == tokenIds.length && tokenIds.length == durations.length, "Mismatched arrays");
+        string memory location = registry.getVaultInfo(address(this)).name;
+        for (uint256 i = 0; i < nftContracts.length; i++) {
+            address nftContract = nftContracts[i];
+            uint256 tokenId = tokenIds[i];
+            uint256 duration = durations[i];
+
+            require(owner721[nftContract][tokenId] == msg.sender, "Not the owner");
+            require(duration > 0, "Duration must be > 0");
+
+            uint256 currentExpiry = expiry721[nftContract][tokenId];
+            uint256 base = currentExpiry > block.timestamp ? currentExpiry : block.timestamp;
+            expiry721[nftContract][tokenId] = base + duration;
+
+            emit Exhibited721(nftContract, tokenId, msg.sender, location, expiry721[nftContract][tokenId]);
+        }
+    }
+
+    /**
+     * @dev Batch extend exhibition duration for multiple ERC1155 tokens.
+     */
+    function batchExtendExhibition1155(address[] calldata nftContracts, uint256[] calldata tokenIds, uint256[] calldata durations) external nonReentrant {
+        require(nftContracts.length == tokenIds.length && tokenIds.length == durations.length, "Mismatched arrays");
+        string memory location = registry.getVaultInfo(address(this)).name;
+        for (uint256 i = 0; i < nftContracts.length; i++) {
+            address nftContract = nftContracts[i];
+            uint256 tokenId = tokenIds[i];
+            uint256 duration = durations[i];
+
+            require(balances1155[nftContract][tokenId][msg.sender] > 0, "No balance");
+            require(duration > 0, "Duration must be > 0");
+
+            uint256 currentExpiry = expiry1155[nftContract][tokenId][msg.sender];
+            uint256 base = currentExpiry > block.timestamp ? currentExpiry : block.timestamp;
+            expiry1155[nftContract][tokenId][msg.sender] = base + duration;
+
+            emit Exhibited1155(nftContract, tokenId, msg.sender, balances1155[nftContract][tokenId][msg.sender], location, expiry1155[nftContract][tokenId][msg.sender]);
+        }
+    }
+
 }
