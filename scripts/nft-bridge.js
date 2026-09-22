@@ -300,7 +300,9 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
         checkMcStructure(structureUrl, matchingNft)
     );
 
-    if (!structureUrl || !isMcStructure) {
+    const isEngine = Boolean(serverId && (serverId.includes('alpha') || serverId.includes('vr') || serverId.includes('engine') || serverId.includes('app')));
+
+    if (!structureUrl || (!isMcStructure && !isEngine)) {
         sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] Selected NFT #${matchingNft.tokenId} is not a valid .mcstructure object.§r"}]}`);
         return { success: false, reason: "not_mcstructure" };
     }
@@ -364,7 +366,18 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
         sendMinecraftCommand(serverId, `execute at "${playerName}" run structure load "${structureName}" ~ ~ ~`);
         sendMinecraftCommand(serverId, `give "${playerName}" structure_block 1`);
         sendMinecraftCommand(serverId, `tellraw @a {"rawtext":[{"text":"§6[Nexus] ★ EXCITING EVENT ★ Player ${playerName} summoned structure for NFT #${matchingNft.tokenId}!§r"}]}`);
-        return { success: true, structureName, tokenId: matchingNft.tokenId, feePaid: isInCurrentVault ? "0" : feeAmount, alreadyInVault: isInCurrentVault };
+
+        broadcastEngineEvent({
+            type: "nft_summoned",
+            serverId: serverId,
+            serverName: serverConfig.name,
+            playerName: playerName,
+            tokenId: matchingNft.tokenId,
+            nft: matchingNft,
+            timestamp: Date.now()
+        });
+
+        return { success: true, structureName, tokenId: matchingNft.tokenId, feePaid: isInCurrentVault ? "0" : feeAmount, alreadyInVault: isInCurrentVault, nft: matchingNft };
     } catch (e) {
         console.error("Failed to download or load structure:", e);
         sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] Failed to load structure: ${e.message}§r"}]}`);
@@ -372,7 +385,22 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
     }
 }
 
-// --- WebSocket Server (Minecraft Bedrock Protocol) ---
+// --- WebSocket Server (Minecraft Bedrock Protocol & Engine Broadcast) ---
+const connectedEngineSockets = new Set();
+
+function broadcastEngineEvent(payload) {
+    const dataStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    for (const ws of connectedEngineSockets) {
+        if (ws.readyState === 1) { // WebSocket.OPEN
+            try {
+                ws.send(dataStr);
+            } catch (err) {
+                console.error("Failed to broadcast engine event:", err);
+            }
+        }
+    }
+}
+
 let wss;
 if (isMain) {
     wss = new WebSocketServer({ port: WS_PORT });
@@ -381,13 +409,44 @@ if (isMain) {
 
 function setupWss(wss) {
 wss.on('connection', (ws, req) => {
-    console.log(`Minecraft server connected from ${req.socket.remoteAddress}`);
+    console.log(`Client/Server connected from ${req.socket.remoteAddress}`);
+    connectedEngineSockets.add(ws);
 
-    // In a real scenario, the first message from the server would identify which serverId it is.
-    // For now, we'll assign the first connection to server-1, second to server-2, etc. or use a handshake.
     ws.on('message', async (data) => {
         try {
             const msg = JSON.parse(data);
+
+            // Engine JSON protocol
+            if (msg.type === 'nexus:handshake' || msg.type === 'handshake') {
+                const serverId = msg.serverId;
+                if (serverId) {
+                    serverSockets.set(serverId, ws);
+                    console.log(`Engine WebSocket handshaked and assigned to ${serverId}`);
+                    ws.send(JSON.stringify({ type: 'handshake_ack', serverId: serverId, status: 'connected' }));
+                }
+                return;
+            }
+
+            if (msg.type === 'summon' || msg.action === 'summon') {
+                const res = await handleSummonCommand(
+                    msg.target,
+                    msg.platformId || msg.xuid || 'alpha:demo',
+                    msg.serverId || 'alpha-realm',
+                    msg.playerName || 'Player'
+                );
+                ws.send(JSON.stringify({ type: 'summon_response', result: res }));
+                return;
+            }
+
+            if (msg.type === 'get_status' || msg.type === 'my_nfts') {
+                const status = await getOwnershipStatus(
+                    msg.platformId || msg.xuid || 'alpha:demo',
+                    msg.serverId || 'alpha-realm',
+                    msg.playerName || 'Player'
+                );
+                ws.send(JSON.stringify({ type: 'status_response', data: status }));
+                return;
+            }
 
             // Handle Minecraft Bedrock Handshake via PlayerMessage
             if (msg.body && msg.body.eventName === 'PlayerMessage') {
@@ -484,6 +543,7 @@ wss.on('connection', (ws, req) => {
     });
 
     ws.on('close', () => {
+        connectedEngineSockets.delete(ws);
         for (const [id, socket] of serverSockets.entries()) {
             if (socket === ws) {
                 serverSockets.delete(id);
@@ -856,6 +916,7 @@ export {
     handleSummonCommand,
     getOwnershipStatus,
     setupWss,
+    broadcastEngineEvent,
     sendMinecraftCommand,
     handleStatusChange,
     setupEventListeners,
