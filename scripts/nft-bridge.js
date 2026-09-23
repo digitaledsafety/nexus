@@ -225,8 +225,21 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
         }
     }
 
-    const combinedNfts = [...status.walletNfts, ...vaultNftsForServer];
-    const isHolder = inVault || inWallet;
+    // Return all user NFTs across wallet and all tracked vaults (deduplicated by tokenId)
+    const allVaultNfts = status.vaults ? Object.values(status.vaults).flat() : [];
+    const rawAllNfts = [...(status.walletNfts || []), ...allVaultNfts];
+
+    const seenTokenIds = new Set();
+    const combinedNfts = [];
+    for (const nft of rawAllNfts) {
+        const idStr = nft.tokenId.toString();
+        if (!seenTokenIds.has(idStr)) {
+            seenTokenIds.add(idStr);
+            combinedNfts.push(nft);
+        }
+    }
+
+    const isHolder = combinedNfts.length > 0;
 
     console.log(`[getOwnershipStatus] Result for ${addressToCheck}: isHolder=${isHolder}, inVault=${inVault}, inWallet=${inWallet}, returnedNfts=${combinedNfts.length}`);
     if (combinedNfts.length > 0) {
