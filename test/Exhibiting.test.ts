@@ -137,6 +137,79 @@ describe("Exhibiting System", async function () {
     assert.equal(await bragNFT.read.ownerOf([tokenId]), getAddress(user.account.address));
   });
 
+  it("Should batch move ERC721 with duration", async function () {
+    const { bragNFT, vault1, vault2, user } = await deployContracts();
+    const publicClient = await viem.getPublicClient();
+
+    await bragNFT.write.donate(["batch move timed 1", ""], { account: user.account, value: parseEther("0.1") });
+    await bragNFT.write.donate(["batch move timed 2", ""], { account: user.account, value: parseEther("0.1") });
+    const tokenId1 = 0n;
+    const tokenId2 = 1n;
+
+    // Summon both to Vault 1
+    await bragNFT.write.safeTransferFrom([user.account.address, vault1.address, tokenId1], { account: user.account });
+    await bragNFT.write.safeTransferFrom([user.account.address, vault1.address, tokenId2], { account: user.account });
+
+    // Batch move to Vault 2 with 1 hour duration
+    const duration = 3600n;
+    await vault1.write.batchMove721WithDuration([[bragNFT.address, bragNFT.address], [tokenId1, tokenId2], vault2.address, duration], { account: user.account });
+
+    // Both should be locked in Vault 2
+    await assert.rejects(
+        vault2.write.withdraw721([bragNFT.address, tokenId1], { account: user.account }),
+        /Exhibition not yet expired/
+    );
+    await assert.rejects(
+        vault2.write.withdraw721([bragNFT.address, tokenId2], { account: user.account }),
+        /Exhibition not yet expired/
+    );
+
+    // Increase time
+    await publicClient.request({ method: "evm_increaseTime" as any, params: [3601] });
+    await publicClient.request({ method: "evm_mine" as any, params: [] });
+
+    await vault2.write.withdraw721([bragNFT.address, tokenId1], { account: user.account });
+    await vault2.write.withdraw721([bragNFT.address, tokenId2], { account: user.account });
+    assert.equal(await bragNFT.read.ownerOf([tokenId1]), getAddress(user.account.address));
+    assert.equal(await bragNFT.read.ownerOf([tokenId2]), getAddress(user.account.address));
+  });
+
+  it("Should batch move ERC1155 with duration", async function () {
+    const { mock1155, vault1, vault2, user, owner } = await deployContracts();
+    const publicClient = await viem.getPublicClient();
+
+    const tokenId1 = 1n;
+    const tokenId2 = 2n;
+    await mock1155.write.mint([user.account.address, tokenId1, 10n], { account: owner.account });
+    await mock1155.write.mint([user.account.address, tokenId2, 10n], { account: owner.account });
+
+    // Exhibit to Vault 1
+    await mock1155.write.safeTransferFrom([user.account.address, vault1.address, tokenId1, 5n, "0x"], { account: user.account });
+    await mock1155.write.safeTransferFrom([user.account.address, vault1.address, tokenId2, 5n, "0x"], { account: user.account });
+
+    // Batch move to Vault 2 with 1 hour duration
+    const duration = 3600n;
+    await vault1.write.batchMove1155WithDuration(
+      [[mock1155.address, mock1155.address], [tokenId1, tokenId2], [5n, 5n], vault2.address, duration],
+      { account: user.account }
+    );
+
+    // Should be locked in Vault 2
+    await assert.rejects(
+        vault2.write.withdraw1155([mock1155.address, tokenId1, 5n], { account: user.account }),
+        /Exhibition not yet expired/
+    );
+
+    // Increase time
+    await publicClient.request({ method: "evm_increaseTime" as any, params: [3601] });
+    await publicClient.request({ method: "evm_mine" as any, params: [] });
+
+    await vault2.write.withdraw1155([mock1155.address, tokenId1, 5n], { account: user.account });
+    await vault2.write.withdraw1155([mock1155.address, tokenId2, 5n], { account: user.account });
+    assert.equal(await mock1155.read.balanceOf([user.account.address, tokenId1]), 10n);
+    assert.equal(await mock1155.read.balanceOf([user.account.address, tokenId2]), 10n);
+  });
+
   it("Should NOT allow moving to unverified vault", async function () {
     const { bragNFT, vault1, user, user2 } = await deployContracts();
 
