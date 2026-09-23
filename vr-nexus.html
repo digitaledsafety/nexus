@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-900 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VR Nexus Gallery | Standalone Web3 App Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; overflow-x: hidden; }
+        .font-cinzel { font-family: 'Cinzel', serif; }
+        .glow-gold { text-shadow: 0 0 10px rgba(234, 179, 8, 0.7), 0 0 20px rgba(234, 179, 8, 0.4); }
+        .glow-violet { text-shadow: 0 0 10px rgba(168, 85, 247, 0.7), 0 0 20px rgba(168, 85, 247, 0.4); }
+        .vr-border { border: 1px solid rgba(234, 179, 8, 0.3); box-shadow: 0 0 20px rgba(234, 179, 8, 0.15); }
+    </style>
+</head>
+<body class="h-full flex flex-col bg-slate-950 text-slate-100">
+
+    <!-- Header Navigation -->
+    <header class="bg-slate-900/90 backdrop-blur border-b border-amber-500/30 px-6 py-4 flex flex-wrap items-center justify-between z-10">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-lg bg-gradient-to-tr from-amber-500 to-purple-600 flex items-center justify-center font-cinzel font-bold text-xl text-slate-950 shadow-lg shadow-amber-500/20">
+                VR
+            </div>
+            <div>
+                <h1 class="font-cinzel font-extrabold text-xl tracking-wider text-amber-300 glow-gold">VR NEXUS GALLERY</h1>
+                <p class="text-xs text-slate-400">Standalone VR Web3 Exhibition App • Server: <span class="text-amber-300 font-mono">vr-nexus</span></p>
+            </div>
+        </div>
+
+        <!-- Connection Badges -->
+        <div class="flex items-center space-x-4">
+            <div id="ws-badge" class="px-3 py-1 rounded-full text-xs font-mono bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center space-x-2">
+                <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                <span id="ws-status-text">Connecting Bridge...</span>
+            </div>
+            <a href="index.html" class="text-xs text-slate-400 hover:text-amber-300 transition flex items-center space-x-1">
+                <span>← Back to Hub</span>
+            </a>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 lg:p-6 overflow-hidden">
+
+        <!-- Left Panel: Controls & Inventory -->
+        <div class="lg:col-span-4 flex flex-col space-y-4">
+            <!-- User Platform Profile -->
+            <div class="bg-slate-900/90 rounded-xl p-5 vr-border flex flex-col space-y-3">
+                <h2 class="font-cinzel font-bold text-sm text-amber-300 flex items-center justify-between">
+                    <span>CURATOR IDENTITY</span>
+                    <span class="text-xs text-slate-500 font-normal">SIWE Link</span>
+                </h2>
+
+                <div>
+                    <label class="text-xs text-slate-400 mb-1 block">Platform User ID:</label>
+                    <div class="flex space-x-2">
+                        <input id="platform-id" type="text" value="vr:player_vr" class="bg-slate-950 border border-amber-500/30 rounded-lg px-3 py-2 text-sm text-amber-300 font-mono w-full focus:outline-none focus:border-amber-400">
+                        <button id="btn-refresh" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-2 rounded-lg text-xs transition">
+                            Sync
+                        </button>
+                    </div>
+                </div>
+
+                <div id="user-status-card" class="bg-slate-950/80 rounded-lg p-3 text-xs space-y-1 font-mono border border-slate-800">
+                    <div class="flex justify-between text-slate-400">
+                        <span>Wallet:</span>
+                        <span id="user-address" class="text-slate-200">Not Synced</span>
+                    </div>
+                    <div class="flex justify-between text-slate-400">
+                        <span>BRAG Balance:</span>
+                        <span id="user-brag" class="text-amber-400 font-bold">-- BRAG</span>
+                    </div>
+                    <div class="flex justify-between text-slate-400">
+                        <span>Pre-Authorized:</span>
+                        <span id="user-preauth" class="text-amber-400">Checking...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summoning Control Panel -->
+            <div class="bg-slate-900/90 rounded-xl p-5 vr-border flex flex-col space-y-4 flex-1">
+                <h2 class="font-cinzel font-bold text-sm text-amber-300 flex items-center justify-between">
+                    <span>SUMMON NFT TO VR GALLERY</span>
+                    <span id="summon-fee-tag" class="text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">Fee: 10 BRAG</span>
+                </h2>
+
+                <div>
+                    <label class="text-xs text-slate-400 mb-1 block">Select NFT to Summon:</label>
+                    <select id="nft-select" class="bg-slate-950 border border-amber-500/30 rounded-lg px-3 py-2 text-sm text-slate-200 w-full focus:outline-none focus:border-amber-400">
+                        <option value="">-- Loading Available NFTs --</option>
+                    </select>
+                </div>
+
+                <button id="btn-summon" class="w-full py-3 px-4 bg-gradient-to-r from-amber-500 to-purple-600 hover:from-amber-400 hover:to-purple-500 text-slate-950 font-cinzel font-bold rounded-lg text-sm transition tracking-wider shadow-lg shadow-amber-500/25 flex items-center justify-center space-x-2">
+                    <svg class="w-5 h-5 animate-spin hidden" id="summon-spinner" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <span id="summon-btn-text">SUMMON INTO VR GALLERY</span>
+                </button>
+
+                <!-- Console Output -->
+                <div class="flex-1 flex flex-col min-h-[160px]">
+                    <div class="text-xs text-slate-400 mb-1 flex justify-between">
+                        <span>GALLERY EVENT LOG</span>
+                        <button id="btn-clear-log" class="text-[10px] text-slate-500 hover:text-slate-300">Clear</button>
+                    </div>
+                    <div id="event-log" class="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-3 font-mono text-[11px] text-slate-300 overflow-y-auto space-y-1.5 max-h-[220px]">
+                        <div class="text-slate-500">[System] VR Nexus Gallery Engine Initialized.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: 3D VR Gallery Canvas -->
+        <div class="lg:col-span-8 flex flex-col h-full min-h-[450px] bg-slate-900/90 rounded-xl vr-border relative overflow-hidden">
+            <!-- Overlay Info Header -->
+            <div class="absolute top-4 left-4 z-10 bg-slate-950/80 backdrop-blur px-4 py-2 rounded-lg border border-amber-500/30 flex items-center space-x-3">
+                <div class="w-3 h-3 rounded-full bg-amber-400 animate-ping"></div>
+                <div>
+                    <div id="scene-nft-title" class="font-cinzel font-bold text-sm text-amber-300">VR Exhibition Pedestal</div>
+                    <div id="scene-nft-subtitle" class="text-xs text-slate-400">Waiting for NFT summon command...</div>
+                </div>
+            </div>
+
+            <!-- Cross-Realm Summon Alert Banner -->
+            <div id="summon-alert" class="hidden absolute top-4 right-4 z-10 max-w-sm bg-gradient-to-r from-cyan-900/90 to-blue-900/90 border border-cyan-500/50 backdrop-blur p-3 rounded-lg text-xs shadow-2xl animate-bounce">
+                <div class="font-bold text-cyan-300 flex items-center justify-between">
+                    <span>⚡ CROSS-REALM EVENT</span>
+                    <button id="btn-close-alert" class="text-slate-400 hover:text-white ml-2">×</button>
+                </div>
+                <div id="alert-message" class="text-slate-200 mt-1">NFT transferred away to Metaverse Alpha Realm.</div>
+            </div>
+
+            <!-- Three.js Canvas Container -->
+            <div id="canvas-container" class="w-full h-full flex-1"></div>
+        </div>
+
+    </main>
+
+    <script>
+        // --- State Variables ---
+        const WS_URL = 'ws://localhost:9001';
+        let ws = null;
+        let activeNft = null;
+        let userNfts = [];
+        let scene, camera, renderer, pedestalMesh, nftGroup, galleryWallsGroup;
+
+        // --- DOM Elements ---
+        const wsBadge = document.getElementById('ws-badge');
+        const wsStatusText = document.getElementById('ws-status-text');
+        const platformIdInput = document.getElementById('platform-id');
+        const userAddressEl = document.getElementById('user-address');
+        const userBragEl = document.getElementById('user-brag');
+        const userPreauthEl = document.getElementById('user-preauth');
+        const nftSelect = document.getElementById('nft-select');
+        const btnSummon = document.getElementById('btn-summon');
+        const btnRefresh = document.getElementById('btn-refresh');
+        const eventLog = document.getElementById('event-log');
+        const sceneNftTitle = document.getElementById('scene-nft-title');
+        const sceneNftSubtitle = document.getElementById('scene-nft-subtitle');
+        const summonAlert = document.getElementById('summon-alert');
+        const alertMessage = document.getElementById('alert-message');
+
+        // --- Logging Helper ---
+        function log(msg, type = 'info') {
+            const time = new Date().toLocaleTimeString();
+            const colorClass = type === 'success' ? 'text-amber-300' : (type === 'warn' ? 'text-amber-400' : (type === 'error' ? 'text-rose-400' : 'text-purple-300'));
+            const div = document.createElement('div');
+            div.className = colorClass;
+            div.innerHTML = `<span class="text-slate-600">[${time}]</span> ${msg}`;
+            eventLog.appendChild(div);
+            eventLog.scrollTop = eventLog.scrollHeight;
+        }
+
+        // --- Three.js 3D VR Gallery Scene Initialization ---
+        function init3D() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x0f172a, 0.025);
+
+            camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.set(0, 3.5, 7.5);
+            camera.lookAt(0, 1.2, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+
+            // VR Showroom Floor (Polished White/Marble)
+            const floorGeo = new THREE.CircleGeometry(15, 64);
+            const floorMat = new THREE.MeshStandardMaterial({
+                color: 0x1e293b,
+                roughness: 0.1,
+                metalness: 0.6
+            });
+            const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+            floorMesh.rotation.x = -Math.PI / 2;
+            floorMesh.position.y = -0.5;
+            scene.add(floorMesh);
+
+            // Lighting (Warm Gallery Studio Lights)
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+
+            const goldSpotLight = new THREE.SpotLight(0xeab308, 4, 25, Math.PI / 4, 0.5);
+            goldSpotLight.position.set(0, 8, 2);
+            goldSpotLight.target.position.set(0, 1, 0);
+            scene.add(goldSpotLight);
+            scene.add(goldSpotLight.target);
+
+            const purpleSpotLight = new THREE.SpotLight(0xa855f7, 3, 25, Math.PI / 4, 0.5);
+            purpleSpotLight.position.set(-5, 6, -3);
+            scene.add(purpleSpotLight);
+
+            // Architectural Pillars around Gallery
+            galleryWallsGroup = new THREE.Group();
+            for (let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2;
+                const radius = 9;
+                const pGeo = new THREE.CylinderGeometry(0.3, 0.3, 8, 16);
+                const pMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8, roughness: 0.2 });
+                const pMesh = new THREE.Mesh(pGeo, pMat);
+                pMesh.position.set(Math.cos(angle) * radius, 3.5, Math.sin(angle) * radius);
+                galleryWallsGroup.add(pMesh);
+            }
+            scene.add(galleryWallsGroup);
+
+            // Luxurious Pedestal Base
+            const baseGeo = new THREE.BoxGeometry(3.0, 0.8, 3.0);
+            const baseMat = new THREE.MeshStandardMaterial({
+                color: 0x0f172a,
+                roughness: 0.2,
+                metalness: 0.9,
+                emissive: 0x3b82f6,
+                emissiveIntensity: 0.2
+            });
+            pedestalMesh = new THREE.Mesh(baseGeo, baseMat);
+            pedestalMesh.position.y = -0.1;
+            scene.add(pedestalMesh);
+
+            // Golden Accent Border on Pedestal
+            const borderGeo = new THREE.BoxGeometry(3.1, 0.1, 3.1);
+            const borderMat = new THREE.MeshStandardMaterial({ color: 0xeab308, metalness: 0.9, roughness: 0.1 });
+            const borderMesh = new THREE.Mesh(borderGeo, borderMat);
+            borderMesh.position.y = 0.31;
+            scene.add(borderMesh);
+
+            // Group for Summoned VR NFT Artwork Frame
+            nftGroup = new THREE.Group();
+            nftGroup.position.set(0, 2.0, 0);
+            scene.add(nftGroup);
+
+            // Responsive Resizing
+            window.addEventListener('resize', () => {
+                camera.aspect = container.clientWidth / container.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(container.clientWidth, container.clientHeight);
+            });
+
+            animate();
+        }
+
+        // --- 3D Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (galleryWallsGroup) {
+                galleryWallsGroup.rotation.y += 0.001;
+            }
+            if (nftGroup) {
+                nftGroup.rotation.y += 0.008;
+                nftGroup.position.y = 2.0 + Math.sin(Date.now() * 0.0015) * 0.1;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // --- Render Exhibition Artwork Frame for Summoned NFT ---
+        function renderNFTOnPedestal(nft) {
+            while (nftGroup.children.length > 0) {
+                nftGroup.remove(nftGroup.children[0]);
+            }
+
+            if (!nft) {
+                sceneNftTitle.innerText = "VR Exhibition Pedestal";
+                sceneNftSubtitle.innerText = "Waiting for NFT summon command...";
+                activeNft = null;
+                return;
+            }
+
+            activeNft = nft;
+            sceneNftTitle.innerText = `VR Artwork #${nft.tokenId}`;
+            sceneNftSubtitle.innerText = `Exhibited in VR Nexus Gallery • ${nft.location || 'VR Vault'}`;
+
+            // Create VR Exhibition Frame Mesh
+            const frameGeo = new THREE.BoxGeometry(2.2, 2.8, 0.15);
+
+            // Dynamic Canvas Texture for Artwork
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 640;
+            const ctx = canvas.getContext('2d');
+
+            // Canvas Background
+            const grad = ctx.createLinearGradient(0, 0, 512, 640);
+            grad.addColorStop(0, '#1e1b4b');
+            grad.addColorStop(0.5, '#312e81');
+            grad.addColorStop(1, '#4c1d95');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 512, 640);
+
+            // Gold Trim
+            ctx.strokeStyle = '#eab308';
+            ctx.lineWidth = 16;
+            ctx.strokeRect(12, 12, 488, 616);
+
+            // Title
+            ctx.fillStyle = '#fef08a';
+            ctx.font = 'bold 36px serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(`VR EXHIBIT #${nft.tokenId}`, 256, 75);
+
+            ctx.fillStyle = '#e9d5ff';
+            ctx.font = '22px sans-serif';
+            ctx.fillText(`VR Nexus Gallery`, 256, 115);
+
+            // Artwork Emblem
+            ctx.fillStyle = '#eab308';
+            ctx.beginPath();
+            ctx.arc(256, 330, 120, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#312e81';
+            ctx.font = 'bold 90px serif';
+            ctx.fillText(`VR`, 256, 360);
+
+            // Footer Status
+            ctx.fillStyle = '#fef08a';
+            ctx.font = 'bold 26px sans-serif';
+            ctx.fillText(`● EXHIBITED IN VR VAULT`, 256, 540);
+
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = '20px sans-serif';
+            ctx.fillText(`Vault: 0xvr...nexus`, 256, 580);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const frameMat = new THREE.MeshStandardMaterial({
+                map: texture,
+                metalness: 0.6,
+                roughness: 0.2,
+                emissive: 0xeab308,
+                emissiveIntensity: 0.2
+            });
+
+            const frameMesh = new THREE.Mesh(frameGeo, frameMat);
+            nftGroup.add(frameMesh);
+
+            // Materialize Scaling Animation
+            nftGroup.scale.set(0.1, 0.1, 0.1);
+            let s = 0.1;
+            const animInterval = setInterval(() => {
+                s += 0.08;
+                if (s >= 1.0) {
+                    s = 1.0;
+                    clearInterval(animInterval);
+                }
+                nftGroup.scale.set(s, s, s);
+            }, 16);
+        }
+
+        function dematerializeNFT() {
+            if (nftGroup.children.length === 0) return;
+            let s = 1.0;
+            const animInterval = setInterval(() => {
+                s -= 0.1;
+                if (s <= 0.05) {
+                    s = 0;
+                    clearInterval(animInterval);
+                    while (nftGroup.children.length > 0) {
+                        nftGroup.remove(nftGroup.children[0]);
+                    }
+                    activeNft = null;
+                    sceneNftTitle.innerText = "VR Exhibition Pedestal";
+                    sceneNftSubtitle.innerText = "Waiting for NFT summon command...";
+                } else {
+                    nftGroup.scale.set(s, s, s);
+                }
+            }, 16);
+        }
+
+        // --- WebSocket Connection ---
+        function connectWebSocket() {
+            ws = new WebSocket(WS_URL);
+
+            ws.onopen = () => {
+                wsBadge.className = "px-3 py-1 rounded-full text-xs font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center space-x-2";
+                wsStatusText.innerText = "Bridge Connected";
+                log("Connected to NFT Bridge WebSocket (port 9001).", "success");
+
+                // Send Handshake
+                ws.send(JSON.stringify({ type: "nexus:handshake", serverId: "vr-nexus" }));
+
+                // Fetch current status
+                fetchUserStatus();
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleBridgeMessage(data);
+                } catch (e) {
+                    console.error("WS Parse error:", e);
+                }
+            };
+
+            ws.onerror = (err) => {
+                wsBadge.className = "px-3 py-1 rounded-full text-xs font-mono bg-rose-500/10 text-rose-400 border border-rose-500/30 flex items-center space-x-2";
+                wsStatusText.innerText = "Bridge Error";
+                log("WebSocket connection error.", "error");
+            };
+
+            ws.onclose = () => {
+                wsBadge.className = "px-3 py-1 rounded-full text-xs font-mono bg-slate-500/10 text-slate-400 border border-slate-500/30 flex items-center space-x-2";
+                wsStatusText.innerText = "Disconnected";
+                log("WebSocket disconnected. Reconnecting in 3s...", "warn");
+                setTimeout(connectWebSocket, 3000);
+            };
+        }
+
+        // --- Handle Incoming Bridge WS Messages ---
+        function handleBridgeMessage(data) {
+            if (data.type === 'handshake_ack') {
+                log(`Server Handshake confirmed for: ${data.serverId}`, 'success');
+            } else if (data.type === 'status_response') {
+                updateUserUI(data.data);
+            } else if (data.type === 'summon_response') {
+                document.getElementById('summon-spinner').classList.add('hidden');
+                document.getElementById('summon-btn-text').innerText = "SUMMON INTO VR GALLERY";
+                btnSummon.disabled = false;
+
+                if (data.result && data.result.success) {
+                    log(`Successfully summoned NFT #${data.result.tokenId}!`, 'success');
+                    if (data.result.nft) {
+                        renderNFTOnPedestal(data.result.nft);
+                    }
+                    fetchUserStatus();
+                } else {
+                    log(`Summon failed: ${data.result ? data.result.reason : 'Unknown reason'}`, 'error');
+                }
+            } else if (data.type === 'nft_summoned') {
+                log(`★ EVENT: Player ${data.playerName} summoned NFT #${data.tokenId} to ${data.serverName || data.serverId}!`, 'info');
+
+                if (data.serverId === 'vr-nexus') {
+                    renderNFTOnPedestal(data.nft);
+                    fetchUserStatus();
+                } else {
+                    // NFT was summoned into ANOTHER realm (e.g., Metaverse Alpha Realm)
+                    if (activeNft && activeNft.tokenId.toString() === data.tokenId.toString()) {
+                        log(`Notice: NFT #${data.tokenId} dematerialized from VR Gallery to ${data.serverName || data.serverId}.`, 'warn');
+                        dematerializeNFT();
+                        showAlert(`NFT #${data.tokenId} was summoned into ${data.serverName || data.serverId}! It has dematerialized from VR Gallery.`);
+                    }
+                    fetchUserStatus();
+                }
+            }
+        }
+
+        function showAlert(msg) {
+            alertMessage.innerText = msg;
+            summonAlert.classList.remove('hidden');
+        }
+
+        document.getElementById('btn-close-alert')?.addEventListener('click', () => {
+            summonAlert.classList.add('hidden');
+        });
+
+        // --- Fetch User Ownership & Vault Status ---
+        function fetchUserStatus() {
+            const platformId = platformIdInput.value.trim();
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'get_status',
+                    platformId: platformId,
+                    serverId: 'vr-nexus',
+                    playerName: 'VR Curator'
+                }));
+            }
+        }
+
+        // --- Update UI with Status Response ---
+        function updateUserUI(status) {
+            if (!status) return;
+
+            if (status.address) {
+                userAddressEl.innerText = `${status.address.slice(0,6)}...${status.address.slice(-4)}`;
+            } else {
+                userAddressEl.innerText = "Unlinked";
+            }
+
+            userNfts = status.nfts || [];
+            nftSelect.innerHTML = '';
+
+            if (userNfts.length === 0) {
+                nftSelect.innerHTML = '<option value="">No NFTs found in wallet or vaults</option>';
+            } else {
+                userNfts.forEach(nft => {
+                    const opt = document.createElement('option');
+                    opt.value = nft.tokenId;
+                    opt.innerText = `NFT #${nft.tokenId} (${nft.location || 'Wallet'})`;
+                    nftSelect.appendChild(opt);
+                });
+            }
+
+            // Check if active NFT is currently in VR Vault
+            if (activeNft && !userNfts.some(n => n.tokenId.toString() === activeNft.tokenId.toString())) {
+                dematerializeNFT();
+            }
+
+            userBragEl.innerText = "1,000 BRAG";
+            userPreauthEl.innerText = "✓ Active";
+            userPreauthEl.className = "text-amber-400 font-bold";
+        }
+
+        // --- Event Listeners ---
+        btnSummon.addEventListener('click', () => {
+            const tokenId = nftSelect.value;
+            if (!tokenId) {
+                log("Please select an NFT to summon.", "warn");
+                return;
+            }
+
+            document.getElementById('summon-spinner').classList.remove('hidden');
+            document.getElementById('summon-btn-text').innerText = "Summoning...";
+            btnSummon.disabled = true;
+
+            const platformId = platformIdInput.value.trim();
+
+            ws.send(JSON.stringify({
+                type: 'summon',
+                target: tokenId,
+                platformId: platformId,
+                serverId: 'vr-nexus',
+                playerName: 'VR Curator'
+            }));
+
+            log(`Sending summon request for NFT #${tokenId}...`, 'info');
+        });
+
+        btnRefresh.addEventListener('click', () => {
+            log("Syncing curator identity and status...", 'info');
+            fetchUserStatus();
+        });
+
+        document.getElementById('btn-clear-log').addEventListener('click', () => {
+            eventLog.innerHTML = '';
+        });
+
+        // --- Initialize Page ---
+        window.addEventListener('DOMContentLoaded', () => {
+            init3D();
+            connectWebSocket();
+        });
+    </script>
+</body>
+</html>
