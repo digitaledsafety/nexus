@@ -143,18 +143,21 @@ node scripts/export-abis.cjs
 ### Minecraft Server Integration
 The bridge coordinates between the blockchain and game servers. It provides an HTTP API on port `9000` (for web-based linking) and a WebSocket server on port `9001` (for Minecraft client connections).
 
-To map specific Minecraft servers to `ExhibitVault` contracts, create a `bridge-config.json` file in the root directory:
+To map specific Minecraft servers to `ExhibitVault` contracts or configure bridge parameters, update `config.json` in the root directory:
 
 ```json
 {
-  "servers": {
-    "survival-1": {
-      "vaultAddress": "0x...",
-      "name": "Survival Server"
-    },
-    "creative-1": {
-      "vaultAddress": "0x...",
-      "name": "Creative Server"
+  "bridge": {
+    "summonFeeBrag": "10",
+    "servers": {
+      "survival-1": {
+        "vaultAddress": "0x...",
+        "name": "Survival Server"
+      },
+      "creative-1": {
+        "vaultAddress": "0x...",
+        "name": "Creative Server"
+      }
     }
   }
 }

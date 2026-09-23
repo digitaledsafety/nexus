@@ -5,32 +5,18 @@ import { createPublicClient, http as viemHttp, getContract, verifyMessage, parse
 import { mainnet, localhost, sepolia } from 'viem/chains';
 import { WebSocketServer } from 'ws';
 import { randomUUID } from 'node:crypto';
+import { loadConfig, getContractAddress as resolveContractAddress } from './loader.js';
 
-const PORT = 9000;
-const WS_PORT = 9001;
-const CHAIN_ID = process.env.CHAIN_ID
-    ? parseInt(process.env.CHAIN_ID)
-    : ((process.env.APP_ENV === 'sepolia' || process.env.HARDHAT_NETWORK === 'sepolia') ? 11155111 : 31337);
+const bridgeConfig = loadConfig();
+const PORT = bridgeConfig.ports.bridgeHttp;
+const WS_PORT = bridgeConfig.ports.bridgeWs;
+const CHAIN_ID = bridgeConfig.chainId;
 const isMain = process.argv[1] && (path.resolve(process.argv[1]) === path.resolve('scripts/nft-bridge.js'));
 const MAPPINGS_FILE = path.join(process.cwd(), 'mappings.json');
-const CONFIG_FILE = path.join(process.cwd(), 'bridge-config.json');
 
 // --- Configuration ---
-let serverConfigs = {
-    "local-dev": { vaultAddress: null, name: "Nexus Staging" },
-    "minecraft-server-1": { vaultAddress: null, name: "Survival" },
-    "server-2": { vaultAddress: null, name: "Creative" }
-};
-
-if (fs.existsSync(CONFIG_FILE)) {
-    try {
-        const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
-        serverConfigs = { ...serverConfigs, ...config.servers };
-        console.log("Loaded server configurations");
-    } catch (e) {
-        console.error("Failed to load bridge-config.json:", e);
-    }
-}
+let serverConfigs = bridgeConfig.bridge.servers;
+console.log("Loaded server configurations from loader");
 
 let mappings = new Map();
 if (fs.existsSync(MAPPINGS_FILE)) {
@@ -606,15 +592,8 @@ function sendMinecraftCommand(serverId, commandLine) {
 }
 
 // --- Blockchain Integration ---
-const DEPLOYMENT_PATH = path.join(process.cwd(), 'ignition', 'deployments', `chain-${CHAIN_ID}`, 'deployed_addresses.json');
-
 function getContractAddress(contractName) {
-    const envVar = `CONTRACT_ADDRESS_${contractName.toUpperCase()}`;
-    if (process.env[envVar]) return process.env[envVar];
-
-    if (!fs.existsSync(DEPLOYMENT_PATH)) return null;
-    const deployments = JSON.parse(fs.readFileSync(DEPLOYMENT_PATH, 'utf8'));
-    return deployments[`AppModule#${contractName}`];
+    return resolveContractAddress(contractName, CHAIN_ID);
 }
 
 const BRAG_ABI = [
