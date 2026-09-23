@@ -40,6 +40,15 @@ if (fs.existsSync(MAPPINGS_FILE)) {
     } catch (e) {}
 }
 
+// Fallback demo mappings if not present
+const DEMO_ADDRESS = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
+const demoKeys = ['alpha:player_alpha', 'vr:player_vr', 'alpha:demo', 'vr:demo', 'roblox:987654321'];
+demoKeys.forEach(key => {
+    if (!mappings.has(key)) {
+        mappings.set(key, DEMO_ADDRESS);
+    }
+});
+
 const pendingTokens = new Map();
 const statusCache = new Map();
 const preAuthorizations = new Map(); // address.toLowerCase() -> { bragApproved: boolean, nftApproved: boolean }
@@ -164,6 +173,33 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
             }
         }
     }
+
+    // Demo Account Fallback NFTs if no NFTs found on-chain or in cache for demo platforms
+    const isDemoPlatform = Boolean(uuid && (demoKeys.includes(uuid) || uuid.startsWith('alpha:') || uuid.startsWith('vr:')));
+    if (addressToCheck.toLowerCase() === DEMO_ADDRESS.toLowerCase() && isDemoPlatform) {
+        const totalNftsCount = (status.walletNfts ? status.walletNfts.length : 0) +
+            Object.values(status.vaults || {}).reduce((acc, list) => acc + list.length, 0);
+
+        if (totalNftsCount === 0) {
+            status.walletNfts = [
+                {
+                    tokenId: "101",
+                    location: "Wallet",
+                    nftContract: getContractAddress('BragNFT') || "0xBragNFTAddress",
+                    image: "https://modelviewer.dev/shared-assets/models/Astronaut.glb",
+                    animation_url: "https://modelviewer.dev/shared-assets/models/Astronaut.glb"
+                },
+                {
+                    tokenId: "202",
+                    location: "Wallet",
+                    nftContract: getContractAddress('BragNFT') || "0xBragNFTAddress",
+                    image: "https://picsum.photos/id/10/800/800",
+                    animation_url: "https://picsum.photos/id/10/800/800"
+                }
+            ];
+        }
+    }
+
     statusCache.set(addressToCheck.toLowerCase(), status);
 
     const serverConfig = serverConfigs[serverId];
