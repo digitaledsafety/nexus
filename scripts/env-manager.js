@@ -3,11 +3,13 @@ import http from 'http';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { loadConfig, generateAddonConfigJS, generateFrontendConfigJS } from './loader.js';
 
+const sysConfig = loadConfig();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.join(__dirname, '..');
-const PORT = 9002;
-export const getAppEnv = () => process.env.APP_ENV || process.env.HARDHAT_NETWORK || 'local';
+const PORT = sysConfig.ports.envManager;
+export const getAppEnv = () => process.env.APP_ENV || process.env.HARDHAT_NETWORK || sysConfig.env || 'local';
 export const isSepolia = () => getAppEnv() === 'sepolia';
 export const isStaging = () => getAppEnv() === 'staging';
 
@@ -103,29 +105,10 @@ export async function prepareAddon() {
     console.log('Preparing NFT addon...');
     const sourceDir = path.join(ROOT, 'addons', 'minecraft-bedrock-addon');
 
-    // Inject configuration into config.js
-    const configJsPath = path.join(sourceDir, 'development_behavior_packs', 'behavior_pack_sample', 'scripts', 'config.js');
+    generateAddonConfigJS();
+    generateFrontendConfigJS();
 
-    let wsUrl = process.env.WS_URL || 'ws://127.0.0.1:9001';
-    let serverId = process.env.SERVER_ID || 'local-dev';
-    let nexusAddress = process.env.CONTRACT_ADDRESS_BRAGNFT || '0x0000000000000000000000000000000000000000';
-
-    if (isStaging()) {
-        wsUrl = process.env.STAGING_BRIDGE_URL || process.env.WS_URL || wsUrl;
-        nexusAddress = process.env.STAGING_BRAGNFT_ADDRESS || process.env.CONTRACT_ADDRESS_BRAGNFT || nexusAddress;
-    } else {
-        const chainIdFolder = isSepolia() ? 'chain-11155111' : 'chain-31337';
-        const deploymentPath = path.join(ROOT, 'ignition', 'deployments', chainIdFolder, 'deployed_addresses.json');
-        if (fs.existsSync(deploymentPath)) {
-            const deployments = JSON.parse(fs.readFileSync(deploymentPath, 'utf8'));
-            nexusAddress = process.env.CONTRACT_ADDRESS_BRAGNFT || deployments['AppModule#BragNFT'] || nexusAddress;
-        }
-    }
-
-    const configContent = `export const WS_URL = "${wsUrl}";\nexport const SERVER_ID = "${serverId}";\nexport const NEXUS_ADDRESS = "${nexusAddress}";\n`;
-
-    fs.writeFileSync(configJsPath, configContent);
-    console.log(`Addon prepared with WS_URL=${wsUrl}, SERVER_ID=${serverId}, NEXUS=${nexusAddress}`);
+    console.log(`Addon and Frontend config dynamically generated via loader.js`);
     return sourceDir;
 }
 
