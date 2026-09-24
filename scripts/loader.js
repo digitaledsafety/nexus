@@ -7,6 +7,188 @@ const __dirname = path.dirname(__filename);
 export const ROOT = path.resolve(__dirname, '..');
 const CONFIG_PATH = path.join(ROOT, 'config.json');
 
+const NAME_TO_ID = {
+    'sepolia': '11155111',
+    'holesky': '17000',
+    'mainnet': '1',
+    'hardhat': '31337',
+    'localhost': '31337',
+    'polygon': '137',
+    'mumbai': '80001',
+    'arbitrum': '42161',
+    'optimism': '10',
+    'base': '8453'
+};
+
+const BASE_INTERFACES = {
+    "IERC165": {
+        "abi": [
+            {"inputs": [{"internalType": "bytes4", "name": "interfaceId", "type": "bytes4"}], "name": "supportsInterface", "outputs": [{"internalType": "bool", "name": "", "type": "bool"}], "stateMutability": "view", "type": "function"}
+        ]
+    },
+    "IERC721": {
+        "abi": [
+            {"inputs": [{"internalType": "address", "name": "owner", "type": "address"}], "name": "balanceOf", "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"},
+            {"inputs": [{"internalType": "uint256", "name": "tokenId", "type": "uint256"}], "name": "ownerOf", "outputs": [{"internalType": "address", "name": "", "type": "address"}], "stateMutability": "view", "type": "function"},
+            {"inputs": [{"internalType": "uint256", "name": "tokenId", "type": "uint256"}], "name": "tokenURI", "outputs": [{"internalType": "string", "name": "", "type": "string"}], "stateMutability": "view", "type": "function"},
+            {"inputs": [], "name": "name", "outputs": [{"internalType": "string", "name": "", "type": "string"}], "stateMutability": "view", "type": "function"},
+            {"inputs": [], "name": "symbol", "outputs": [{"internalType": "string", "name": "", "type": "string"}], "stateMutability": "view", "type": "function"},
+            {"inputs": [{"internalType": "address", "name": "to", "type": "address"}, {"internalType": "uint256", "name": "tokenId", "type": "uint256"}], "name": "approve", "outputs": [], "stateMutability": "nonpayable", "type": "function"},
+            {"inputs": [{"internalType": "address", "name": "operator", "type": "address"}, {"internalType": "bool", "name": "approved", "type": "bool"}], "name": "setApprovalForAll", "outputs": [], "stateMutability": "nonpayable", "type": "function"},
+            {"inputs": [{"internalType": "address", "name": "owner", "type": "address"}, {"internalType": "address", "name": "operator", "type": "address"}], "name": "isApprovedForAll", "outputs": [{"internalType": "bool", "name": "", "type": "bool"}], "stateMutability": "view", "type": "function"},
+            {"inputs": [{"internalType": "uint256", "name": "tokenId", "type": "uint256"}], "name": "getApproved", "outputs": [{"internalType": "address", "name": "", "type": "address"}], "stateMutability": "view", "type": "function"},
+            {"inputs": [{"internalType": "address", "name": "from", "type": "address"}, {"internalType": "address", "name": "to", "type": "address"}, {"internalType": "uint256", "name": "tokenId", "type": "uint256"}], "name": "safeTransferFrom", "outputs": [], "stateMutability": "nonpayable", "type": "function"}
+        ]
+    },
+    "IERC1155": {
+        "abi": [
+            {"inputs": [{"internalType": "address", "name": "account", "type": "address"}, {"internalType": "uint256", "name": "id", "type": "uint256"}], "name": "balanceOf", "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"},
+            {"inputs": [{"internalType": "uint256", "name": "id", "type": "uint256"}], "name": "uri", "outputs": [{"internalType": "string", "name": "", "type": "string"}], "stateMutability": "view", "type": "function"},
+            {"inputs": [{"internalType": "address", "name": "operator", "type": "address"}, {"internalType": "bool", "name": "approved", "type": "bool"}], "name": "setApprovalForAll", "outputs": [], "stateMutability": "nonpayable", "type": "function"},
+            {"inputs": [{"internalType": "address", "name": "account", "type": "address"}, {"internalType": "address", "name": "operator", "type": "address"}], "name": "isApprovedForAll", "outputs": [{"internalType": "bool", "name": "", "type": "bool"}], "stateMutability": "view", "type": "function"},
+            {"inputs": [{"internalType": "address", "name": "from", "type": "address"}, {"internalType": "address", "name": "to", "type": "address"}, {"internalType": "uint256", "name": "id", "type": "uint256"}, {"internalType": "uint256", "name": "amount", "type": "uint256"}, {"internalType": "bytes", "name": "data", "type": "bytes"}], "name": "safeTransferFrom", "outputs": [], "stateMutability": "nonpayable", "type": "function"}
+        ]
+    }
+};
+
+/**
+ * Loads contract ABIs and bytecode from build artifacts
+ */
+export function loadContractABIs() {
+    const contracts = { ...BASE_INTERFACES };
+    const contractsDir = path.join(ROOT, "artifacts", "contracts");
+
+    if (fs.existsSync(contractsDir)) {
+        const solFolders = fs.readdirSync(contractsDir);
+        solFolders.forEach(solFolder => {
+            if (solFolder.endsWith(".sol")) {
+                const contractName = solFolder.replace(".sol", "");
+                const artifactPath = path.join(contractsDir, solFolder, `${contractName}.json`);
+                if (fs.existsSync(artifactPath)) {
+                    try {
+                        const data = JSON.parse(fs.readFileSync(artifactPath, "utf8"));
+                        if (data.abi && data.abi.length > 0) {
+                            contracts[contractName] = {
+                                abi: data.abi,
+                                bytecode: data.bytecode
+                            };
+                        }
+                    } catch (e) {
+                        console.warn(`[loader] Could not parse artifact ${artifactPath}:`, e.message);
+                    }
+                }
+            }
+        });
+    }
+
+    // Fallback: If any contract is missing from artifacts, try loading from existing config.js / contracts.js
+    const configPath = path.join(ROOT, "frontend", "config.js");
+    if (fs.existsSync(configPath)) {
+        try {
+            const content = fs.readFileSync(configPath, "utf8");
+            const match = content.match(/window\.APP_CONFIG = ({[\s\S]*?});/);
+            if (match) {
+                const existingConfig = JSON.parse(match[1]);
+                if (existingConfig.contracts) {
+                    for (const [name, obj] of Object.entries(existingConfig.contracts)) {
+                        if (!contracts[name]) {
+                            contracts[name] = obj;
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            // Ignore fallback errors
+        }
+    }
+
+    return contracts;
+}
+
+/**
+ * Gets the ABI for a specific contract name
+ */
+export function getContractAbi(contractName) {
+    const abis = loadContractABIs();
+    return abis[contractName]?.abi || null;
+}
+
+/**
+ * Loads deployed addresses from ignition/deployments and existing configs
+ */
+export function loadDeployments() {
+    let addresses = {};
+
+    // First load from config.json if contracts field is defined
+    const rawConfig = loadConfig();
+    if (rawConfig.contracts) {
+        for (const [chainId, map] of Object.entries(rawConfig.contracts)) {
+            addresses[chainId] = { ...map };
+            addresses[`chain-${chainId}`] = { ...map };
+        }
+    }
+
+    // Load from existing frontend/contracts.js or frontend/config.js if present
+    const frontendPath = path.join(ROOT, "frontend", "contracts.js");
+    if (fs.existsSync(frontendPath)) {
+        const existingContent = fs.readFileSync(frontendPath, "utf8");
+        const match = existingContent.match(/const CONTRACT_DATA = ({[\s\S]*});/);
+        if (match) {
+            try {
+                const existingData = JSON.parse(match[1]);
+                if (existingData.deployments) {
+                    for (const [chain, map] of Object.entries(existingData.deployments)) {
+                        addresses[chain] = { ...(addresses[chain] || {}), ...map };
+                    }
+                }
+            } catch (e) {
+                // Ignore parse errors
+            }
+        }
+    }
+
+    const deploymentsDir = path.join(ROOT, "ignition", "deployments");
+    if (fs.existsSync(deploymentsDir)) {
+        const chains = fs.readdirSync(deploymentsDir);
+        chains.forEach(chain => {
+            const deployedContractsPath = path.join(deploymentsDir, chain, "deployed_addresses.json");
+            if (fs.existsSync(deployedContractsPath)) {
+                try {
+                    const deployed = JSON.parse(fs.readFileSync(deployedContractsPath, "utf8"));
+
+                    let chainId = chain;
+                    if (NAME_TO_ID[chain.toLowerCase()]) {
+                        chainId = NAME_TO_ID[chain.toLowerCase()];
+                    } else if (chain.startsWith("chain-")) {
+                        chainId = chain.replace("chain-", "");
+                    }
+
+                    for (const [key, addr] of Object.entries(deployed)) {
+                        const nameMatch = key.split("#")[1] || key;
+                        if (nameMatch) {
+                            if (!addresses[chain]) addresses[chain] = {};
+                            addresses[chain][nameMatch] = addr;
+
+                            if (chainId !== chain) {
+                                if (!addresses[chainId]) addresses[chainId] = {};
+                                addresses[chainId][nameMatch] = addr;
+                            }
+
+                            const prefixedId = `chain-${chainId}`;
+                            if (!addresses[prefixedId]) addresses[prefixedId] = {};
+                            addresses[prefixedId][nameMatch] = addr;
+                        }
+                    }
+                } catch (e) {
+                    console.warn(`[loader] Error reading deployments from ${deployedContractsPath}:`, e.message);
+                }
+            }
+        });
+    }
+
+    return addresses;
+}
+
 /**
  * Reads config.json and applies process.env overrides
  */
@@ -95,15 +277,56 @@ export function getContractAddress(contractName, chainId) {
  */
 export function generateFrontendConfigJS() {
     const config = loadConfig();
+    const contracts = loadContractABIs();
+    const deployments = loadDeployments();
+
+    let externalCollections = config.frontend.externalCollections || [];
+    if (externalCollections.length === 0) {
+        const contractsJsPath = path.join(ROOT, "frontend", "contracts.js");
+        if (fs.existsSync(contractsJsPath)) {
+            const existingContent = fs.readFileSync(contractsJsPath, "utf8");
+            const match = existingContent.match(/const CONTRACT_DATA = ({[\s\S]*});/);
+            if (match) {
+                try {
+                    const existingData = JSON.parse(match[1]);
+                    if (existingData.externalCollections) {
+                        externalCollections = existingData.externalCollections;
+                    }
+                } catch (e) {
+                    // Ignore
+                }
+            }
+        }
+    }
+
+    const frontendConfig = {
+        ...config.frontend,
+        contracts,
+        deployments,
+        externalCollections
+    };
+
     const frontendContent = `/**
  * config.js - Global configuration for brag.charity frontend.
  * Auto-generated by scripts/loader.js - DO NOT EDIT MANUALLY.
  */
 
-window.APP_CONFIG = ${JSON.stringify(config.frontend, null, 4)};
+window.APP_CONFIG = ${JSON.stringify(frontendConfig, null, 2)};
+window.CONTRACT_DATA = window.APP_CONFIG;
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = window.APP_CONFIG;
+}
 `;
     const targetPath = path.join(ROOT, 'frontend', 'config.js');
     fs.writeFileSync(targetPath, frontendContent);
+
+    // Maintain frontend/contracts.js as a shim pointing to APP_CONFIG
+    const contractsJsContent = `// Deprecated shim: CONTRACT_DATA is consolidated in window.APP_CONFIG inside config.js
+const CONTRACT_DATA = window.APP_CONFIG || ${JSON.stringify({ contracts, deployments, externalCollections }, null, 2)};
+`;
+    const contractsJsPath = path.join(ROOT, 'frontend', 'contracts.js');
+    fs.writeFileSync(contractsJsPath, contractsJsContent);
+
     return targetPath;
 }
 
