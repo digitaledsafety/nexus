@@ -384,9 +384,10 @@ function getContract(name, addressOverride = null) {
         console.warn(`No valid address for contract ${name} on network ${network?.chainId}`);
         return null;
     }
-    const contractData = CONTRACT_DATA.contracts[name];
+    const configData = window.APP_CONFIG || (typeof CONTRACT_DATA !== 'undefined' ? CONTRACT_DATA : {});
+    const contractData = configData.contracts?.[name];
     if (!contractData || !contractData.abi) {
-        console.warn(`No ABI found for contract ${name} in CONTRACT_DATA`);
+        console.warn(`No ABI found for contract ${name} in config`);
         return null;
     }
     const abi = contractData.abi;
@@ -411,10 +412,12 @@ function getDeploymentAddress(name) {
     }
     if (override && ethers.utils.isAddress(override)) return override;
 
-    // Priority 2: CONTRACT_DATA
+    // Priority 2: window.APP_CONFIG (single configuration)
     if (!network) return null;
     const chainId = network.chainId.toString();
-    const deps = CONTRACT_DATA.deployments[chainId] || CONTRACT_DATA.deployments[`chain-${chainId}`];
+    const configData = window.APP_CONFIG || (typeof CONTRACT_DATA !== 'undefined' ? CONTRACT_DATA : {});
+    const deployments = configData.deployments || {};
+    const deps = deployments[chainId] || deployments[`chain-${chainId}`];
 
     if (deps) {
         return deps[name] || (alias ? deps[alias] : null) || null;

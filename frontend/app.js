@@ -202,9 +202,10 @@ function setupManagerListeners() {
                     throw new Error("Contract deployment not yet supported in Gasless mode via Manager. Use standard mode.");
                 }
 
+                const contractsData = (window.APP_CONFIG || CONTRACT_DATA || {}).contracts || {};
                 const factory = new ethers.ContractFactory(
-                    CONTRACT_DATA.contracts.ExhibitVault.abi,
-                    CONTRACT_DATA.contracts.ExhibitVault.bytecode,
+                    contractsData.ExhibitVault.abi,
+                    contractsData.ExhibitVault.bytecode,
                     signer
                 );
                 const registry = document.getElementById('addrExhibitRegistry').value;
@@ -235,7 +236,8 @@ function setupManagerListeners() {
         btnAutofill.onclick = () => {
             if (!network) return log('Connect wallet first', 'error');
             const chainId = network.chainId.toString();
-            const deps = CONTRACT_DATA.deployments[chainId] || CONTRACT_DATA.deployments[`chain-${chainId}`];
+            const deployments = (window.APP_CONFIG || CONTRACT_DATA || {}).deployments || {};
+            const deps = deployments[chainId] || deployments[`chain-${chainId}`];
             if (deps) {
                 Object.entries(deps).forEach(([name, addr]) => {
                     let fieldId = `addr${name}`;
@@ -268,7 +270,12 @@ function getAdminContract(name, addressOverride = null) {
     if (!address || !ethers.utils.isAddress(address)) {
         throw new Error(`Invalid address for ${name}`);
     }
-    return new ethers.Contract(address, CONTRACT_DATA.contracts[name].abi, signer || provider);
+    const contractsData = (window.APP_CONFIG || CONTRACT_DATA || {}).contracts || {};
+    const abi = contractsData[name]?.abi;
+    if (!abi) {
+        throw new Error(`No ABI found for ${name}`);
+    }
+    return new ethers.Contract(address, abi, signer || provider);
 }
 
 /**

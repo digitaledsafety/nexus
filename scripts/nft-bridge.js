@@ -5,7 +5,7 @@ import { createPublicClient, http as viemHttp, getContract, verifyMessage, parse
 import { mainnet, localhost, sepolia } from 'viem/chains';
 import { WebSocketServer } from 'ws';
 import { randomUUID } from 'node:crypto';
-import { loadConfig, getContractAddress as resolveContractAddress } from './loader.js';
+import { loadConfig, getContractAddress as resolveContractAddress, getContractAbi } from './loader.js';
 
 const bridgeConfig = loadConfig();
 const PORT = bridgeConfig.ports.bridgeHttp;
@@ -596,7 +596,7 @@ function getContractAddress(contractName) {
     return resolveContractAddress(contractName, CHAIN_ID);
 }
 
-const BRAG_ABI = [
+const BRAG_ABI = getContractAbi('BragNFT') || [
     { "inputs": [{ "name": "owner", "type": "address" }], "name": "balanceOf", "outputs": [{ "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }
 ];
 
@@ -960,9 +960,10 @@ async function fetchCurrentStatus(address) {
             if (balance > 0n) {
                 let foundTokens = false;
                 try {
+                    const bragNFTAbi = getContractAbi('BragNFT') || BRAG_ABI;
                     const total = await fetchWithRetry(() => publicClient.readContract({
                         address: bragAddress,
-                        abi: [parseAbiItem('function nextTokenId() view returns (uint256)')],
+                        abi: bragNFTAbi,
                         functionName: 'nextTokenId'
                     }), 'nextTokenId()');
 
@@ -973,7 +974,7 @@ async function fetchCurrentStatus(address) {
                         try {
                             const owner = await publicClient.readContract({
                                 address: bragAddress,
-                                abi: [parseAbiItem('function ownerOf(uint256) view returns (address)')],
+                                abi: bragNFTAbi,
                                 functionName: 'ownerOf',
                                 args: [BigInt(i)]
                             });
@@ -984,7 +985,7 @@ async function fetchCurrentStatus(address) {
                                 try {
                                     const uri = await publicClient.readContract({
                                         address: bragAddress,
-                                        abi: [parseAbiItem('function tokenURI(uint256) view returns (string)')],
+                                        abi: bragNFTAbi,
                                         functionName: 'tokenURI',
                                         args: [BigInt(i)]
                                     });
@@ -1048,10 +1049,12 @@ async function fetchCurrentStatus(address) {
             // Check for exhibited BragNFTs in this vault via direct contract state read owner721
             if (bragAddress) {
                 let maxCheck = 0;
+                const bragNFTAbi = getContractAbi('BragNFT') || BRAG_ABI;
+                const vaultAbi = getContractAbi('ExhibitVault') || [parseAbiItem('function owner721(address, uint256) view returns (address)')];
                 try {
                     const total = await fetchWithRetry(() => publicClient.readContract({
                         address: bragAddress,
-                        abi: [parseAbiItem('function nextTokenId() view returns (uint256)')],
+                        abi: bragNFTAbi,
                         functionName: 'nextTokenId'
                     }), 'nextTokenId()');
                     maxCheck = Number(total);
@@ -1063,7 +1066,7 @@ async function fetchCurrentStatus(address) {
                     try {
                         const currentOwner = await publicClient.readContract({
                             address: vaultAddr,
-                            abi: [parseAbiItem('function owner721(address, uint256) view returns (address)')],
+                            abi: vaultAbi,
                             functionName: 'owner721',
                             args: [bragAddress, BigInt(i)]
                         });
@@ -1074,7 +1077,7 @@ async function fetchCurrentStatus(address) {
                             try {
                                 const uri = await publicClient.readContract({
                                     address: bragAddress,
-                                    abi: [parseAbiItem('function tokenURI(uint256) view returns (string)')],
+                                    abi: bragNFTAbi,
                                     functionName: 'tokenURI',
                                     args: [BigInt(i)]
                                 });
