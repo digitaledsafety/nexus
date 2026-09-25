@@ -240,7 +240,7 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
     const allNfts = [...(userStatus.walletNfts || []), ...allVaultNfts];
 
     if (allNfts.length === 0) {
-        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[Nexus] Account linked (${ownership.address.slice(0, 6)}...${ownership.address.slice(-4)}), but no exhibited NFTs were found in this server's vault (${vaultAddr.slice(0, 6)}...${vaultAddr.slice(-4)}).§r"}]}`);
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[Nexus] Account linked (${ownership.address.slice(0, 6)}...${ownership.address.slice(-4)}), but no NFTs found.§r"}]}`);
         return { success: false, reason: "not_in_vault" };
     }
 
@@ -262,7 +262,7 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
     );
 
     if (!matchingNft) {
-        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] NFT structure target '${target}' not found in your vault exhibition.§r"}]}`);
+        sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] NFT structure target '${target}' not found in your wallet or vault exhibition.§r"}]}`);
         return { success: false, reason: "nft_not_found" };
     }
 
@@ -491,7 +491,7 @@ wss.on('connection', (ws, req) => {
                                 sendMinecraftCommand(serverId, `tag "${playerName}" add nft_holder`);
                             } else {
                                 sendMinecraftCommand(serverId, `tag "${playerName}" remove nft_holder`);
-                                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[Nexus] Account linked (${data.address.slice(0, 6)}...${data.address.slice(-4)}), but no qualifying exhibited NFTs were found for this server.§r"}]}`);
+                                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[Nexus] Account linked (${data.address.slice(0, 6)}...${data.address.slice(-4)}), but no qualifying NFTs found.§r"}]}`);
                             }
                         } else if (command === 'register') {
                             const data = await createRegistrationToken(platformId);
@@ -638,7 +638,7 @@ async function handleStatusChange(address) {
         const vaultAddr = (serverConfig && serverConfig.vaultAddress) ? serverConfig.vaultAddress.toLowerCase() : null;
         const inVault = vaultAddr ? (status.vaults[vaultAddr]?.length > 0) : false;
         const inWallet = status.walletNfts.length > 0;
-        const isHolder = inVault || inWallet;
+        const isHolder = inVault;
 
         if (isHolder) {
             sendMinecraftCommand(active.serverId, `tag "${active.playerName}" add nft_holder`);
