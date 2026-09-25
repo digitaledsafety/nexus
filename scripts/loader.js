@@ -299,7 +299,11 @@ export function generateFrontendConfigJS() {
         }
     }
 
+    const isStaging = config.env === 'staging';
+    const wsUrl = (isStaging ? process.env.STAGING_BRIDGE_URL : null) || process.env.WS_URL || config.frontend.wsUrl || config.addon?.wsUrl || `ws://127.0.0.1:${config.ports?.bridgeWs || 9001}`;
+
     const frontendConfig = {
+        wsUrl,
         ...config.frontend,
         contracts,
         deployments,

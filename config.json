@@ -55,7 +55,8 @@
       "maxPriorityFeePerGas": "2000000000",
       "hugeCalldataGasLimit": 25000000
     },
-    "bridgeUrl": ""
+    "bridgeUrl": "",
+    "wsUrl": "ws://127.0.0.1:9001"
   },
   "addon": {
     "wsUrl": "ws://127.0.0.1:9001",
