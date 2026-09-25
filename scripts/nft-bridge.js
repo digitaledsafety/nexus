@@ -601,9 +601,7 @@ const BRAG_ABI = getContractAbi('BragNFT') || [
 ];
 
 const chain = CHAIN_ID === 31337 ? localhost : sepolia;
-const RPC_URL = process.env.RPC_URL || process.env.SEPOLIA_RPC_URL || (CHAIN_ID === 11155111
-    ? (process.env.ALCHEMY_API_KEY ? `https://eth-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}` : 'https://rpc.ankr.com/eth_sepolia')
-    : 'http://127.0.0.1:8545');
+const RPC_URL = bridgeConfig.rpcUrl || bridgeConfig.RPC_URL;
 if (isMain) console.log(`Bridge using RPC_URL: ${RPC_URL} for Chain ID: ${CHAIN_ID}`);
 
 async function handleStatusChange(address) {
