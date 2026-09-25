@@ -3,6 +3,7 @@ import { describe, it, beforeEach, afterEach } from "node:test";
 import fs from "node:fs";
 import path from "node:path";
 import { prepareAddon, isSepolia, getAppEnv, ROOT } from "../scripts/env-manager.js";
+import { generateFrontendConfigJS } from "../scripts/loader.js";
 
 describe("Environment Manager Logic", () => {
     const configJsPath = path.join(ROOT, "addons", "minecraft-bedrock-addon", "development_behavior_packs", "behavior_pack_sample", "scripts", "config.js");
@@ -109,5 +110,12 @@ describe("Environment Manager Logic", () => {
         const content = fs.readFileSync(rawSourcePath, "utf8");
 
         assert.ok(content.includes('import { WS_URL, SERVER_ID, NEXUS_ADDRESS } from "./config.js";'));
+    });
+
+    it("should generate frontend config.js containing wsUrl in APP_CONFIG", () => {
+        const frontendConfigPath = generateFrontendConfigJS();
+        const content = fs.readFileSync(frontendConfigPath, "utf8");
+
+        assert.ok(content.includes('"wsUrl": "ws://127.0.0.1:9001"'));
     });
 });
