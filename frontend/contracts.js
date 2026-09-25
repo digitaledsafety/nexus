@@ -10385,7 +10385,7 @@ const CONTRACT_DATA = window.APP_CONFIG || {
       "Treasury": ""
     },
     "11155111": {
-      "BragNFT": "",
+      "BragNFT": "0xSEPOLIA_NEXUS_ADDRESS",
       "BragToken": "",
       "ExhibitVault": "",
       "NFTMarketplace": "",
@@ -10399,7 +10399,7 @@ const CONTRACT_DATA = window.APP_CONFIG || {
       "Treasury": ""
     },
     "chain-11155111": {
-      "BragNFT": "",
+      "BragNFT": "0xSEPOLIA_NEXUS_ADDRESS",
       "BragToken": "",
       "ExhibitVault": "",
       "NFTMarketplace": "",

@@ -5,9 +5,10 @@ import { createPublicClient, http as viemHttp, getContract, verifyMessage, parse
 import { mainnet, localhost, sepolia } from 'viem/chains';
 import { WebSocketServer } from 'ws';
 import { randomUUID } from 'node:crypto';
-import { loadConfig, getContractAddress as resolveContractAddress, getContractAbi } from './loader.js';
+import { loadConfig, getContractAddress as resolveContractAddress, getContractAbi, loadProjectConfig } from './loader.js';
 
 const bridgeConfig = loadConfig();
+const projectConfig = loadProjectConfig();
 const PORT = bridgeConfig.ports.bridgeHttp;
 const WS_PORT = bridgeConfig.ports.bridgeWs;
 const CHAIN_ID = bridgeConfig.chainId;
@@ -16,7 +17,12 @@ const MAPPINGS_FILE = path.join(process.cwd(), 'mappings.json');
 
 // --- Configuration ---
 let serverConfigs = bridgeConfig.bridge.servers;
-console.log("Loaded server configurations from loader");
+if (isMain) {
+    console.log("Loaded server configurations from loader");
+    if (projectConfig) {
+        console.log("Loaded project-wide config.js for bridge contract resolution");
+    }
+}
 
 let mappings = new Map();
 if (fs.existsSync(MAPPINGS_FILE)) {
