@@ -224,7 +224,9 @@ export function loadConfig() {
         },
         contracts: rawConfig.contracts || {},
         frontend: rawConfig.frontend || {},
-        addon: rawConfig.addon || {}
+        addon: rawConfig.addon || {},
+        rpcUrl: rawConfig.rpcUrl || rawConfig.RPC_URL,
+        RPC_URL: rawConfig.RPC_URL || rawConfig.rpcUrl
     };
 
     // Override Alchemy keys from environment if present
