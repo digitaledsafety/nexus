@@ -12,7 +12,7 @@ const projectConfig = loadProjectConfig();
 const PORT = bridgeConfig.ports.bridgeHttp;
 const WS_PORT = bridgeConfig.ports.bridgeWs;
 const CHAIN_ID = bridgeConfig.chainId;
-const isMain = process.argv[1] && (path.resolve(process.argv[1]) === path.resolve('scripts/nft-bridge.js'));
+const isMain = Boolean(process.argv && process.argv[1] && (path.resolve(process.argv[1]) === path.resolve('scripts/nft-bridge.js')));
 const MAPPINGS_FILE = path.join(process.cwd(), 'mappings.json');
 
 // --- Configuration ---

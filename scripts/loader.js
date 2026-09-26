@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 export const ROOT = path.resolve(__dirname, '..');
-const CONFIG_PATH = path.join(ROOT, 'config.json');
+const CONFIG_JS_PATH = path.join(ROOT, 'config.js');
 
 const NAME_TO_ID = {
     'sepolia': '11155111',
@@ -52,7 +52,7 @@ const BASE_INTERFACES = {
 };
 
 /**
- * Loads contract ABIs and bytecode from build artifacts
+ * Loads contract ABIs and bytecode from build artifacts or base interfaces
  */
 export function loadContractABIs() {
     const contracts = { ...BASE_INTERFACES };
@@ -81,35 +81,14 @@ export function loadContractABIs() {
         });
     }
 
-    // Fallback: If any contract is missing from artifacts, try loading from existing config.js / contracts.js
-    const configPath = path.join(ROOT, "frontend", "config.js");
-    if (fs.existsSync(configPath)) {
-        try {
-            const content = fs.readFileSync(configPath, "utf8");
-            const match = content.match(/window\.APP_CONFIG = ({[\s\S]*?});/);
-            if (match) {
-                const existingConfig = JSON.parse(match[1]);
-                if (existingConfig.contracts) {
-                    for (const [name, obj] of Object.entries(existingConfig.contracts)) {
-                        if (!contracts[name]) {
-                            contracts[name] = obj;
-                        }
-                    }
-                }
-            }
-        } catch (e) {
-            // Ignore fallback errors
-        }
-    }
-
     return contracts;
 }
 
 /**
- * Loads the project-wide config from frontend/config.js
+ * Loads the central configuration directly from root config.js
  */
 export function loadProjectConfig() {
-    const configPath = path.join(ROOT, "frontend", "config.js");
+    const configPath = CONFIG_JS_PATH;
     if (fs.existsSync(configPath)) {
         try {
             const content = fs.readFileSync(configPath, "utf8");
@@ -118,14 +97,59 @@ export function loadProjectConfig() {
                 return JSON.parse(match[1]);
             }
         } catch (e) {
-            console.warn("[loader] Error reading project config.js:", e.message);
+            console.warn("[loader] Error reading root config.js:", e.message);
         }
     }
     return null;
 }
 
 /**
- * Gets the ABI for a specific contract name
+ * Reads root config.js and applies process.env overrides
+ */
+export function loadConfig() {
+    const projConfig = loadProjectConfig() || {};
+
+    const appEnv = process.env.APP_ENV || process.env.HARDHAT_NETWORK || projConfig.env || 'local';
+    const chainId = process.env.CHAIN_ID
+        ? parseInt(process.env.CHAIN_ID)
+        : (appEnv === 'sepolia' ? 11155111 : 31337);
+
+    const config = {
+        ...projConfig,
+        env: appEnv,
+        chainId: chainId,
+        ports: {
+            bridgeHttp: parseInt(process.env.BRIDGE_HTTP_PORT || process.env.PORT || projConfig.ports?.bridgeHttp || 9000),
+            bridgeWs: parseInt(process.env.BRIDGE_WS_PORT || process.env.WS_PORT || projConfig.ports?.bridgeWs || 9001),
+            envManager: parseInt(process.env.ENV_MANAGER_PORT || projConfig.ports?.envManager || 9002),
+            frontend: parseInt(process.env.FRONTEND_PORT || projConfig.ports?.frontend || 3000),
+            bedrockManager: parseInt(process.env.BEDROCK_MANAGER_PORT || projConfig.ports?.bedrockManager || 9003)
+        },
+        bridge: {
+            summonFeeBrag: process.env.SUMMON_FEE_BRAG || projConfig.bridge?.summonFeeBrag || "10",
+            servers: projConfig.bridge?.servers || {}
+        },
+        contracts: projConfig.contracts || {},
+        deployments: projConfig.deployments || {},
+        frontend: projConfig.frontend || {},
+        addon: projConfig.addon || {}
+    };
+
+    if (process.env.ALCHEMY_API_KEY && config.frontend.alchemy?.['11155111']) {
+        config.frontend.alchemy['11155111'].apiKey = process.env.ALCHEMY_API_KEY;
+    }
+    if (process.env.ALCHEMY_GAS_POLICY_ID && config.frontend.alchemy?.['11155111']) {
+        config.frontend.alchemy['11155111'].gasPolicyId = process.env.ALCHEMY_GAS_POLICY_ID;
+    }
+
+    if (process.env.WS_URL) config.addon.wsUrl = process.env.WS_URL;
+    if (process.env.SERVER_ID) config.addon.serverId = process.env.SERVER_ID;
+
+    return config;
+}
+
+/**
+ * Gets the ABI for a specific contract name from root config.js or build artifacts
  */
 export function getContractAbi(contractName) {
     const projConfig = loadProjectConfig();
@@ -137,25 +161,56 @@ export function getContractAbi(contractName) {
 }
 
 /**
- * Loads deployed addresses from ignition/deployments and existing configs
+ * Returns contract address directly from root config.js or process.env
  */
-export function loadDeployments() {
-    let addresses = {};
+export function getContractAddress(contractName, chainId) {
+    const envVar = `CONTRACT_ADDRESS_${contractName.toUpperCase()}`;
+    if (process.env[envVar]) return process.env[envVar];
 
-    // First load from config.json if contracts field is defined
-    const rawConfig = loadConfig();
-    if (rawConfig.contracts) {
-        for (const [chainId, map] of Object.entries(rawConfig.contracts)) {
-            addresses[chainId] = { ...map };
-            addresses[`chain-${chainId}`] = { ...map };
+    const config = loadConfig();
+    const effectiveChainId = chainId || config.chainId;
+
+    if (config.contracts?.[effectiveChainId]?.[contractName]) {
+        return config.contracts[effectiveChainId][contractName];
+    }
+
+    const projConfig = loadProjectConfig();
+    if (projConfig && projConfig.deployments) {
+        const chainKey = effectiveChainId.toString();
+        const prefixedKey = `chain-${chainKey}`;
+        const map = projConfig.deployments[chainKey] || projConfig.deployments[prefixedKey];
+        if (map) {
+            if (map[contractName]) return map[contractName];
+            if (map[`AppModule#${contractName}`]) return map[`AppModule#${contractName}`];
         }
     }
 
-    // Load from existing project-wide config.js if present
-    const projConfig = loadProjectConfig();
-    if (projConfig && projConfig.deployments) {
-        for (const [chain, map] of Object.entries(projConfig.deployments)) {
-            addresses[chain] = { ...(addresses[chain] || {}), ...map };
+    const deploymentPath = path.join(ROOT, 'ignition', 'deployments', `chain-${effectiveChainId}`, 'deployed_addresses.json');
+    if (fs.existsSync(deploymentPath)) {
+        try {
+            const deployments = JSON.parse(fs.readFileSync(deploymentPath, 'utf8'));
+            return deployments[`AppModule#${contractName}`] || null;
+        } catch (e) {
+            console.error(`[loader] Error reading deployment file ${deploymentPath}:`, e.message);
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Syncs root config.js with active ignition/deployments and compiled contract ABIs
+ */
+export function syncRootConfigWithDeployments() {
+    const projConfig = loadProjectConfig() || {};
+    let addresses = projConfig.deployments || {};
+    const compiledContracts = loadContractABIs();
+
+    // Merge compiled ABIs into projConfig.contracts if missing or empty
+    if (!projConfig.contracts) projConfig.contracts = {};
+    for (const [name, obj] of Object.entries(compiledContracts)) {
+        if (!projConfig.contracts[name] || typeof projConfig.contracts[name] !== 'object' || !projConfig.contracts[name].abi) {
+            projConfig.contracts[name] = obj;
         }
     }
 
@@ -198,149 +253,13 @@ export function loadDeployments() {
         });
     }
 
-    return addresses;
-}
+    projConfig.deployments = addresses;
 
-/**
- * Reads config.json and applies process.env overrides
- */
-export function loadConfig() {
-    let rawConfig = {};
-    if (fs.existsSync(CONFIG_PATH)) {
-        try {
-            rawConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-        } catch (e) {
-            console.error(`[loader] Error parsing ${CONFIG_PATH}:`, e.message);
-        }
-    }
-
-    const appEnv = process.env.APP_ENV || process.env.HARDHAT_NETWORK || rawConfig.env || 'local';
-    const chainId = process.env.CHAIN_ID
-        ? parseInt(process.env.CHAIN_ID)
-        : (appEnv === 'sepolia' ? 11155111 : 31337);
-
-    // Merge env overrides
-    const config = {
-        env: appEnv,
-        chainId: chainId,
-        ports: {
-            bridgeHttp: parseInt(process.env.BRIDGE_HTTP_PORT || process.env.PORT || rawConfig.ports?.bridgeHttp || 9000),
-            bridgeWs: parseInt(process.env.BRIDGE_WS_PORT || process.env.WS_PORT || rawConfig.ports?.bridgeWs || 9001),
-            envManager: parseInt(process.env.ENV_MANAGER_PORT || rawConfig.ports?.envManager || 9002),
-            frontend: parseInt(process.env.FRONTEND_PORT || rawConfig.ports?.frontend || 3000),
-            bedrockManager: parseInt(process.env.BEDROCK_MANAGER_PORT || rawConfig.ports?.bedrockManager || 9003)
-        },
-        bridge: {
-            summonFeeBrag: process.env.SUMMON_FEE_BRAG || rawConfig.bridge?.summonFeeBrag || "10",
-            servers: rawConfig.bridge?.servers || {}
-        },
-        contracts: rawConfig.contracts || {},
-        frontend: rawConfig.frontend || {},
-        addon: rawConfig.addon || {}
-    };
-
-    // Override Alchemy keys from environment if present
-    if (process.env.ALCHEMY_API_KEY && config.frontend.alchemy?.['11155111']) {
-        config.frontend.alchemy['11155111'].apiKey = process.env.ALCHEMY_API_KEY;
-    }
-    if (process.env.ALCHEMY_GAS_POLICY_ID && config.frontend.alchemy?.['11155111']) {
-        config.frontend.alchemy['11155111'].gasPolicyId = process.env.ALCHEMY_GAS_POLICY_ID;
-    }
-
-    // Override Addon parameters from environment if present
-    if (process.env.WS_URL) config.addon.wsUrl = process.env.WS_URL;
-    if (process.env.SERVER_ID) config.addon.serverId = process.env.SERVER_ID;
-
-    return config;
-}
-
-/**
- * Returns contract address with fallback chain:
- * 1. process.env (e.g. CONTRACT_ADDRESS_BRAGNFT)
- * 2. config.json contracts[chainId][contractName]
- * 3. ignition/deployments/chain-{chainId}/deployed_addresses.json
- */
-export function getContractAddress(contractName, chainId) {
-    const envVar = `CONTRACT_ADDRESS_${contractName.toUpperCase()}`;
-    if (process.env[envVar]) return process.env[envVar];
-
-    const config = loadConfig();
-    const effectiveChainId = chainId || config.chainId;
-
-    if (config.contracts?.[effectiveChainId]?.[contractName]) {
-        return config.contracts[effectiveChainId][contractName];
-    }
-
-    // Check project-wide config.js first
-    const projConfig = loadProjectConfig();
-    if (projConfig && projConfig.deployments) {
-        const chainKey = effectiveChainId.toString();
-        const prefixedKey = `chain-${chainKey}`;
-        const map = projConfig.deployments[chainKey] || projConfig.deployments[prefixedKey];
-        if (map) {
-            if (map[contractName]) return map[contractName];
-            if (map[`AppModule#${contractName}`]) return map[`AppModule#${contractName}`];
-        }
-    }
-
-    // Fallback to ignition deployments if not found in project-wide config
-    const deploymentPath = path.join(ROOT, 'ignition', 'deployments', `chain-${effectiveChainId}`, 'deployed_addresses.json');
-    if (fs.existsSync(deploymentPath)) {
-        try {
-            const deployments = JSON.parse(fs.readFileSync(deploymentPath, 'utf8'));
-            return deployments[`AppModule#${contractName}`] || null;
-        } catch (e) {
-            console.error(`[loader] Error reading deployment file ${deploymentPath}:`, e.message);
-        }
-    }
-
-    return null;
-}
-
-/**
- * Dynamically generates frontend/config.js based on central config
- */
-export function generateFrontendConfigJS() {
-    const config = loadConfig();
-    const contracts = loadContractABIs();
-    const deployments = loadDeployments();
-
-    let externalCollections = config.frontend.externalCollections || [];
-    if (externalCollections.length === 0) {
-        const contractsJsPath = path.join(ROOT, "frontend", "contracts.js");
-        if (fs.existsSync(contractsJsPath)) {
-            const existingContent = fs.readFileSync(contractsJsPath, "utf8");
-            const match = existingContent.match(/const CONTRACT_DATA = ({[\s\S]*});/);
-            if (match) {
-                try {
-                    const existingData = JSON.parse(match[1]);
-                    if (existingData.externalCollections) {
-                        externalCollections = existingData.externalCollections;
-                    }
-                } catch (e) {
-                    // Ignore
-                }
-            }
-        }
-    }
-
-    const isStaging = config.env === 'staging';
-    const wsUrl = (isStaging ? process.env.STAGING_BRIDGE_URL : null) || process.env.WS_URL || config.frontend.wsUrl || config.addon?.wsUrl || `ws://127.0.0.1:${config.ports?.bridgeWs || 9001}`;
-
-    const frontendConfig = {
-        wsUrl,
-        ...config.frontend,
-        contracts,
-        deployments,
-        externalCollections
-    };
-
-    const frontendContent = `/**
- * config.js - Global configuration for brag.charity frontend.
- * Auto-generated by scripts/loader.js - DO NOT EDIT MANUALLY.
+    const updatedContent = `/**
+ * config.js - Central project configuration for brag.charity.
  */
 
-const APP_CONFIG = ${JSON.stringify(frontendConfig, null, 2)};
+const APP_CONFIG = ${JSON.stringify(projConfig, null, 2)};
 
 if (typeof window !== 'undefined') {
     window.APP_CONFIG = APP_CONFIG;
@@ -350,32 +269,42 @@ if (typeof window !== 'undefined') {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = APP_CONFIG;
 }
-
-export default APP_CONFIG;
 `;
+    fs.writeFileSync(CONFIG_JS_PATH, updatedContent);
+    generateFrontendConfigJS();
+    generateAddonConfigJS();
+    return CONFIG_JS_PATH;
+}
+
+/**
+ * Ensures frontend/config.js is kept in sync with root config.js
+ */
+export function generateFrontendConfigJS() {
+    const rootConfigContent = fs.readFileSync(CONFIG_JS_PATH, 'utf8');
     const targetPath = path.join(ROOT, 'frontend', 'config.js');
-    fs.writeFileSync(targetPath, frontendContent);
+    fs.writeFileSync(targetPath, rootConfigContent);
 
-    // Maintain frontend/contracts.js as a shim pointing to APP_CONFIG
-    const contractsJsContent = `// Deprecated shim: CONTRACT_DATA is consolidated in window.APP_CONFIG inside config.js
-const CONTRACT_DATA = window.APP_CONFIG || ${JSON.stringify({ contracts, deployments, externalCollections }, null, 2)};
-`;
     const contractsJsPath = path.join(ROOT, 'frontend', 'contracts.js');
+    const contractsJsContent = `// Shim: CONTRACT_DATA is consolidated in window.APP_CONFIG inside config.js
+const CONTRACT_DATA = (typeof window !== 'undefined' && window.APP_CONFIG) ? window.APP_CONFIG : (typeof module !== 'undefined' && module.exports ? module.exports : {});
+if (typeof window !== 'undefined') window.CONTRACT_DATA = CONTRACT_DATA;
+if (typeof module !== 'undefined' && module.exports) module.exports = CONTRACT_DATA;
+`;
     fs.writeFileSync(contractsJsPath, contractsJsContent);
 
     return targetPath;
 }
 
 /**
- * Dynamically generates addons/minecraft-bedrock-addon/.../scripts/config.js based on central config
+ * Generates addons/minecraft-bedrock-addon/.../scripts/config.js based on root config
  */
 export function generateAddonConfigJS() {
     const config = loadConfig();
     const isStaging = config.env === 'staging';
-    const wsUrl = (isStaging ? process.env.STAGING_BRIDGE_URL : null) || process.env.WS_URL || config.addon.wsUrl || 'ws://127.0.0.1:9001';
-    const serverId = process.env.SERVER_ID || config.addon.serverId || 'local-dev';
+    const wsUrl = (isStaging ? process.env.STAGING_BRIDGE_URL : null) || process.env.WS_URL || config.addon?.wsUrl || 'ws://127.0.0.1:9001';
+    const serverId = process.env.SERVER_ID || config.addon?.serverId || 'local-dev';
 
-    let nexusAddress = (isStaging ? process.env.STAGING_BRAGNFT_ADDRESS : null) || process.env.CONTRACT_ADDRESS_BRAGNFT || config.addon.nexusAddress;
+    let nexusAddress = (isStaging ? process.env.STAGING_BRAGNFT_ADDRESS : null) || process.env.CONTRACT_ADDRESS_BRAGNFT || config.addon?.nexusAddress;
     if (!nexusAddress || nexusAddress === '0x0000000000000000000000000000000000000000') {
         nexusAddress = getContractAddress('BragNFT', config.chainId) || '0x0000000000000000000000000000000000000000';
     }

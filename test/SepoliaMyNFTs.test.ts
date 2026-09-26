@@ -60,29 +60,30 @@ describe("Sepolia Mode (/nexus:my_nfts) Test Suite", () => {
             )
         );
 
-        // Also ensure project-wide frontend/config.js contains Sepolia deployments
+        // Also ensure project-wide root config.js and frontend/config.js contain Sepolia deployments
+        const rootConfigPath = path.join(process.cwd(), "config.js");
         const frontendConfigPath = path.join(process.cwd(), "frontend", "config.js");
-        let frontendConfigObj: any = { deployments: {}, contracts: {} };
-        if (fs.existsSync(frontendConfigPath)) {
-            try {
-                const content = fs.readFileSync(frontendConfigPath, "utf8");
-                const match = content.match(/(?:window\.APP_CONFIG|const APP_CONFIG) = ({[\s\S]*?});/);
-                if (match) {
-                    frontendConfigObj = JSON.parse(match[1]);
-                }
-            } catch (e) {}
-        }
-        if (!frontendConfigObj.deployments) frontendConfigObj.deployments = {};
-        frontendConfigObj.deployments["11155111"] = {
-            BragNFT: mockBragAddress,
-            ExhibitVault: mockVaultAddress
-        };
-        frontendConfigObj.deployments["chain-11155111"] = {
-            BragNFT: mockBragAddress,
-            ExhibitVault: mockVaultAddress
-        };
 
-        const updatedContent = `const APP_CONFIG = ${JSON.stringify(frontendConfigObj, null, 2)};
+        [rootConfigPath, frontendConfigPath].forEach(cfgPath => {
+            let configObj: any = { deployments: {}, contracts: {} };
+            if (fs.existsSync(cfgPath)) {
+                try {
+                    const content = fs.readFileSync(cfgPath, "utf8");
+                    const match = content.match(/(?:window\.APP_CONFIG|const APP_CONFIG) = ({[\s\S]*?});/);
+                    if (match) configObj = JSON.parse(match[1]);
+                } catch (e) {}
+            }
+            if (!configObj.deployments) configObj.deployments = {};
+            configObj.deployments["11155111"] = {
+                BragNFT: mockBragAddress,
+                ExhibitVault: mockVaultAddress
+            };
+            configObj.deployments["chain-11155111"] = {
+                BragNFT: mockBragAddress,
+                ExhibitVault: mockVaultAddress
+            };
+
+            const updatedContent = `const APP_CONFIG = ${JSON.stringify(configObj, null, 2)};
 if (typeof window !== 'undefined') {
     window.APP_CONFIG = APP_CONFIG;
     window.CONTRACT_DATA = APP_CONFIG;
@@ -92,7 +93,8 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 export default APP_CONFIG;
 `;
-        fs.writeFileSync(frontendConfigPath, updatedContent);
+            fs.writeFileSync(cfgPath, updatedContent);
+        });
     });
 
     afterEach(() => {
@@ -112,18 +114,21 @@ export default APP_CONFIG;
             fs.unlinkSync(sepoliaDeploymentFile);
         }
 
-        // Clean up mock Sepolia deployments in frontend/config.js
+        // Clean up mock Sepolia deployments in root config.js and frontend/config.js
+        const rootConfigPath = path.join(process.cwd(), "config.js");
         const frontendConfigPath = path.join(process.cwd(), "frontend", "config.js");
-        if (fs.existsSync(frontendConfigPath)) {
-            try {
-                const content = fs.readFileSync(frontendConfigPath, "utf8");
-                const match = content.match(/(?:window\.APP_CONFIG|const APP_CONFIG) = ({[\s\S]*?});/);
-                if (match) {
-                    const frontendConfigObj = JSON.parse(match[1]);
-                    if (frontendConfigObj.deployments) {
-                        delete frontendConfigObj.deployments["11155111"];
-                        delete frontendConfigObj.deployments["chain-11155111"];
-                        const updatedContent = `const APP_CONFIG = ${JSON.stringify(frontendConfigObj, null, 2)};
+
+        [rootConfigPath, frontendConfigPath].forEach(cfgPath => {
+            if (fs.existsSync(cfgPath)) {
+                try {
+                    const content = fs.readFileSync(cfgPath, "utf8");
+                    const match = content.match(/(?:window\.APP_CONFIG|const APP_CONFIG) = ({[\s\S]*?});/);
+                    if (match) {
+                        const configObj = JSON.parse(match[1]);
+                        if (configObj.deployments) {
+                            delete configObj.deployments["11155111"];
+                            delete configObj.deployments["chain-11155111"];
+                            const updatedContent = `const APP_CONFIG = ${JSON.stringify(configObj, null, 2)};
 if (typeof window !== 'undefined') {
     window.APP_CONFIG = APP_CONFIG;
     window.CONTRACT_DATA = APP_CONFIG;
@@ -133,11 +138,12 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 export default APP_CONFIG;
 `;
-                        fs.writeFileSync(frontendConfigPath, updatedContent);
+                            fs.writeFileSync(cfgPath, updatedContent);
+                        }
                     }
-                }
-            } catch (e) {}
-        }
+                } catch (e) {}
+            }
+        });
     });
 
     it("should default CHAIN_ID to 11155111 and load Sepolia contract deployments when APP_ENV=sepolia", async () => {
