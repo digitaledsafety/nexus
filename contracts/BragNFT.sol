@@ -491,6 +491,26 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
             if (b1 == 'g' && b2 == 'l' && b3 == 't' && b4 == 'f') return true;
         }
 
+        // Check for .mcstructure extension anywhere in string
+        if (len >= 12) {
+            for (uint256 i = 0; i <= len - 12; i++) {
+                if (b[i] == '.' &&
+                    _toLower(b[i+1]) == 'm' &&
+                    _toLower(b[i+2]) == 'c' &&
+                    _toLower(b[i+3]) == 's' &&
+                    _toLower(b[i+4]) == 't' &&
+                    _toLower(b[i+5]) == 'r' &&
+                    _toLower(b[i+6]) == 'u' &&
+                    _toLower(b[i+7]) == 'c' &&
+                    _toLower(b[i+8]) == 't' &&
+                    _toLower(b[i+9]) == 'u' &&
+                    _toLower(b[i+10]) == 'r' &&
+                    _toLower(b[i+11]) == 'e') {
+                    return true;
+                }
+            }
+        }
+
         return false;
     }
 

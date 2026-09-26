@@ -3,11 +3,14 @@ import http from 'http';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { loadConfig, generateAddonConfigJS, generateFrontendConfigJS } from './loader.js';
 
+const sysConfig = loadConfig();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.join(__dirname, '..');
-const PORT = 9002;
-export const getAppEnv = () => process.env.APP_ENV || 'local';
+const PORT = sysConfig.ports.envManager;
+export const getAppEnv = () => process.env.APP_ENV || process.env.HARDHAT_NETWORK || sysConfig.env || 'local';
+export const isSepolia = () => getAppEnv() === 'sepolia';
 export const isStaging = () => getAppEnv() === 'staging';
 
 export const services = {
@@ -27,7 +30,7 @@ export const services = {
     },
     frontend: {
         command: 'npx',
-        args: ['serve', 'frontend', '-p', '3001'],
+        args: ['serve', 'frontend', '-p', '3000'],
         process: null,
         status: 'stopped',
         logs: []
@@ -102,28 +105,10 @@ export async function prepareAddon() {
     console.log('Preparing NFT addon...');
     const sourceDir = path.join(ROOT, 'addons', 'minecraft-bedrock-addon');
 
-    // Inject configuration into config.js
-    const configJsPath = path.join(sourceDir, 'development_behavior_packs', 'behavior_pack_sample', 'scripts', 'config.js');
+    generateAddonConfigJS();
+    generateFrontendConfigJS();
 
-    let wsUrl = process.env.WS_URL || 'ws://127.0.0.1:9001';
-    let serverId = process.env.SERVER_ID || 'local-dev';
-    let nexusAddress = process.env.CONTRACT_ADDRESS_BRAGNFT || '0x0000000000000000000000000000000000000000';
-
-    if (isStaging()) {
-        wsUrl = process.env.STAGING_BRIDGE_URL || process.env.WS_URL || wsUrl;
-        nexusAddress = process.env.STAGING_BRAGNFT_ADDRESS || process.env.CONTRACT_ADDRESS_BRAGNFT || nexusAddress;
-    } else {
-        const deploymentPath = path.join(ROOT, 'ignition', 'deployments', 'chain-31337', 'deployed_addresses.json');
-        if (fs.existsSync(deploymentPath)) {
-            const deployments = JSON.parse(fs.readFileSync(deploymentPath, 'utf8'));
-            nexusAddress = process.env.CONTRACT_ADDRESS_BRAGNFT || deployments['AppModule#BragNFT'] || nexusAddress;
-        }
-    }
-
-    const configContent = `export const WS_URL = "${wsUrl}";\nexport const SERVER_ID = "${serverId}";\nexport const NEXUS_ADDRESS = "${nexusAddress}";\n`;
-
-    fs.writeFileSync(configJsPath, configContent);
-    console.log(`Addon prepared with WS_URL=${wsUrl}, SERVER_ID=${serverId}, NEXUS=${nexusAddress}`);
+    console.log(`Addon and Frontend config dynamically generated via loader.js`);
     return sourceDir;
 }
 
@@ -159,27 +144,53 @@ async function initEnvironment() {
     }
 
     try {
-        // 1. Start Hardhat Node
-        startService('hardhat');
+        if (isSepolia()) {
+            const hasGaslessConfig = process.env.ALCHEMY_API_KEY && process.env.ALCHEMY_GAS_POLICY_ID;
+            const deployScript = hasGaslessConfig ? 'deploy:sepolia:gasless' : 'deploy:sepolia';
 
-        // Wait for node to be ready
-        await new Promise(resolve => setTimeout(resolve, 8000));
+            if (!hasGaslessConfig) {
+                console.warn('⚠️ Gasless deployment credentials (ALCHEMY_API_KEY / ALCHEMY_GAS_POLICY_ID) not found.');
+                console.warn('⚠️ Proceeding with standard Sepolia deployment using native Sepolia tokens/coins.');
+            }
 
-        console.log('Deploying contracts...');
-        await new Promise((resolve, reject) => {
-            const child = spawn('npm', ['run', 'deploy:local'], { cwd: ROOT, shell: true });
-            child.stdout.on('data', d => log('hardhat', d));
-            child.stderr.on('data', d => log('hardhat', d));
-            child.on('close', code => code === 0 ? resolve() : reject(new Error('Deploy failed')));
-        });
+            console.log(`Deploying contracts to Sepolia (${deployScript})...`);
+            await new Promise((resolve, reject) => {
+                const child = spawn('npm', ['run', deployScript], { cwd: ROOT, shell: true });
+                child.stdout.on('data', d => console.log(`[SEPOLIA-DEPLOY] ${d.toString().trim()}`));
+                child.stderr.on('data', d => console.error(`[SEPOLIA-DEPLOY-ERR] ${d.toString().trim()}`));
+                child.on('close', code => code === 0 ? resolve() : reject(new Error('Sepolia deployment failed')));
+            });
 
-        console.log('Seeding data...');
-        await new Promise((resolve, reject) => {
-            const child = spawn('npm', ['run', 'seed:local'], { cwd: ROOT, shell: true });
-            child.stdout.on('data', d => log('hardhat', d));
-            child.stderr.on('data', d => log('hardhat', d));
-            child.on('close', code => code === 0 ? resolve() : reject(new Error('Seed failed')));
-        });
+            console.log('Seeding data on Sepolia...');
+            await new Promise((resolve, reject) => {
+                const child = spawn('npm', ['run', 'seed:sepolia'], { cwd: ROOT, shell: true });
+                child.stdout.on('data', d => console.log(`[SEPOLIA-SEED] ${d.toString().trim()}`));
+                child.stderr.on('data', d => console.error(`[SEPOLIA-SEED-ERR] ${d.toString().trim()}`));
+                child.on('close', code => code === 0 ? resolve() : reject(new Error('Sepolia seeding failed')));
+            });
+        } else {
+            // 1. Start Hardhat Node
+            startService('hardhat');
+
+            // Wait for node to be ready
+            await new Promise(resolve => setTimeout(resolve, 8000));
+
+            console.log('Deploying contracts...');
+            await new Promise((resolve, reject) => {
+                const child = spawn('npm', ['run', 'deploy:local'], { cwd: ROOT, shell: true });
+                child.stdout.on('data', d => log('hardhat', d));
+                child.stderr.on('data', d => log('hardhat', d));
+                child.on('close', code => code === 0 ? resolve() : reject(new Error('Deploy failed')));
+            });
+
+            console.log('Seeding data...');
+            await new Promise((resolve, reject) => {
+                const child = spawn('npm', ['run', 'seed:local'], { cwd: ROOT, shell: true });
+                child.stdout.on('data', d => log('hardhat', d));
+                child.stderr.on('data', d => log('hardhat', d));
+                child.on('close', code => code === 0 ? resolve() : reject(new Error('Seed failed')));
+            });
+        }
 
         // 2. Clone and setup Manager
         const managerPath = path.join(ROOT, 'external', 'bedrock-server-manager');
@@ -341,13 +352,17 @@ if (mode === 'init') {
         }
     });
 } else if (mode === 'start') {
-    if (!isStaging()) {
-        startService('hardhat');
+    if (isStaging()) {
+        console.log('In staging mode, services are expected to be running externally.');
+    } else if (isSepolia()) {
         startService('bridge');
         startService('frontend');
         startService('manager');
     } else {
-        console.log('In staging mode, services are expected to be running externally.');
+        startService('hardhat');
+        startService('bridge');
+        startService('frontend');
+        startService('manager');
     }
 }
 

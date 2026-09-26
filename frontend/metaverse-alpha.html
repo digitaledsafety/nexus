@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metaverse Alpha Realm | Standalone Web3 App Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+    <script src="config.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; overflow-x: hidden; }
+        .font-orbitron { font-family: 'Orbitron', sans-serif; }
+        .glow-neon-cyan { text-shadow: 0 0 10px rgba(6, 182, 212, 0.7), 0 0 20px rgba(6, 182, 212, 0.4); }
+        .glow-neon-purple { text-shadow: 0 0 10px rgba(168, 85, 247, 0.7), 0 0 20px rgba(168, 85, 247, 0.4); }
+        .cyber-border { border: 1px solid rgba(6, 182, 212, 0.3); box-shadow: 0 0 15px rgba(6, 182, 212, 0.15); }
+    </style>
+</head>
+<body class="h-full flex flex-col bg-slate-950 text-slate-100">
+
+    <!-- Header Navigation -->
+    <header class="bg-slate-900/80 backdrop-blur border-b border-cyan-500/30 px-6 py-4 flex flex-wrap items-center justify-between z-10">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-lg bg-gradient-to-tr from-cyan-600 to-indigo-600 flex items-center justify-center font-orbitron font-bold text-xl text-white shadow-lg shadow-cyan-500/20">
+                α
+            </div>
+            <div>
+                <h1 class="font-orbitron font-extrabold text-xl tracking-wider text-cyan-400 glow-neon-cyan">METAVERSE ALPHA REALM</h1>
+                <p class="text-xs text-slate-400">Standalone Web3 Game Engine Client • Server: <span class="text-cyan-300 font-mono">alpha-realm</span></p>
+            </div>
+        </div>
+
+        <!-- Connection Badges -->
+        <div class="flex items-center space-x-4">
+            <div id="ws-badge" class="px-3 py-1 rounded-full text-xs font-mono bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center space-x-2">
+                <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                <span id="ws-status-text">Connecting Bridge...</span>
+            </div>
+            <a href="index.html" class="text-xs text-slate-400 hover:text-cyan-400 transition flex items-center space-x-1">
+                <span>← Back to Hub</span>
+            </a>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 lg:p-6 overflow-hidden">
+
+        <!-- Left Panel: Controls & Inventory -->
+        <div class="lg:col-span-4 flex flex-col space-y-4">
+            <!-- User Platform Profile -->
+            <div class="bg-slate-900/90 rounded-xl p-5 cyber-border flex flex-col space-y-3">
+                <h2 class="font-orbitron font-semibold text-sm text-cyan-400 flex items-center justify-between">
+                    <span>PLAYER IDENTITY</span>
+                    <span class="text-xs text-slate-500 font-normal">SIWE Link</span>
+                </h2>
+
+                <div>
+                    <label class="text-xs text-slate-400 mb-1 block">Platform User ID:</label>
+                    <div class="flex space-x-2">
+                        <input id="platform-id" type="text" value="alpha:player_alpha" class="bg-slate-950 border border-cyan-500/30 rounded-lg px-3 py-2 text-sm text-cyan-300 font-mono w-full focus:outline-none focus:border-cyan-400">
+                        <button id="btn-refresh" class="bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold px-3 py-2 rounded-lg text-xs transition">
+                            Sync
+                        </button>
+                    </div>
+                </div>
+
+                <div id="user-status-card" class="bg-slate-950/80 rounded-lg p-3 text-xs space-y-1 font-mono border border-slate-800">
+                    <div class="flex justify-between text-slate-400">
+                        <span>Wallet:</span>
+                        <span id="user-address" class="text-slate-200">Not Synced</span>
+                    </div>
+                    <div class="flex justify-between text-slate-400">
+                        <span>BRAG Balance:</span>
+                        <span id="user-brag" class="text-emerald-400 font-bold">-- BRAG</span>
+                    </div>
+                    <div class="flex justify-between text-slate-400">
+                        <span>Pre-Authorized:</span>
+                        <span id="user-preauth" class="text-amber-400">Checking...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summoning Control Panel -->
+            <div class="bg-slate-900/90 rounded-xl p-5 cyber-border flex flex-col space-y-4 flex-1">
+                <h2 class="font-orbitron font-semibold text-sm text-cyan-400 flex items-center justify-between">
+                    <span>SUMMON NFT TO ALPHA REALM</span>
+                    <span id="summon-fee-tag" class="text-xs px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">Fee: 10 BRAG</span>
+                </h2>
+
+                <div>
+                    <label class="text-xs text-slate-400 mb-1 block">Select NFT to Summon:</label>
+                    <select id="nft-select" class="bg-slate-950 border border-cyan-500/30 rounded-lg px-3 py-2 text-sm text-slate-200 w-full focus:outline-none focus:border-cyan-400">
+                        <option value="">-- Loading Available NFTs --</option>
+                    </select>
+                </div>
+
+                <button id="btn-summon" class="w-full py-3 px-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-orbitron font-bold rounded-lg text-sm transition tracking-wider shadow-lg shadow-cyan-500/25 flex items-center justify-center space-x-2">
+                    <svg class="w-5 h-5 animate-spin hidden" id="summon-spinner" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <span id="summon-btn-text">SUMMON INTO METAVERSE ALPHA</span>
+                </button>
+
+                <!-- Console Output -->
+                <div class="flex-1 flex flex-col min-h-[160px]">
+                    <div class="text-xs text-slate-400 mb-1 flex justify-between">
+                        <span>BRIDGE EVENT LOG</span>
+                        <button id="btn-clear-log" class="text-[10px] text-slate-500 hover:text-slate-300">Clear</button>
+                    </div>
+                    <div id="event-log" class="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-3 font-mono text-[11px] text-slate-300 overflow-y-auto space-y-1.5 max-h-[220px]">
+                        <div class="text-slate-500">[System] Metaverse Alpha Realm Initialized.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: 3D Canvas Scene -->
+        <div class="lg:col-span-8 flex flex-col h-full min-h-[450px] bg-slate-900/90 rounded-xl cyber-border relative overflow-hidden">
+            <!-- Overlay Info Header -->
+            <div class="absolute top-4 left-4 z-10 bg-slate-950/80 backdrop-blur px-4 py-2 rounded-lg border border-cyan-500/30 flex items-center space-x-3">
+                <div class="w-3 h-3 rounded-full bg-cyan-400 animate-ping"></div>
+                <div>
+                    <div id="scene-nft-title" class="font-orbitron font-bold text-sm text-cyan-300">3D Holographic Pedestal</div>
+                    <div id="scene-nft-subtitle" class="text-xs text-slate-400">Waiting for NFT summon command...</div>
+                </div>
+            </div>
+
+            <!-- Cross-Realm Summon Alert Banner -->
+            <div id="summon-alert" class="hidden absolute top-4 right-4 z-10 max-w-sm bg-gradient-to-r from-purple-900/90 to-indigo-900/90 border border-purple-500/50 backdrop-blur p-3 rounded-lg text-xs shadow-2xl animate-bounce">
+                <div class="font-bold text-purple-300 flex items-center justify-between">
+                    <span>⚡ CROSS-REALM EVENT</span>
+                    <button id="btn-close-alert" class="text-slate-400 hover:text-white ml-2">×</button>
+                </div>
+                <div id="alert-message" class="text-slate-200 mt-1">NFT transferred away to VR Nexus Gallery.</div>
+            </div>
+
+            <!-- Three.js Canvas Container -->
+            <div id="canvas-container" class="w-full h-full flex-1"></div>
+        </div>
+
+    </main>
+
+    <script>
+        // --- State Variables ---
+        const WS_URL = window.APP_CONFIG?.wsUrl || (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + (window.location.hostname || 'localhost') + ':9001';
+        let ws = null;
+        let activeNft = null;
+        let userNfts = [];
+        let scene, camera, renderer, pedestalMesh, nftGroup, particlesMesh;
+        let isSummoningAnimation = false;
+
+        // --- DOM Elements ---
+        const wsBadge = document.getElementById('ws-badge');
+        const wsStatusText = document.getElementById('ws-status-text');
+        const platformIdInput = document.getElementById('platform-id');
+        const userAddressEl = document.getElementById('user-address');
+        const userBragEl = document.getElementById('user-brag');
+        const userPreauthEl = document.getElementById('user-preauth');
+        const nftSelect = document.getElementById('nft-select');
+        const btnSummon = document.getElementById('btn-summon');
+        const btnRefresh = document.getElementById('btn-refresh');
+        const eventLog = document.getElementById('event-log');
+        const sceneNftTitle = document.getElementById('scene-nft-title');
+        const sceneNftSubtitle = document.getElementById('scene-nft-subtitle');
+        const summonAlert = document.getElementById('summon-alert');
+        const alertMessage = document.getElementById('alert-message');
+
+        // --- Logging Helper ---
+        function log(msg, type = 'info') {
+            const time = new Date().toLocaleTimeString();
+            const colorClass = type === 'success' ? 'text-emerald-400' : (type === 'warn' ? 'text-amber-400' : (type === 'error' ? 'text-rose-400' : 'text-cyan-300'));
+            const div = document.createElement('div');
+            div.className = colorClass;
+            div.innerHTML = `<span class="text-slate-600">[${time}]</span> ${msg}`;
+            eventLog.appendChild(div);
+            eventLog.scrollTop = eventLog.scrollHeight;
+        }
+
+        // --- Three.js 3D Holographic Scene Initialization ---
+        function init3D() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x020617, 0.035);
+
+            camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.set(0, 3, 7);
+            camera.lookAt(0, 1, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+
+            // Cyber Grid Floor
+            const gridHelper = new THREE.GridHelper(30, 30, 0x06b6d4, 0x1e293b);
+            gridHelper.position.y = -0.5;
+            scene.add(gridHelper);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const cyanLight = new THREE.PointLight(0x06b6d4, 3, 20);
+            cyanLight.position.set(0, 4, 2);
+            scene.add(cyanLight);
+
+            const purpleLight = new THREE.PointLight(0xa855f7, 2, 20);
+            purpleLight.position.set(-4, 2, -2);
+            scene.add(purpleLight);
+
+            // Pedestal (Cyber Hologram Base)
+            const pedestalGeo = new THREE.CylinderGeometry(1.8, 2.2, 0.6, 32);
+            const pedestalMat = new THREE.MeshStandardMaterial({
+                color: 0x0f172a,
+                roughness: 0.2,
+                metalness: 0.8,
+                emissive: 0x06b6d4,
+                emissiveIntensity: 0.3
+            });
+            pedestalMesh = new THREE.Mesh(pedestalGeo, pedestalMat);
+            pedestalMesh.position.y = -0.2;
+            scene.add(pedestalMesh);
+
+            // Holographic Ring around Pedestal
+            const ringGeo = new THREE.RingGeometry(2.3, 2.5, 32);
+            const ringMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
+            const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+            ringMesh.rotation.x = Math.PI / 2;
+            ringMesh.position.y = -0.49;
+            scene.add(ringMesh);
+
+            // Particles
+            const particleGeo = new THREE.BufferGeometry();
+            const particleCount = 200;
+            const posArray = new Float32Array(particleCount * 3);
+            for(let i = 0; i < particleCount * 3; i += 3) {
+                posArray[i] = (Math.random() - 0.5) * 15;
+                posArray[i+1] = Math.random() * 8;
+                posArray[i+2] = (Math.random() - 0.5) * 15;
+            }
+            particleGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+            const particleMat = new THREE.PointsMaterial({ size: 0.05, color: 0x06b6d4, transparent: true, opacity: 0.6 });
+            particlesMesh = new THREE.Points(particleGeo, particleMat);
+            scene.add(particlesMesh);
+
+            // Group for Summoned NFT Mesh
+            nftGroup = new THREE.Group();
+            nftGroup.position.set(0, 1.8, 0);
+            scene.add(nftGroup);
+
+            // Responsive Resizing
+            window.addEventListener('resize', () => {
+                camera.aspect = container.clientWidth / container.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(container.clientWidth, container.clientHeight);
+            });
+
+            animate();
+        }
+
+        // --- 3D Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (pedestalMesh) {
+                pedestalMesh.rotation.y += 0.005;
+            }
+            if (nftGroup) {
+                nftGroup.rotation.y += 0.01;
+                // Subtle levitation floating
+                nftGroup.position.y = 1.8 + Math.sin(Date.now() * 0.002) * 0.15;
+            }
+            if (particlesMesh) {
+                particlesMesh.rotation.y -= 0.001;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // --- Render Hologram Card Mesh for Summoned NFT ---
+        function renderNFTOnPedestal(nft) {
+            // Clear previous children
+            while (nftGroup.children.length > 0) {
+                nftGroup.remove(nftGroup.children[0]);
+            }
+
+            if (!nft) {
+                sceneNftTitle.innerText = "3D Holographic Pedestal";
+                sceneNftSubtitle.innerText = "Waiting for NFT summon command...";
+                activeNft = null;
+                return;
+            }
+
+            activeNft = nft;
+            sceneNftTitle.innerText = `NFT #${nft.tokenId} Hologram`;
+            sceneNftSubtitle.innerText = `Exhibited in Metaverse Alpha Realm • ${nft.location || 'Alpha Vault'}`;
+
+            // Create Hologram Card Mesh
+            const cardGeo = new THREE.BoxGeometry(2.0, 2.6, 0.1);
+
+            // Dynamic Canvas Texture for NFT Metadata
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 640;
+            const ctx = canvas.getContext('2d');
+
+            // Canvas Background
+            const grad = ctx.createLinearGradient(0, 0, 512, 640);
+            grad.addColorStop(0, '#020617');
+            grad.addColorStop(0.5, '#0f172a');
+            grad.addColorStop(1, '#082f49');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 512, 640);
+
+            // Border
+            ctx.strokeStyle = '#06b6d4';
+            ctx.lineWidth = 12;
+            ctx.strokeRect(10, 10, 492, 620);
+
+            // Title Header
+            ctx.fillStyle = '#38bdf8';
+            ctx.font = 'bold 36px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(`BRAG NFT #${nft.tokenId}`, 256, 70);
+
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '22px sans-serif';
+            ctx.fillText(`Metaverse Alpha Realm`, 256, 110);
+
+            // Center Hologram Symbol/Artwork
+            ctx.fillStyle = '#06b6d4';
+            ctx.beginPath();
+            ctx.arc(256, 320, 130, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#020617';
+            ctx.font = 'bold 110px sans-serif';
+            ctx.fillText(`α`, 256, 355);
+
+            // Footer Status
+            ctx.fillStyle = '#4ade80';
+            ctx.font = 'bold 26px sans-serif';
+            ctx.fillText(`● ACTIVE IN METAVERSE`, 256, 540);
+
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = '20px sans-serif';
+            ctx.fillText(`Vault: 0xalpha...vault`, 256, 580);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const cardMat = new THREE.MeshStandardMaterial({
+                map: texture,
+                metalness: 0.5,
+                roughness: 0.2,
+                emissive: 0x06b6d4,
+                emissiveIntensity: 0.25
+            });
+
+            const cardMesh = new THREE.Mesh(cardGeo, cardMat);
+            nftGroup.add(cardMesh);
+
+            // Summon Burst Animation (Scaling)
+            nftGroup.scale.set(0.1, 0.1, 0.1);
+            let s = 0.1;
+            const animInterval = setInterval(() => {
+                s += 0.08;
+                if (s >= 1.0) {
+                    s = 1.0;
+                    clearInterval(animInterval);
+                }
+                nftGroup.scale.set(s, s, s);
+            }, 16);
+        }
+
+        function dematerializeNFT() {
+            if (nftGroup.children.length === 0) return;
+            let s = 1.0;
+            const animInterval = setInterval(() => {
+                s -= 0.1;
+                if (s <= 0.05) {
+                    s = 0;
+                    clearInterval(animInterval);
+                    while (nftGroup.children.length > 0) {
+                        nftGroup.remove(nftGroup.children[0]);
+                    }
+                    activeNft = null;
+                    sceneNftTitle.innerText = "3D Holographic Pedestal";
+                    sceneNftSubtitle.innerText = "Waiting for NFT summon command...";
+                } else {
+                    nftGroup.scale.set(s, s, s);
+                }
+            }, 16);
+        }
+
+        // --- WebSocket Connection ---
+        function connectWebSocket() {
+            ws = new WebSocket(WS_URL);
+
+            ws.onopen = () => {
+                wsBadge.className = "px-3 py-1 rounded-full text-xs font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center space-x-2";
+                wsStatusText.innerText = "Bridge Connected";
+                log(`Connected to NFT Bridge WebSocket (${WS_URL}).`, "success");
+
+                // Send Handshake
+                ws.send(JSON.stringify({ type: "nexus:handshake", serverId: "alpha-realm" }));
+
+                // Request initial status
+                fetchUserStatus();
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleBridgeMessage(data);
+                } catch (e) {
+                    console.error("WS Parse error:", e);
+                }
+            };
+
+            ws.onerror = (err) => {
+                wsBadge.className = "px-3 py-1 rounded-full text-xs font-mono bg-rose-500/10 text-rose-400 border border-rose-500/30 flex items-center space-x-2";
+                wsStatusText.innerText = "Bridge Error";
+                log("WebSocket connection error.", "error");
+            };
+
+            ws.onclose = () => {
+                wsBadge.className = "px-3 py-1 rounded-full text-xs font-mono bg-slate-500/10 text-slate-400 border border-slate-500/30 flex items-center space-x-2";
+                wsStatusText.innerText = "Disconnected";
+                log("WebSocket disconnected. Reconnecting in 3s...", "warn");
+                setTimeout(connectWebSocket, 3000);
+            };
+        }
+
+        // --- Handle Incoming Bridge WS Messages ---
+        function handleBridgeMessage(data) {
+            if (data.type === 'handshake_ack') {
+                log(`Server Handshake confirmed for: ${data.serverId}`, 'success');
+            } else if (data.type === 'status_response') {
+                updateUserUI(data.data);
+            } else if (data.type === 'summon_response') {
+                document.getElementById('summon-spinner').classList.add('hidden');
+                document.getElementById('summon-btn-text').innerText = "SUMMON INTO METAVERSE ALPHA";
+                btnSummon.disabled = false;
+
+                if (data.result && data.result.success) {
+                    log(`Successfully summoned NFT #${data.result.tokenId}!`, 'success');
+                    if (data.result.nft) {
+                        renderNFTOnPedestal(data.result.nft);
+                    }
+                    fetchUserStatus();
+                } else {
+                    log(`Summon failed: ${data.result ? data.result.reason : 'Unknown reason'}`, 'error');
+                }
+            } else if (data.type === 'nft_summoned') {
+                log(`★ EVENT: Player ${data.playerName} summoned NFT #${data.tokenId} to ${data.serverName || data.serverId}!`, 'info');
+
+                if (data.serverId === 'alpha-realm') {
+                    renderNFTOnPedestal(data.nft);
+                    fetchUserStatus();
+                } else {
+                    // NFT was summoned into ANOTHER realm (e.g., VR Nexus Gallery)
+                    if (activeNft && activeNft.tokenId.toString() === data.tokenId.toString()) {
+                        log(`Notice: NFT #${data.tokenId} dematerialized from Alpha Realm to ${data.serverName || data.serverId}.`, 'warn');
+                        dematerializeNFT();
+                        showAlert(`NFT #${data.tokenId} was summoned into ${data.serverName || data.serverId}! It has dematerialized from Alpha Realm.`);
+                    }
+                    fetchUserStatus();
+                }
+            }
+        }
+
+        function showAlert(msg) {
+            alertMessage.innerText = msg;
+            summonAlert.classList.remove('hidden');
+        }
+
+        document.getElementById('btn-close-alert')?.addEventListener('click', () => {
+            summonAlert.classList.add('hidden');
+        });
+
+        // --- Fetch User Ownership & Vault Status ---
+        function fetchUserStatus() {
+            const platformId = platformIdInput.value.trim();
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'get_status',
+                    platformId: platformId,
+                    serverId: 'alpha-realm',
+                    playerName: 'Alpha Explorer'
+                }));
+            }
+        }
+
+        // --- Update UI with Status Response ---
+        function updateUserUI(status) {
+            if (!status) return;
+
+            if (status.address) {
+                userAddressEl.innerText = `${status.address.slice(0,6)}...${status.address.slice(-4)}`;
+            } else {
+                userAddressEl.innerText = "Unlinked";
+            }
+
+            userNfts = status.nfts || [];
+            nftSelect.innerHTML = '';
+
+            if (userNfts.length === 0) {
+                nftSelect.innerHTML = '<option value="">No NFTs found in wallet or vaults</option>';
+            } else {
+                userNfts.forEach(nft => {
+                    const opt = document.createElement('option');
+                    opt.value = nft.tokenId;
+                    opt.innerText = `NFT #${nft.tokenId} (${nft.location || 'Wallet'})`;
+                    nftSelect.appendChild(opt);
+                });
+            }
+
+            // Check if active NFT is currently in Alpha Vault
+            if (activeNft && !userNfts.some(n => n.tokenId.toString() === activeNft.tokenId.toString())) {
+                dematerializeNFT();
+            }
+
+            // Mock balance / preauth indicator for demo
+            userBragEl.innerText = "1,000 BRAG";
+            userPreauthEl.innerText = "✓ Active";
+            userPreauthEl.className = "text-emerald-400 font-bold";
+        }
+
+        // --- Event Listeners ---
+        btnSummon.addEventListener('click', () => {
+            const tokenId = nftSelect.value;
+            if (!tokenId) {
+                log("Please select an NFT to summon.", "warn");
+                return;
+            }
+
+            document.getElementById('summon-spinner').classList.remove('hidden');
+            document.getElementById('summon-btn-text').innerText = "Summoning...";
+            btnSummon.disabled = true;
+
+            const platformId = platformIdInput.value.trim();
+
+            ws.send(JSON.stringify({
+                type: 'summon',
+                target: tokenId,
+                platformId: platformId,
+                serverId: 'alpha-realm',
+                playerName: 'Alpha Explorer'
+            }));
+
+            log(`Sending summon request for NFT #${tokenId}...`, 'info');
+        });
+
+        btnRefresh.addEventListener('click', () => {
+            log("Syncing player identity and status...", 'info');
+            fetchUserStatus();
+        });
+
+        document.getElementById('btn-clear-log').addEventListener('click', () => {
+            eventLog.innerHTML = '';
+        });
+
+        // --- Initialize Page ---
+        window.addEventListener('DOMContentLoaded', () => {
+            init3D();
+            connectWebSocket();
+        });
+    </script>
+</body>
+</html>

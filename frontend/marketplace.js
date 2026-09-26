@@ -12,7 +12,7 @@ async function initMarketplace() {
 /**
  * Load and display NFTs from the blockchain
  */
-const EXTERNAL_COLLECTIONS = CONTRACT_DATA.externalCollections || [];
+const EXTERNAL_COLLECTIONS = window.APP_CONFIG?.externalCollections || (typeof CONTRACT_DATA !== 'undefined' ? CONTRACT_DATA.externalCollections : []) || [];
 
 async function loadNFTs() {
     const nftGrid = document.getElementById('nftGrid');
@@ -113,7 +113,8 @@ async function renderNFTCard(contract, tokenId, collectionName = "Impact NFT") {
         const isGif = animUrl.includes('image/gif') || animUrl.match(/\.gif$/i);
         const is3d = animUrl.match(/\.(glb|gltf)$/i);
 
-        const isExternal = CONTRACT_DATA.externalCollections?.some(c => c.address.toLowerCase() === contract.address.toLowerCase());
+        const collections = window.APP_CONFIG?.externalCollections || (typeof CONTRACT_DATA !== 'undefined' ? CONTRACT_DATA.externalCollections : []) || [];
+        const isExternal = collections.some(c => c.address.toLowerCase() === contract.address.toLowerCase());
 
         card.innerHTML = `
             <div class="aspect-square bg-slate-900 flex items-center justify-center overflow-hidden relative">
