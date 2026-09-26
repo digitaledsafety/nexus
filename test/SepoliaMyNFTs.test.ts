@@ -3,6 +3,7 @@ import { describe, it, beforeEach, afterEach } from "node:test";
 import path from "node:path";
 import fs from "node:fs";
 import { EventEmitter } from "node:events";
+import { generateFrontendConfigJS } from "../scripts/loader.js";
 
 class MockWebSocket extends EventEmitter {
     sentMessages: any[] = [];
@@ -58,6 +59,42 @@ describe("Sepolia Mode (/nexus:my_nfts) Test Suite", () => {
                 2
             )
         );
+
+        // Also ensure project-wide root config.js and frontend/config.js contain Sepolia deployments
+        const rootConfigPath = path.join(process.cwd(), "config.js");
+        const frontendConfigPath = path.join(process.cwd(), "frontend", "config.js");
+
+        [rootConfigPath, frontendConfigPath].forEach(cfgPath => {
+            let configObj: any = { deployments: {}, contracts: {} };
+            if (fs.existsSync(cfgPath)) {
+                try {
+                    const content = fs.readFileSync(cfgPath, "utf8");
+                    const match = content.match(/(?:window\.APP_CONFIG|const APP_CONFIG) = ({[\s\S]*?});/);
+                    if (match) configObj = JSON.parse(match[1]);
+                } catch (e) {}
+            }
+            if (!configObj.deployments) configObj.deployments = {};
+            configObj.deployments["11155111"] = {
+                BragNFT: mockBragAddress,
+                ExhibitVault: mockVaultAddress
+            };
+            configObj.deployments["chain-11155111"] = {
+                BragNFT: mockBragAddress,
+                ExhibitVault: mockVaultAddress
+            };
+
+            const updatedContent = `const APP_CONFIG = ${JSON.stringify(configObj, null, 2)};
+if (typeof window !== 'undefined') {
+    window.APP_CONFIG = APP_CONFIG;
+    window.CONTRACT_DATA = APP_CONFIG;
+}
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = APP_CONFIG;
+}
+export default APP_CONFIG;
+`;
+            fs.writeFileSync(cfgPath, updatedContent);
+        });
     });
 
     afterEach(() => {
@@ -72,6 +109,41 @@ describe("Sepolia Mode (/nexus:my_nfts) Test Suite", () => {
         } else {
             delete process.env.CHAIN_ID;
         }
+
+        if (fs.existsSync(sepoliaDeploymentFile)) {
+            fs.unlinkSync(sepoliaDeploymentFile);
+        }
+
+        // Clean up mock Sepolia deployments in root config.js and frontend/config.js
+        const rootConfigPath = path.join(process.cwd(), "config.js");
+        const frontendConfigPath = path.join(process.cwd(), "frontend", "config.js");
+
+        [rootConfigPath, frontendConfigPath].forEach(cfgPath => {
+            if (fs.existsSync(cfgPath)) {
+                try {
+                    const content = fs.readFileSync(cfgPath, "utf8");
+                    const match = content.match(/(?:window\.APP_CONFIG|const APP_CONFIG) = ({[\s\S]*?});/);
+                    if (match) {
+                        const configObj = JSON.parse(match[1]);
+                        if (configObj.deployments) {
+                            delete configObj.deployments["11155111"];
+                            delete configObj.deployments["chain-11155111"];
+                            const updatedContent = `const APP_CONFIG = ${JSON.stringify(configObj, null, 2)};
+if (typeof window !== 'undefined') {
+    window.APP_CONFIG = APP_CONFIG;
+    window.CONTRACT_DATA = APP_CONFIG;
+}
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = APP_CONFIG;
+}
+export default APP_CONFIG;
+`;
+                            fs.writeFileSync(cfgPath, updatedContent);
+                        }
+                    }
+                } catch (e) {}
+            }
+        });
     });
 
     it("should default CHAIN_ID to 11155111 and load Sepolia contract deployments when APP_ENV=sepolia", async () => {
