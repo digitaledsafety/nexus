@@ -193,6 +193,28 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
     }
 
     /**
+     * @dev Batch approve multiple proposals.
+     */
+    function batchApprove(uint256[] calldata proposalIds, uint256 nonce) external onlyOwner(nonce) {
+        address owner = _getMsgSender(nonce);
+        for (uint256 i = 0; i < proposalIds.length; ) {
+            uint256 proposalId = proposalIds[i];
+            if (proposalId >= proposalCount) revert ProposalNotFound();
+
+            Proposal storage p = proposals[proposalId];
+            if (p.executed) revert AlreadyExecuted();
+            if (p.canceled) revert AlreadyCanceled();
+            if (p.approved[owner]) revert AlreadyApproved();
+
+            p.approved[owner] = true;
+            p.approvalCount++;
+
+            emit Approved(proposalId, owner);
+            unchecked { i++; }
+        }
+    }
+
+    /**
      * @dev Execute a proposal that has reached the threshold.
      */
     function executeProposal(uint256 proposalId) external payable {
@@ -250,7 +272,7 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
     /**
      * @dev Cancel a proposal (only by proposer or via treasury execution).
      */
-    function cancel(uint256 proposalId, uint256 nonce) external {
+    function cancel(uint256 proposalId, uint256 nonce) public {
         address caller = _getMsgSender(nonce);
         if (proposalId >= proposalCount) revert ProposalNotFound();
 
@@ -264,6 +286,29 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
 
         p.canceled = true;
         emit Canceled(proposalId);
+    }
+
+    /**
+     * @dev Batch cancel multiple proposals.
+     */
+    function batchCancel(uint256[] calldata proposalIds, uint256 nonce) external {
+        address caller = _getMsgSender(nonce);
+        for (uint256 i = 0; i < proposalIds.length; ) {
+            uint256 proposalId = proposalIds[i];
+            if (proposalId >= proposalCount) revert ProposalNotFound();
+
+            Proposal storage p = proposals[proposalId];
+            if (p.executed) revert AlreadyExecuted();
+            if (p.canceled) revert AlreadyCanceled();
+
+            if (caller != p.proposer && msg.sender != address(this)) {
+                 revert NotProposer();
+            }
+
+            p.canceled = true;
+            emit Canceled(proposalId);
+            unchecked { i++; }
+        }
     }
 
     /**
