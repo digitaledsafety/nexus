@@ -10482,4 +10482,3 @@ if (typeof window !== 'undefined') {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = APP_CONFIG;
 }
-export default APP_CONFIG;
