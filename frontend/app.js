@@ -177,7 +177,9 @@ function setupManagerListeners() {
                 // Max gas if huge file
                 let gasOverride = null;
                 if (onChain && tokenURI.length > 50000) {
-                    gasOverride = BigInt(APP_CONFIG.gasLimits.hugeCalldataGasLimit);
+                    const cfg = window.APP_CONFIG || (typeof CONTRACT_DATA !== 'undefined' ? CONTRACT_DATA : {});
+                    const hugeLimit = cfg.frontend?.gasLimits?.hugeCalldataGasLimit || cfg.gasLimits?.hugeCalldataGasLimit || 25000000;
+                    gasOverride = BigInt(hugeLimit);
                     log(`Large file detected (${Math.round(tokenURI.length/1024)}KB). Applying gas limit override: ${gasOverride.toString()}`);
                 }
 
