@@ -135,8 +135,13 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
 
     console.log(`[getOwnershipStatus] Resolved target wallet address: ${addressToCheck} (mapping lookup for uuid='${uuid}')`);
 
-    // Fetch fresh on-chain status every time to guarantee real-time updates from the blockchain
-    const status = await fetchCurrentStatus(addressToCheck);
+    const serverConfig = serverConfigs[serverId];
+    const targetVaultAddr = (serverConfig && serverConfig.vaultAddress)
+        ? serverConfig.vaultAddress.toLowerCase()
+        : null;
+
+    // Fetch fresh on-chain status for target vault and configured server vaults
+    const status = await fetchCurrentStatus(addressToCheck, targetVaultAddr);
 
     // Preserve in-memory non-blockchain fields (e.g. bragBalance) or mocked/transferred NFTs in statusCache
     const cachedUser = statusCache.get(addressToCheck.toLowerCase());
@@ -161,11 +166,7 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
 
     statusCache.set(addressToCheck.toLowerCase(), status);
 
-    const serverConfig = serverConfigs[serverId];
-    const registryAddr = getContractAddress('ExhibitRegistry');
-    const vaultAddr = (serverConfig && serverConfig.vaultAddress)
-        ? serverConfig.vaultAddress.toLowerCase()
-        : null;
+    const vaultAddr = targetVaultAddr;
 
     const allVaultNfts = status.vaults ? Object.values(status.vaults).flat() : [];
     const vaultNftsForServer = vaultAddr ? (status.vaults[vaultAddr] || []) : allVaultNfts;
@@ -234,15 +235,12 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
 
     const ownership = await getOwnershipStatus(platformId, serverId, playerName);
     const serverConfig = serverConfigs[serverId] || { name: serverId, vaultAddress: null };
-    const registryAddr = getContractAddress('ExhibitRegistry');
     const vaultAddr = (serverConfig && serverConfig.vaultAddress)
         ? serverConfig.vaultAddress.toLowerCase()
         : null;
 
     const userStatus = statusCache.get(ownership.address.toLowerCase()) || { walletNfts: [], vaults: {} };
-    const currentVaultNfts = vaultAddr
-        ? ((userStatus.vaults && userStatus.vaults[vaultAddr]) ? userStatus.vaults[vaultAddr] : [])
-        : (userStatus.vaults ? Object.values(userStatus.vaults).flat() : []);
+    const currentVaultNfts = (vaultAddr && userStatus.vaults && userStatus.vaults[vaultAddr]) ? userStatus.vaults[vaultAddr] : [];
 
     const allVaultNfts = userStatus.vaults ? Object.values(userStatus.vaults).flat() : [];
     const allNfts = [...(userStatus.walletNfts || []), ...allVaultNfts];
@@ -948,7 +946,7 @@ async function fetchWithRetry(fn, label, maxRetries = 3) {
     }
 }
 
-async function fetchCurrentStatus(address) {
+async function fetchCurrentStatus(address, targetVaultAddr = null) {
     console.log(`[fetchCurrentStatus] Starting fresh on-chain status fetch for address ${address}...`);
     const bragAddress = getContractAddress('BragNFT');
     console.log(`[fetchCurrentStatus] Resolved BragNFT contract address: ${bragAddress || 'null (not found)'}`);
@@ -1038,9 +1036,19 @@ async function fetchCurrentStatus(address) {
     console.log(`[fetchCurrentStatus] Resolved ExhibitRegistry address: ${registryAddr || 'null (not found)'}`);
 
     const activeConfigs = { ...serverConfigs };
-    const registeredVaultAddrs = new Set();
+    const vaultsToQuery = new Map(); // vaultAddr -> locationName
 
-    if (registryAddr) {
+    if (targetVaultAddr) {
+        vaultsToQuery.set(targetVaultAddr.toLowerCase(), "Target Vault");
+    }
+
+    for (const [configKey, config] of Object.entries(activeConfigs)) {
+        if (config.vaultAddress) {
+            vaultsToQuery.set(config.vaultAddress.toLowerCase(), config.name);
+        }
+    }
+
+    if (registryAddr && vaultsToQuery.size === 0) {
         try {
             const registryAbi = getContractAbi('ExhibitRegistry') || [
                 parseAbiItem('function getVaultCount() view returns (uint256)'),
@@ -1062,7 +1070,7 @@ async function fetchCurrentStatus(address) {
                         args: [i]
                     });
                     if (vAddr && vAddr !== '0x0000000000000000000000000000000000000000') {
-                        registeredVaultAddrs.add(vAddr.toLowerCase());
+                        vaultsToQuery.set(vAddr.toLowerCase(), "Verified Vault");
                     }
                 } catch (e) {
                     console.error(`[fetchCurrentStatus] Error fetching vaultAddress[${i}]:`, e.message);
@@ -1070,18 +1078,6 @@ async function fetchCurrentStatus(address) {
             }
         } catch (e) {
             console.error(`[fetchCurrentStatus] Error reading ExhibitRegistry count:`, e.message);
-        }
-    }
-
-    const vaultsToQuery = new Map(); // vaultAddr -> locationName
-    for (const [configKey, config] of Object.entries(activeConfigs)) {
-        if (config.vaultAddress) {
-            vaultsToQuery.set(config.vaultAddress.toLowerCase(), config.name);
-        }
-    }
-    for (const vAddr of registeredVaultAddrs) {
-        if (!vaultsToQuery.has(vAddr)) {
-            vaultsToQuery.set(vAddr, "Verified Vault");
         }
     }
 
