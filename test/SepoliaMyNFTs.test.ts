@@ -53,7 +53,7 @@ describe("Sepolia Mode (/nexus:my_nfts) Test Suite", () => {
             JSON.stringify(
                 {
                     "AppModule#BragNFT": mockBragAddress,
-                    "AppModule#ExhibitVault": mockVaultAddress
+                    "AppModule#ExhibitRegistry": mockVaultAddress
                 },
                 null,
                 2
@@ -76,11 +76,11 @@ describe("Sepolia Mode (/nexus:my_nfts) Test Suite", () => {
             if (!configObj.deployments) configObj.deployments = {};
             configObj.deployments["11155111"] = {
                 BragNFT: mockBragAddress,
-                ExhibitVault: mockVaultAddress
+                ExhibitRegistry: mockVaultAddress
             };
             configObj.deployments["chain-11155111"] = {
                 BragNFT: mockBragAddress,
-                ExhibitVault: mockVaultAddress
+                ExhibitRegistry: mockVaultAddress
             };
 
             const updatedContent = `const APP_CONFIG = ${JSON.stringify(configObj, null, 2)};
@@ -91,7 +91,6 @@ if (typeof window !== 'undefined') {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = APP_CONFIG;
 }
-export default APP_CONFIG;
 `;
             fs.writeFileSync(cfgPath, updatedContent);
         });
@@ -136,7 +135,6 @@ if (typeof window !== 'undefined') {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = APP_CONFIG;
 }
-export default APP_CONFIG;
 `;
                             fs.writeFileSync(cfgPath, updatedContent);
                         }

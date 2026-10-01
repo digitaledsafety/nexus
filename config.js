@@ -41,14 +41,14 @@ const APP_CONFIG = {
     "31337": {
       "BragNFT": "",
       "BragToken": "",
-      "ExhibitVault": "",
+      "ExhibitRegistry": "",
       "NFTMarketplace": "",
       "Treasury": ""
     },
     "11155111": {
       "BragNFT": "",
       "BragToken": "",
-      "ExhibitVault": "",
+      "ExhibitRegistry": "",
       "NFTMarketplace": "",
       "Treasury": ""
     },
@@ -10461,14 +10461,14 @@ const APP_CONFIG = {
     "31337": {
       "BragNFT": "0xLOCAL_NEXUS_ADDRESS",
       "BragToken": "",
-      "ExhibitVault": "",
+      "ExhibitRegistry": "",
       "NFTMarketplace": "",
       "Treasury": ""
     },
     "chain-31337": {
       "BragNFT": "0xLOCAL_NEXUS_ADDRESS",
       "BragToken": "",
-      "ExhibitVault": "",
+      "ExhibitRegistry": "",
       "NFTMarketplace": "",
       "Treasury": ""
     }
