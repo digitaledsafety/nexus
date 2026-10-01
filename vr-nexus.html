@@ -494,7 +494,7 @@
         function updateUserUI(status) {
             if (!status) return;
 
-            if (status.address && typeof status.address === 'string' && status.address.startsWith('0x') && status.address.length === 42) {
+            if (status.address) {
                 userAddressEl.innerText = `${status.address.slice(0,6)}...${status.address.slice(-4)}`;
             } else {
                 userAddressEl.innerText = "Unlinked";
