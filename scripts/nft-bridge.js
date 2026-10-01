@@ -162,12 +162,13 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
     statusCache.set(addressToCheck.toLowerCase(), status);
 
     const serverConfig = serverConfigs[serverId];
-    const defaultVaultAddr = getContractAddress('ExhibitVault');
+    const registryAddr = getContractAddress('ExhibitRegistry');
     const vaultAddr = (serverConfig && serverConfig.vaultAddress)
         ? serverConfig.vaultAddress.toLowerCase()
-        : (defaultVaultAddr ? defaultVaultAddr.toLowerCase() : null);
+        : null;
 
-    const vaultNftsForServer = vaultAddr ? (status.vaults[vaultAddr] || []) : [];
+    const allVaultNfts = status.vaults ? Object.values(status.vaults).flat() : [];
+    const vaultNftsForServer = vaultAddr ? (status.vaults[vaultAddr] || []) : allVaultNfts;
     const inVault = vaultNftsForServer.length > 0;
     const inWallet = status.walletNfts.length > 0;
 
@@ -185,7 +186,6 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
     }
 
     // Return all user NFTs across wallet and all tracked vaults (deduplicated by tokenId)
-    const allVaultNfts = status.vaults ? Object.values(status.vaults).flat() : [];
     const rawAllNfts = [...(status.walletNfts || []), ...allVaultNfts];
 
     const seenTokenIds = new Set();
@@ -234,13 +234,15 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
 
     const ownership = await getOwnershipStatus(platformId, serverId, playerName);
     const serverConfig = serverConfigs[serverId] || { name: serverId, vaultAddress: null };
-    const defaultVaultAddr = getContractAddress('ExhibitVault');
+    const registryAddr = getContractAddress('ExhibitRegistry');
     const vaultAddr = (serverConfig && serverConfig.vaultAddress)
         ? serverConfig.vaultAddress.toLowerCase()
-        : (defaultVaultAddr ? defaultVaultAddr.toLowerCase() : "0xdefaultvault");
+        : null;
 
     const userStatus = statusCache.get(ownership.address.toLowerCase()) || { walletNfts: [], vaults: {} };
-    const currentVaultNfts = (vaultAddr && userStatus.vaults && userStatus.vaults[vaultAddr]) ? userStatus.vaults[vaultAddr] : [];
+    const currentVaultNfts = vaultAddr
+        ? ((userStatus.vaults && userStatus.vaults[vaultAddr]) ? userStatus.vaults[vaultAddr] : [])
+        : (userStatus.vaults ? Object.values(userStatus.vaults).flat() : []);
 
     const allVaultNfts = userStatus.vaults ? Object.values(userStatus.vaults).flat() : [];
     const allNfts = [...(userStatus.walletNfts || []), ...allVaultNfts];
@@ -316,7 +318,8 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
     }
 
     // Check if matchingNft is ALREADY in current vaultAddr
-    const isInCurrentVault = vaultAddr && currentVaultNfts.some(n => n.tokenId.toString() === matchingNft.tokenId.toString());
+    const isInCurrentVault = vaultAddr ? currentVaultNfts.some(n => n.tokenId.toString() === matchingNft.tokenId.toString()) : true;
+    const targetVaultAddr = vaultAddr || "0xdefaultvault";
 
     const feeAmount = (serverConfig && serverConfig.summonFeeBrag)
         ? serverConfig.summonFeeBrag
@@ -344,7 +347,7 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
             }
         }
 
-        executeVaultTransferAndPayment(ownership.address, matchingNft, vaultAddr, feeAmount, serverConfig.name);
+        executeVaultTransferAndPayment(ownership.address, matchingNft, targetVaultAddr, feeAmount, serverConfig.name);
         sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§a[NFT] Paid ${feeAmount} BRAG fee and transferred NFT #${matchingNft.tokenId} to ${serverConfig.name} Vault!§r"}]}`);
     } else {
         sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§a[NFT] NFT #${matchingNft.tokenId} is already in this client's vault! Loading structure...§r"}]}`);
@@ -642,7 +645,8 @@ async function handleStatusChange(address) {
 
         const serverConfig = serverConfigs[active.serverId];
         const vaultAddr = (serverConfig && serverConfig.vaultAddress) ? serverConfig.vaultAddress.toLowerCase() : null;
-        const inVault = vaultAddr ? (status.vaults[vaultAddr]?.length > 0) : false;
+        const allVaultNfts = status.vaults ? Object.values(status.vaults).flat() : [];
+        const inVault = vaultAddr ? (status.vaults[vaultAddr]?.length > 0) : (allVaultNfts.length > 0);
         const inWallet = status.walletNfts.length > 0;
         const isHolder = inVault;
 
@@ -1030,26 +1034,62 @@ async function fetchCurrentStatus(address) {
         }
     }
 
-    const defaultVault = getContractAddress('ExhibitVault');
-    console.log(`[fetchCurrentStatus] Resolved default ExhibitVault address: ${defaultVault || 'null (not found)'}`);
+    const registryAddr = getContractAddress('ExhibitRegistry');
+    console.log(`[fetchCurrentStatus] Resolved ExhibitRegistry address: ${registryAddr || 'null (not found)'}`);
 
     const activeConfigs = { ...serverConfigs };
-    if (defaultVault) {
-        for (const [id, cfg] of Object.entries(activeConfigs)) {
-            if (!cfg.vaultAddress) {
-                activeConfigs[id] = { ...cfg, vaultAddress: defaultVault };
+    const registeredVaultAddrs = new Set();
+
+    if (registryAddr) {
+        try {
+            const registryAbi = getContractAbi('ExhibitRegistry') || [
+                parseAbiItem('function getVaultCount() view returns (uint256)'),
+                parseAbiItem('function vaultAddresses(uint256) view returns (address)')
+            ];
+            const vaultCount = await fetchWithRetry(() => publicClient.readContract({
+                address: registryAddr,
+                abi: registryAbi,
+                functionName: 'getVaultCount'
+            }), 'getVaultCount()');
+            console.log(`[fetchCurrentStatus] ExhibitRegistry has ${vaultCount} registered vaults`);
+
+            for (let i = 0n; i < vaultCount; i++) {
+                try {
+                    const vAddr = await publicClient.readContract({
+                        address: registryAddr,
+                        abi: registryAbi,
+                        functionName: 'vaultAddresses',
+                        args: [i]
+                    });
+                    if (vAddr && vAddr !== '0x0000000000000000000000000000000000000000') {
+                        registeredVaultAddrs.add(vAddr.toLowerCase());
+                    }
+                } catch (e) {
+                    console.error(`[fetchCurrentStatus] Error fetching vaultAddress[${i}]:`, e.message);
+                }
             }
+        } catch (e) {
+            console.error(`[fetchCurrentStatus] Error reading ExhibitRegistry count:`, e.message);
+        }
+    }
+
+    const vaultsToQuery = new Map(); // vaultAddr -> locationName
+    for (const [configKey, config] of Object.entries(activeConfigs)) {
+        if (config.vaultAddress) {
+            vaultsToQuery.set(config.vaultAddress.toLowerCase(), config.name);
+        }
+    }
+    for (const vAddr of registeredVaultAddrs) {
+        if (!vaultsToQuery.has(vAddr)) {
+            vaultsToQuery.set(vAddr, "Verified Vault");
         }
     }
 
     const vaults = {};
-    for (const [configKey, config] of Object.entries(activeConfigs)) {
-        if (!config.vaultAddress) continue;
-        const vaultAddr = config.vaultAddress.toLowerCase();
-        if (vaults[vaultAddr]) continue;
+    for (const [vaultAddr, locationName] of vaultsToQuery.entries()) {
         vaults[vaultAddr] = [];
 
-        console.log(`[fetchCurrentStatus] Checking ExhibitVault '${vaultAddr}' for server '${config.name}' (${configKey})...`);
+        console.log(`[fetchCurrentStatus] Checking Vault '${vaultAddr}' (${locationName})...`);
 
         try {
             // Check for exhibited BragNFTs in this vault via direct contract state read owner721
@@ -1100,7 +1140,7 @@ async function fetchCurrentStatus(address) {
                             vaults[vaultAddr].push({
                                 tokenId: i.toString(),
                                 nftContract: bragAddress,
-                                location: config.name,
+                                location: locationName,
                                 image: media.image,
                                 animation_url: media.animation_url
                             });
