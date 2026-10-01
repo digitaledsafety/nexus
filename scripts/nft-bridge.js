@@ -137,14 +137,14 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
 
     const serverConfig = serverConfigs[serverId];
     const targetVaultAddr = (serverConfig && serverConfig.vaultAddress)
-        ? serverConfig.vaultAddress.toLowerCase()
+        ? serverConfig.vaultAddress
         : null;
 
     // Fetch fresh on-chain status for target vault and configured server vaults
     const status = await fetchCurrentStatus(addressToCheck, targetVaultAddr);
 
     // Preserve in-memory non-blockchain fields (e.g. bragBalance) or mocked/transferred NFTs in statusCache
-    const cachedUser = statusCache.get(addressToCheck.toLowerCase());
+    const cachedUser = statusCache.get(addressToCheck);
     if (cachedUser) {
         if (cachedUser.bragBalance !== undefined) {
             status.bragBalance = cachedUser.bragBalance;
@@ -164,7 +164,7 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
     }
 
 
-    statusCache.set(addressToCheck.toLowerCase(), status);
+    statusCache.set(addressToCheck, status);
 
     const vaultAddr = targetVaultAddr;
 
@@ -235,11 +235,9 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
 
     const ownership = await getOwnershipStatus(platformId, serverId, playerName);
     const serverConfig = serverConfigs[serverId] || { name: serverId, vaultAddress: null };
-    const vaultAddr = (serverConfig && serverConfig.vaultAddress)
-        ? serverConfig.vaultAddress.toLowerCase()
-        : null;
+    const vaultAddr = (serverConfig && serverConfig.vaultAddress) ? serverConfig.vaultAddress : null;
 
-    const userStatus = statusCache.get(ownership.address.toLowerCase()) || { walletNfts: [], vaults: {} };
+    const userStatus = statusCache.get(ownership.address) || { walletNfts: [], vaults: {} };
     const currentVaultNfts = (vaultAddr && userStatus.vaults && userStatus.vaults[vaultAddr]) ? userStatus.vaults[vaultAddr] : [];
 
     const allVaultNfts = userStatus.vaults ? Object.values(userStatus.vaults).flat() : [];
@@ -608,9 +606,8 @@ const BRAG_ABI = getContractAbi('BragNFT') || [
 ];
 
 const chain = CHAIN_ID === 31337 ? localhost : sepolia;
-const RPC_URL = process.env.RPC_URL || process.env.SEPOLIA_RPC_URL || (CHAIN_ID === 11155111
-    ? (process.env.ALCHEMY_API_KEY ? `https://eth-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}` : 'https://rpc.ankr.com/eth_sepolia')
-    : 'http://127.0.0.1:8545');
+const RPC_URL = process.env.RPC_URL || process.env.SEPOLIA_RPC_URL || (CHAIN_ID === 11155111 ? (process.env.ALCHEMY_API_KEY ? `https://eth-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}` : 'https://rpc.ankr.com/eth_sepolia') : 'http://127.0.0.1:8545');
+
 if (isMain) console.log(`Bridge using RPC_URL: ${RPC_URL} for Chain ID: ${CHAIN_ID}`);
 
 async function handleStatusChange(address) {
@@ -637,12 +634,12 @@ async function handleStatusChange(address) {
         console.log(`Pushing real-time update for player ${active.playerName} (${xuid}) on ${active.serverId}`);
 
         // Refresh status
-        const lowerAddr = normalizedAddress.toLowerCase();
+        const lowerAddr = normalizedAddress;
         const status = await fetchCurrentStatus(lowerAddr);
         statusCache.set(lowerAddr, status);
 
         const serverConfig = serverConfigs[active.serverId];
-        const vaultAddr = (serverConfig && serverConfig.vaultAddress) ? serverConfig.vaultAddress.toLowerCase() : null;
+        const vaultAddr = (serverConfig && serverConfig.vaultAddress) ? serverConfig.vaultAddress : null;
         const allVaultNfts = status.vaults ? Object.values(status.vaults).flat() : [];
         const inVault = vaultAddr ? (status.vaults[vaultAddr]?.length > 0) : (allVaultNfts.length > 0);
         const inWallet = status.walletNfts.length > 0;
@@ -986,7 +983,7 @@ async function fetchCurrentStatus(address, targetVaultAddr = null) {
                                 functionName: 'ownerOf',
                                 args: [BigInt(i)]
                             });
-                            if (owner.toLowerCase() === address.toLowerCase()) {
+                            if (owner === address) {
                                 foundTokens = true;
                                 console.log(`[fetchCurrentStatus] Direct wallet token match: Token #${i} owned by ${address}`);
                                 let media = { image: null, animation_url: null };
@@ -1039,12 +1036,12 @@ async function fetchCurrentStatus(address, targetVaultAddr = null) {
     const vaultsToQuery = new Map(); // vaultAddr -> locationName
 
     if (targetVaultAddr) {
-        vaultsToQuery.set(targetVaultAddr.toLowerCase(), "Target Vault");
+        vaultsToQuery.set(targetVaultAddr, "Target Vault");
     }
 
     for (const [configKey, config] of Object.entries(activeConfigs)) {
         if (config.vaultAddress) {
-            vaultsToQuery.set(config.vaultAddress.toLowerCase(), config.name);
+            vaultsToQuery.set(config.vaultAddress, config.name);
         }
     }
 
@@ -1070,7 +1067,7 @@ async function fetchCurrentStatus(address, targetVaultAddr = null) {
                         args: [i]
                     });
                     if (vAddr && vAddr !== '0x0000000000000000000000000000000000000000') {
-                        vaultsToQuery.set(vAddr.toLowerCase(), "Verified Vault");
+                        vaultsToQuery.set(vAddr, "Verified Vault");
                     }
                 } catch (e) {
                     console.error(`[fetchCurrentStatus] Error fetching vaultAddress[${i}]:`, e.message);
@@ -1113,7 +1110,7 @@ async function fetchCurrentStatus(address, targetVaultAddr = null) {
                             args: [bragAddress, BigInt(i)]
                         });
 
-                        if (currentOwner.toLowerCase() === address.toLowerCase()) {
+                        if (currentOwner === address) {
                             console.log(`[fetchCurrentStatus] Vault exhibition match: Token #${i} in vault ${vaultAddr} belongs to ${address}`);
                             let media = { image: null, animation_url: null };
                             try {
