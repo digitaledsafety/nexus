@@ -101,26 +101,11 @@ function saveMappings() {
 
 // --- Core Logic ---
 async function getPlatformStatus(platformId) {
-    let linkedAddress = mappings.get(platformId);
-    if (!linkedAddress && platformId) {
-        for (const [pid, addr] of mappings.entries()) {
-            if (pid.toLowerCase() === platformId.toLowerCase()) {
-                linkedAddress = addr;
-                break;
-            }
-        }
-    }
+    const linkedAddress = mappings.get(platformId);
     let linkedPlatforms = [];
     if (linkedAddress) {
         for (const [pid, addr] of mappings.entries()) {
             if (addr && addr.toLowerCase() === linkedAddress.toLowerCase()) {
-                linkedPlatforms.push(pid);
-            }
-        }
-    } else if (platformId && platformId.startsWith('0x') && platformId.length === 42) {
-        linkedAddress = platformId;
-        for (const [pid, addr] of mappings.entries()) {
-            if (addr && addr.toLowerCase() === platformId.toLowerCase()) {
                 linkedPlatforms.push(pid);
             }
         }
@@ -137,18 +122,7 @@ async function createRegistrationToken(platformId) {
 async function getOwnershipStatus(uuid, serverId, playerName) {
     console.log(`[getOwnershipStatus] Request received for uuid='${uuid}', serverId='${serverId}', playerName='${playerName}'`);
 
-    let addressToCheck = mappings.get(uuid);
-    if (!addressToCheck && uuid) {
-        for (const [pid, addr] of mappings.entries()) {
-            if (pid.toLowerCase() === uuid.toLowerCase()) {
-                addressToCheck = addr;
-                break;
-            }
-        }
-    }
-    if (!addressToCheck && uuid && uuid.startsWith('0x') && uuid.length === 42) {
-        addressToCheck = uuid;
-    }
+    const addressToCheck = mappings.get(uuid) || uuid;
 
     if (uuid && serverId && playerName) {
         activePlayers.set(uuid, { serverId, playerName });
@@ -156,7 +130,7 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
 
     if (!addressToCheck || !addressToCheck.startsWith('0x') || addressToCheck.length !== 42) {
          console.warn(`[getOwnershipStatus] Unlinked or invalid address resolved for uuid='${uuid}': '${addressToCheck}'`);
-         return { isHolder: false, address: addressToCheck || null, linked: false, nfts: [] };
+         return { isHolder: false, address: addressToCheck, linked: false, nfts: [] };
     }
 
     console.log(`[getOwnershipStatus] Resolved target wallet address: ${addressToCheck} (mapping lookup for uuid='${uuid}')`);
@@ -170,33 +144,16 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
         if (cachedUser.bragBalance !== undefined) {
             status.bragBalance = cachedUser.bragBalance;
         }
-        // First, merge cached vaults if fresh query returned empty entries for those vaults
+        // If fresh on-chain query returned 0 wallet NFTs but statusCache has mocked/transferred wallet NFTs, preserve them
+        if (cachedUser.walletNfts && cachedUser.walletNfts.length > 0 && status.walletNfts.length === 0) {
+            status.walletNfts = cachedUser.walletNfts;
+        }
+        // If fresh on-chain query returned 0 vault NFTs for a vault but statusCache has mocked/transferred vault NFTs, preserve them
         if (cachedUser.vaults && Object.keys(cachedUser.vaults).length > 0) {
             for (const [vAddr, nfts] of Object.entries(cachedUser.vaults)) {
                 if ((!status.vaults[vAddr] || status.vaults[vAddr].length === 0) && nfts.length > 0) {
                     status.vaults[vAddr] = nfts;
                 }
-            }
-        }
-
-        // Collect all token IDs currently present in any vault
-        const allVaultTokenIds = new Set();
-        if (status.vaults) {
-            Object.values(status.vaults).flat().forEach(nft => {
-                if (nft && nft.tokenId !== undefined) {
-                    allVaultTokenIds.add(nft.tokenId.toString());
-                }
-            });
-        }
-
-        // If fresh on-chain query returned 0 wallet NFTs but statusCache has mocked/transferred wallet NFTs,
-        // preserve only those wallet NFTs that are NOT currently exhibited in a vault.
-        if (cachedUser.walletNfts && cachedUser.walletNfts.length > 0) {
-            const validCachedWalletNfts = cachedUser.walletNfts.filter(
-                n => !allVaultTokenIds.has(n.tokenId.toString())
-            );
-            if (status.walletNfts.length === 0 && validCachedWalletNfts.length > 0) {
-                status.walletNfts = validCachedWalletNfts;
             }
         }
     }
@@ -227,13 +184,9 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
         }
     }
 
-    // Return all user NFTs across all tracked vaults and wallet (deduplicated by tokenId).
-    // Place vault NFTs first so vault exhibition location takes precedence over wallet.
+    // Return all user NFTs across wallet and all tracked vaults (deduplicated by tokenId)
     const allVaultNfts = status.vaults ? Object.values(status.vaults).flat() : [];
-    const vaultTokenIds = new Set(allVaultNfts.map(n => n.tokenId.toString()));
-    const cleanWalletNfts = (status.walletNfts || []).filter(n => !vaultTokenIds.has(n.tokenId.toString()));
-
-    const rawAllNfts = [...allVaultNfts, ...cleanWalletNfts];
+    const rawAllNfts = [...(status.walletNfts || []), ...allVaultNfts];
 
     const seenTokenIds = new Set();
     const combinedNfts = [];
@@ -1082,17 +1035,10 @@ async function fetchCurrentStatus(address) {
 
     const activeConfigs = { ...serverConfigs };
     if (defaultVault) {
-        let foundDefault = false;
         for (const [id, cfg] of Object.entries(activeConfigs)) {
             if (!cfg.vaultAddress) {
                 activeConfigs[id] = { ...cfg, vaultAddress: defaultVault };
-                foundDefault = true;
-            } else if (cfg.vaultAddress.toLowerCase() === defaultVault.toLowerCase()) {
-                foundDefault = true;
             }
-        }
-        if (!foundDefault) {
-            activeConfigs['_default_vault'] = { name: "Default Exhibit Vault", vaultAddress: defaultVault };
         }
     }
 
