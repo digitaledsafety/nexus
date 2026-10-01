@@ -73,7 +73,7 @@ describe("Minecraft Bridge WebSocket Logic Unit Tests", () => {
         mappings.set(xuid, testAddress);
         activePlayers.set(xuid, { serverId: "minecraft-server-1", playerName: "Alex" });
 
-        statusCache.set(testAddress.toLowerCase(), {
+        statusCache.set(testAddress, {
             walletNfts: [{ tokenId: "10", location: "Wallet" }],
             vaults: {}
         });
@@ -98,7 +98,7 @@ describe("Minecraft Bridge WebSocket Logic Unit Tests", () => {
         mappings.set(xuid, testAddress);
         activePlayers.set(xuid, { serverId: "minecraft-server-1", playerName: "Bob" });
 
-        statusCache.set(testAddress.toLowerCase(), {
+        statusCache.set(testAddress, {
             walletNfts: [],
             vaults: {}
         });
@@ -127,7 +127,7 @@ describe("Minecraft Bridge WebSocket Logic Unit Tests", () => {
         activePlayers.set(xuid, { serverId: "minecraft-server-1", playerName: "Charlie" });
 
         // Pre-populate status cache
-        statusCache.set(testAddress.toLowerCase(), {
+        statusCache.set(testAddress, {
             walletNfts: [{ tokenId: "100", location: "Wallet" }],
             vaults: {}
         });

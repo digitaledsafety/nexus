@@ -26,7 +26,7 @@ describe("Real-Time Ownership Updates (No Stale Caching)", () => {
         assert.strictEqual(status1.nfts.length, 0, "Initial NFT list should be empty");
 
         // Verify that statusCache has been populated with fresh status
-        const cachedAfterFirstCall = statusCache.get(walletAddress.toLowerCase());
+        const cachedAfterFirstCall = statusCache.get(walletAddress);
         assert.ok(cachedAfterFirstCall, "statusCache should store the result after query");
         assert.strictEqual(cachedAfterFirstCall.walletNfts.length, 0);
 
@@ -37,7 +37,7 @@ describe("Real-Time Ownership Updates (No Stale Caching)", () => {
         assert.strictEqual(status2.nfts.length, 0);
 
         // Verify statusCache was refreshed
-        const cachedAfterSecondCall = statusCache.get(walletAddress.toLowerCase());
+        const cachedAfterSecondCall = statusCache.get(walletAddress);
         assert.ok(cachedAfterSecondCall, "statusCache should remain active and up-to-date");
     });
 });

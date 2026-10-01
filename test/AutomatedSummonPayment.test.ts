@@ -103,12 +103,12 @@ describe("Automated Summon Payment & Critical Test Cases Suite", () => {
             mcstructure: true
         };
 
-        statusCache.set(account.address.toLowerCase(), {
+        statusCache.set(account.address, {
             walletNfts: [],
             bragBalance: "50",
             vaults: {
-                [robloxVault.toLowerCase()]: [nftInRobloxVault],
-                [minecraftVault.toLowerCase()]: []
+                [robloxVault]: [nftInRobloxVault],
+                [minecraftVault]: []
             }
         });
 
@@ -122,11 +122,11 @@ describe("Automated Summon Payment & Critical Test Cases Suite", () => {
         assert.strictEqual(res.feePaid, "10");
 
         // Verify status cache shows NFT transferred to Minecraft Vault and BRAG balance deducted
-        const updatedStatus = statusCache.get(account.address.toLowerCase());
+        const updatedStatus = statusCache.get(account.address);
         assert.strictEqual(updatedStatus.bragBalance, "40");
-        assert.strictEqual(updatedStatus.vaults[robloxVault.toLowerCase()].length, 0);
-        assert.strictEqual(updatedStatus.vaults[minecraftVault.toLowerCase()].length, 1);
-        assert.strictEqual(updatedStatus.vaults[minecraftVault.toLowerCase()][0].location, "Minecraft Realm");
+        assert.strictEqual(updatedStatus.vaults[robloxVault].length, 0);
+        assert.strictEqual(updatedStatus.vaults[minecraftVault].length, 1);
+        assert.strictEqual(updatedStatus.vaults[minecraftVault][0].location, "Minecraft Realm");
     });
 
     it("2. Critical Test: Failing when summoning an NFT not owned by user at all / not in any vault or wallet", async () => {
@@ -136,11 +136,11 @@ describe("Automated Summon Payment & Critical Test Cases Suite", () => {
         const mcVault = "0x3333333333333333333333333333333333333333";
         serverConfigs["minecraft-server-1"] = { vaultAddress: mcVault, name: "Survival", summonFeeBrag: "10" };
 
-        statusCache.set(account.address.toLowerCase(), {
+        statusCache.set(account.address, {
             walletNfts: [],
             bragBalance: "100",
             vaults: {
-                [mcVault.toLowerCase()]: []
+                [mcVault]: []
             }
         });
 
@@ -168,11 +168,11 @@ describe("Automated Summon Payment & Critical Test Cases Suite", () => {
             mcstructure: true
         };
 
-        statusCache.set(account.address.toLowerCase(), {
+        statusCache.set(account.address, {
             walletNfts: [],
             bragBalance: "20",
             vaults: {
-                [currentVault.toLowerCase()]: [nftInCurrentVault]
+                [currentVault]: [nftInCurrentVault]
             }
         });
 
@@ -185,7 +185,7 @@ describe("Automated Summon Payment & Critical Test Cases Suite", () => {
         assert.strictEqual(resFirst.feePaid, "0");
 
         // BRAG balance should remain unchanged (20)
-        assert.strictEqual(statusCache.get(account.address.toLowerCase()).bragBalance, "20");
+        assert.strictEqual(statusCache.get(account.address).bragBalance, "20");
     });
 
     it("4. Critical Test: Failing when user has insufficient BRAG token balance", async () => {
@@ -195,7 +195,7 @@ describe("Automated Summon Payment & Critical Test Cases Suite", () => {
         const currentVault = "0x5555555555555555555555555555555555555555";
         serverConfigs["server-1"] = { vaultAddress: currentVault, name: "Survival Server", summonFeeBrag: "10" };
 
-        statusCache.set(account.address.toLowerCase(), {
+        statusCache.set(account.address, {
             walletNfts: [
                 {
                     tokenId: "303",
@@ -208,7 +208,7 @@ describe("Automated Summon Payment & Critical Test Cases Suite", () => {
             ],
             bragBalance: "3", // Only 3 BRAG available, but 10 BRAG required
             vaults: {
-                [currentVault.toLowerCase()]: []
+                [currentVault]: []
             }
         });
 
@@ -238,11 +238,11 @@ describe("Automated Summon Payment & Critical Test Cases Suite", () => {
             mime_type: "application/x-minecraft-structure"
         };
 
-        statusCache.set(account.address.toLowerCase(), {
+        statusCache.set(account.address, {
             walletNfts: [],
             bragBalance: "100",
             vaults: {
-                [currentVault.toLowerCase()]: [nftWithDataUri]
+                [currentVault]: [nftWithDataUri]
             }
         });
 
@@ -267,11 +267,11 @@ describe("Automated Summon Payment & Critical Test Cases Suite", () => {
             mime_type: "application/x-minecraft-structure"
         };
 
-        statusCache.set(account.address.toLowerCase(), {
+        statusCache.set(account.address, {
             walletNfts: [],
             bragBalance: "100",
             vaults: {
-                [currentVault.toLowerCase()]: [nftWithImageOnly]
+                [currentVault]: [nftWithImageOnly]
             }
         });
 

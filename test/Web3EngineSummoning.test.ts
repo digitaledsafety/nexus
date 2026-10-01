@@ -47,11 +47,11 @@ describe("Standalone Web3 Engine Summoning & Cross-App State Sync Suite", () => 
             animation_url: "https://example.com/model.glb" // 3D GLB model format (not .mcstructure)
         };
 
-        statusCache.set(account.address.toLowerCase(), {
+        statusCache.set(account.address, {
             walletNfts: [modelNft3D],
             bragBalance: "100",
             vaults: {
-                [alphaVault.toLowerCase()]: []
+                [alphaVault]: []
             }
         });
 
@@ -83,12 +83,12 @@ describe("Standalone Web3 Engine Summoning & Cross-App State Sync Suite", () => 
             animation_url: "https://example.com/artwork.png"
         };
 
-        statusCache.set(account.address.toLowerCase(), {
+        statusCache.set(account.address, {
             walletNfts: [],
             bragBalance: "50",
             vaults: {
-                [alphaVault.toLowerCase()]: [nftInAlphaVault],
-                [vrVault.toLowerCase()]: []
+                [alphaVault]: [nftInAlphaVault],
+                [vrVault]: []
             }
         });
 
@@ -100,11 +100,11 @@ describe("Standalone Web3 Engine Summoning & Cross-App State Sync Suite", () => 
         assert.strictEqual(res.feePaid, "10");
 
         // Verify NFT was removed from Alpha Vault and added to VR Vault
-        const updatedStatus = statusCache.get(account.address.toLowerCase());
+        const updatedStatus = statusCache.get(account.address);
         assert.strictEqual(updatedStatus.bragBalance, "40");
-        assert.strictEqual(updatedStatus.vaults[alphaVault.toLowerCase()].length, 0, "NFT should no longer be in Alpha Vault");
-        assert.strictEqual(updatedStatus.vaults[vrVault.toLowerCase()].length, 1, "NFT should now be in VR Vault");
-        assert.strictEqual(updatedStatus.vaults[vrVault.toLowerCase()][0].location, "VR Nexus Gallery");
+        assert.strictEqual(updatedStatus.vaults[alphaVault].length, 0, "NFT should no longer be in Alpha Vault");
+        assert.strictEqual(updatedStatus.vaults[vrVault].length, 1, "NFT should now be in VR Vault");
+        assert.strictEqual(updatedStatus.vaults[vrVault][0].location, "VR Nexus Gallery");
     });
 
     it("4. Should broadcast real-time engine event payload on successful summon", async () => {

@@ -382,10 +382,10 @@ describe("Bedrock Protocol Client Emulation & Chat Commands", () => {
         mappings.set(xuid, walletAddress);
 
         // Pre-authorize
-        preAuthorizations.set(walletAddress.toLowerCase(), { bragApproved: true, nftApproved: true });
+        preAuthorizations.set(walletAddress, { bragApproved: true, nftApproved: true });
 
         // Set status cache with .mcstructure NFT
-        statusCache.set(walletAddress.toLowerCase(), {
+        statusCache.set(walletAddress, {
             walletNfts: [
                 {
                     tokenId: "1",
@@ -452,7 +452,7 @@ describe("Bedrock Protocol Client Emulation & Chat Commands", () => {
         const walletAddress = "0x2222333344445555666677778888999900001111";
 
         mappings.set(xuid, walletAddress);
-        statusCache.set(walletAddress.toLowerCase(), {
+        statusCache.set(walletAddress, {
             walletNfts: [{ tokenId: "42", location: "Wallet" }],
             vaults: {}
         });
