@@ -195,7 +195,7 @@ describe("Multi-Game User Registration & Vault Exclusivity Test Suite", () => {
             const vaultB = "0x2222222222222222222222222222222222222222";
 
             // User has deposited NFT #101 into Server 1's Vault A only
-            statusCache.set(account.address.toLowerCase(), {
+            statusCache.set(account.address, {
                 walletNfts: [],
                 vaults: {
                     [vaultA]: [
@@ -219,7 +219,7 @@ describe("Multi-Game User Registration & Vault Exclusivity Test Suite", () => {
             assert.strictEqual(resServer1.alreadyInVault, true);
 
             // 2. Attempt summon on Server 2 without pre-authorization -> REJECTED (preauth required)
-            preAuthorizations.delete(account.address.toLowerCase());
+            preAuthorizations.delete(account.address);
             const resServer2NoPreauth = await handleSummonCommand("101", platformId, "server-2", "RobloxPlayer");
             assert.strictEqual(resServer2NoPreauth.success, false);
             assert.strictEqual(resServer2NoPreauth.reason, "preauth_required");
@@ -259,7 +259,7 @@ describe("Multi-Game User Registration & Vault Exclusivity Test Suite", () => {
             mappings.set(platformId, account.address);
 
             const vaultA = "0x1111111111111111111111111111111111111111";
-            statusCache.set(account.address.toLowerCase(), {
+            statusCache.set(account.address, {
                 walletNfts: [],
                 vaults: {
                     [vaultA]: [

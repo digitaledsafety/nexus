@@ -35,16 +35,16 @@ if (fs.existsSync(MAPPINGS_FILE)) {
 
 const pendingTokens = new Map();
 const statusCache = new Map();
-const preAuthorizations = new Map(); // address.toLowerCase() -> { bragApproved: boolean, nftApproved: boolean }
+const preAuthorizations = new Map(); // address -> { bragApproved: boolean, nftApproved: boolean }
 
 function getPreAuthorization(address) {
     if (!address) return { bragApproved: false, nftApproved: false };
-    return preAuthorizations.get(address.toLowerCase()) || { bragApproved: false, nftApproved: false };
+    return preAuthorizations.get(address) || { bragApproved: false, nftApproved: false };
 }
 
 function setPreAuthorization(address, preauthObj) {
     if (!address) return;
-    preAuthorizations.set(address.toLowerCase(), {
+    preAuthorizations.set(address, {
         bragApproved: preauthObj.bragApproved ?? true,
         nftApproved: preauthObj.nftApproved ?? true
     });
@@ -52,10 +52,10 @@ function setPreAuthorization(address, preauthObj) {
 
 function executeVaultTransferAndPayment(address, nft, targetVaultAddr, feeAmount, locationName) {
     if (!address) return;
-    let userStatus = statusCache.get(address.toLowerCase());
+    let userStatus = statusCache.get(address);
     if (!userStatus) {
         userStatus = { walletNfts: [], vaults: {} };
-        statusCache.set(address.toLowerCase(), userStatus);
+        statusCache.set(address, userStatus);
     }
 
     // Deduct BRAG fee if tracked in userStatus
@@ -65,7 +65,7 @@ function executeVaultTransferAndPayment(address, nft, targetVaultAddr, feeAmount
         userStatus.bragBalance = Math.max(0, avail - fee).toString();
     }
 
-    const normTargetVaultAddr = targetVaultAddr.toLowerCase();
+    const normTargetVaultAddr = targetVaultAddr;
 
     // Remove from wallet
     userStatus.walletNfts = (userStatus.walletNfts || []).filter(n => n.tokenId.toString() !== nft.tokenId.toString());
@@ -73,7 +73,7 @@ function executeVaultTransferAndPayment(address, nft, targetVaultAddr, feeAmount
     // Remove from other vaults
     if (userStatus.vaults) {
         for (const [vAddr, nftList] of Object.entries(userStatus.vaults)) {
-            if (vAddr.toLowerCase() !== normTargetVaultAddr) {
+            if (vAddr !== normTargetVaultAddr) {
                 userStatus.vaults[vAddr] = nftList.filter(n => n.tokenId.toString() !== nft.tokenId.toString());
             }
         }
@@ -105,7 +105,7 @@ async function getPlatformStatus(platformId) {
     let linkedPlatforms = [];
     if (linkedAddress) {
         for (const [pid, addr] of mappings.entries()) {
-            if (addr && addr.toLowerCase() === linkedAddress.toLowerCase()) {
+            if (addr && addr === linkedAddress) {
                 linkedPlatforms.push(pid);
             }
         }
@@ -180,7 +180,7 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
     let linkedPlatforms = [];
     if (addressToCheck && addressToCheck.startsWith('0x') && addressToCheck.length === 42) {
         for (const [pid, addr] of mappings.entries()) {
-            if (addr && addr.toLowerCase() === addressToCheck.toLowerCase()) {
+            if (addr && addr === addressToCheck) {
                 linkedPlatforms.push(pid);
             }
         }

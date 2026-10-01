@@ -153,7 +153,7 @@ if (typeof module !== 'undefined' && module.exports) {
         bridge.mappings.set(xuid, testAddress);
 
         // Populate status cache directly to simulate resolved Sepolia state
-        bridge.statusCache.set(testAddress.toLowerCase(), {
+        bridge.statusCache.set(testAddress, {
             walletNfts: [
                 {
                     tokenId: "0",
@@ -164,7 +164,7 @@ if (typeof module !== 'undefined' && module.exports) {
                 }
             ],
             vaults: {
-                [mockVaultAddress.toLowerCase()]: [
+                [mockVaultAddress]: [
                     {
                         tokenId: "1",
                         nftContract: mockBragAddress,
@@ -204,7 +204,7 @@ if (typeof module !== 'undefined' && module.exports) {
         const playerName = "SepoliaMiner";
 
         bridge.mappings.set(xuid, testAddress);
-        bridge.statusCache.set(testAddress.toLowerCase(), {
+        bridge.statusCache.set(testAddress, {
             walletNfts: [
                 {
                     tokenId: "42",
