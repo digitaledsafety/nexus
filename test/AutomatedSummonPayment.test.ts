@@ -220,6 +220,8 @@ describe("Automated Summon Payment & Critical Test Cases Suite", () => {
         assert.strictEqual(res.reason, "insufficient_brag");
         assert.strictEqual(res.available, "3");
         assert.strictEqual(res.required, "10");
+        assert.strictEqual(res.topUpUrl, "http://localhost:3000/#/home");
+        assert.ok(res.message.includes("Insufficient BRAG balance"));
     });
 
     it("5. Reproduction Test: Recognize .mcstructure from Data URIs and non-extension metadata formats", async () => {
@@ -279,5 +281,31 @@ describe("Automated Summon Payment & Critical Test Cases Suite", () => {
 
         const res = await handleSummonCommand("999", platformId, "server-1", "Steve");
         assert.strictEqual(res.success, true, `Expected summon to succeed when animation_url is undefined, but got reason: ${res.reason}`);
+    });
+
+    it("7. Verification Test: Execute vault transfer and deduct fee towards Treasury", async () => {
+        const address = account.address.toLowerCase();
+        const initialStatus = {
+            walletNfts: [
+                { tokenId: "101", nftContract: "0xBragNFTAddress", location: "Wallet" }
+            ],
+            bragBalance: "100",
+            vaults: {
+                "0x1111111111111111111111111111111111111111": []
+            }
+        };
+        statusCache.set(address, initialStatus);
+
+        const targetVault = "0x1111111111111111111111111111111111111111";
+        const feeAmount = "10";
+        const nftToTransfer = initialStatus.walletNfts[0];
+
+        executeVaultTransferAndPayment(address, nftToTransfer, targetVault, feeAmount, "Target Server Realm");
+
+        const updated = statusCache.get(address);
+        assert.strictEqual(updated.bragBalance, "90");
+        assert.strictEqual(updated.walletNfts.length, 0);
+        assert.strictEqual(updated.vaults[targetVault.toLowerCase()].length, 1);
+        assert.strictEqual(updated.vaults[targetVault.toLowerCase()][0].tokenId, "101");
     });
 });

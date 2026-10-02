@@ -340,8 +340,23 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
             const avail = typeof userStatus.bragBalance === 'number' ? userStatus.bragBalance : parseFloat(userStatus.bragBalance.toString());
             const req = parseFloat(feeAmount.toString());
             if (avail < req) {
-                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] Insufficient BRAG balance (${avail}/${req} BRAG required).§r"}]}`);
-                return { success: false, reason: "insufficient_brag", available: avail.toString(), required: req.toString() };
+                const topUpUrl = `http://localhost:3000/#/home`;
+                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§e====================================§r"}]}`);
+                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[BRAG Error] Insufficient BRAG Token Balance!§r"}]}`);
+                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§fYou currently have §e${avail} BRAG§f, but §a${req} BRAG§f is required to summon this structure into this vault.§r"}]}`);
+                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§bHow to obtain BRAG:§r"}]}`);
+                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§f1. Donate to STEM programs or top-up BRAG tokens at:§r"}]}`);
+                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§a${topUpUrl}§r"}]}`);
+                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§f2. Earn 1,000,000 BRAG per $1 donation or 1M BRAG instant top-up on product pages.§r"}]}`);
+                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§e====================================§r"}]}`);
+                return {
+                    success: false,
+                    reason: "insufficient_brag",
+                    available: avail.toString(),
+                    required: req.toString(),
+                    topUpUrl: topUpUrl,
+                    message: `Insufficient BRAG balance (${avail}/${req} BRAG). Visit ${topUpUrl} to acquire BRAG tokens.`
+                };
             }
         }
 
@@ -949,9 +964,33 @@ async function fetchWithRetry(fn, label, maxRetries = 3) {
 async function fetchCurrentStatus(address, targetVaultAddr = null) {
     console.log(`[fetchCurrentStatus] Starting fresh on-chain status fetch for address ${address}...`);
     const bragAddress = getContractAddress('BragNFT');
+    const bragTokenAddress = getContractAddress('BragToken');
     console.log(`[fetchCurrentStatus] Resolved BragNFT contract address: ${bragAddress || 'null (not found)'}`);
+    console.log(`[fetchCurrentStatus] Resolved BragToken contract address: ${bragTokenAddress || 'null (not found)'}`);
 
     let walletNfts = [];
+    let onChainBragBalance = null;
+
+    // Check on-chain BragToken balance
+    if (bragTokenAddress) {
+        try {
+            const erc20Abi = [
+                { "inputs": [{ "name": "account", "type": "address" }], "name": "balanceOf", "outputs": [{ "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }
+            ];
+            const rawBalance = await fetchWithRetry(() => publicClient.readContract({
+                address: bragTokenAddress,
+                abi: erc20Abi,
+                functionName: 'balanceOf',
+                args: [address]
+            }), `BragToken.balanceOf(${address})`);
+            // Format from 18 decimals or raw units
+            onChainBragBalance = (Number(rawBalance) / 1e18).toString();
+            console.log(`[fetchCurrentStatus] On-chain BragToken balanceOf(${address}): ${onChainBragBalance} (${rawBalance.toString()} wei)`);
+        } catch (e) {
+            console.error(`[fetchCurrentStatus] Error reading BragToken balance for ${address}:`, e.message);
+        }
+    }
+
 
     // Check Wallet
     if (bragAddress) {
@@ -1154,7 +1193,11 @@ async function fetchCurrentStatus(address, targetVaultAddr = null) {
     }
 
     console.log(`[fetchCurrentStatus] Completed status fetch for ${address}. Found ${walletNfts.length} wallet NFTs and ${Object.values(vaults).reduce((acc, list) => acc + list.length, 0)} total vault NFTs across ${Object.keys(vaults).length} vaults.`);
-    return { walletNfts, vaults };
+    const resultStatus = { walletNfts, vaults };
+    if (onChainBragBalance !== null) {
+        resultStatus.bragBalance = onChainBragBalance;
+    }
+    return resultStatus;
 }
 
 const publicClient = isMain ? createPublicClient({
