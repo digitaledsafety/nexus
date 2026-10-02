@@ -44,16 +44,28 @@ async function initLogin() {
             // 4. Handle Account Linking if token present
             const params = getParams();
             const token = params.get('token');
+            const isPreauth = params.get('preauth');
+            const fetchFn = typeof fetchBridgeEndpoint === 'function' ? fetchBridgeEndpoint : (path, opts) => fetch(`http://localhost:9000${path}`, opts);
+
             if (token) {
                 console.log('Attempting to link account with token:', token);
                 try {
-                    const fetchFn = typeof fetchBridgeEndpoint === 'function' ? fetchBridgeEndpoint : (path, opts) => fetch(`http://localhost:9000${path}`, opts);
                     const linkRes = await fetchFn('/verify-link', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ token, address, message, signature })
+                        body: JSON.stringify({
+                            token,
+                            address,
+                            message,
+                            signature,
+                            preauth: isPreauth ? true : false,
+                            bragApproved: true,
+                            nftApproved: true
+                        })
                     });
-                    if (!linkRes.ok) {
+                    if (linkRes.ok) {
+                        alert(isPreauth ? 'Account linked & in-game automated summoning successfully pre-authorized!' : 'Account linked successfully!');
+                    } else {
                        const err = await linkRes.json();
                        alert('Linking failed: ' + err.error);
                     }
@@ -61,21 +73,17 @@ async function initLogin() {
                     console.error('Linking failed', e);
                     alert('Connection to bridge failed. Is it running?');
                 }
-            }
-
-            // 5. Handle Pre-Authorization if requested
-            const isPreauth = params.get('preauth');
-            if (isPreauth) {
+            } else if (isPreauth) {
+                // 5. Handle Standalone Pre-Authorization if requested without link token
                 console.log('Attempting pre-authorization for address:', address);
                 try {
-                    const fetchFn = typeof fetchBridgeEndpoint === 'function' ? fetchBridgeEndpoint : (path, opts) => fetch(`http://localhost:9000${path}`, opts);
                     const preauthRes = await fetchFn('/verify-preauth', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ address, bragApproved: true, nftApproved: true, message, signature })
                     });
                     if (preauthRes.ok) {
-                        alert(token ? 'Account linked & in-game automated summoning successfully pre-authorized!' : 'In-game automated summoning successfully pre-authorized!');
+                        alert('In-game automated summoning successfully pre-authorized!');
                     } else {
                         const err = await preauthRes.json();
                         alert('Pre-authorization failed: ' + err.error);

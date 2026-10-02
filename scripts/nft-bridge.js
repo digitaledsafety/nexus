@@ -727,14 +727,19 @@ export const handleRequest = async (req, res) => {
                 res.writeHead(400); res.end(JSON.stringify({ error: "Missing address" }));
                 return;
             }
-            if (!skipVerify && CHAIN_ID !== 31337) {
-                if (!message || !message.includes(address) || !signature) {
+            if (!skipVerify && (signature || message)) {
+                if (!message || !message.toLowerCase().includes(address.toLowerCase()) || !signature) {
                     res.writeHead(400); res.end(JSON.stringify({ error: "Invalid preauth signature or message" }));
                     return;
                 }
-                const isValid = await verifyMessage({ address, message, signature });
-                if (!isValid) {
-                    res.writeHead(401); res.end(JSON.stringify({ error: "Invalid signature" }));
+                try {
+                    const isValid = await verifyMessage({ address, message, signature });
+                    if (!isValid) {
+                        res.writeHead(401); res.end(JSON.stringify({ error: "Invalid signature" }));
+                        return;
+                    }
+                } catch (e) {
+                    res.writeHead(401); res.end(JSON.stringify({ error: "Invalid signature format" }));
                     return;
                 }
             }
@@ -763,27 +768,35 @@ export const handleRequest = async (req, res) => {
         if (pathname === '/verify-link' && req.method === 'POST') {
             let body = '';
             for await (const chunk of req) body += chunk;
-            const { token, signature, message, address, skipVerify } = JSON.parse(body);
+            const { token, signature, message, address, skipVerify, preauth, bragApproved, nftApproved } = JSON.parse(body);
             const pending = pendingTokens.get(token);
             if (!pending || pending.expires < Date.now()) { res.writeHead(400); res.end(JSON.stringify({ error: "Invalid token" })); return; }
 
             // Allow skipping signature verification for local dev testing if requested
-            if (!skipVerify || CHAIN_ID !== 31337) {
+            if (!skipVerify && (signature || message)) {
                 // Verify that the message includes the address to prevent simple replay (stateless)
                 // In a production environment, you should also verify the timestamp.
-                if (!message.includes(address)) {
+                if (!message || !message.toLowerCase().includes(address.toLowerCase())) {
                     res.writeHead(400); res.end(JSON.stringify({ error: "Message must include address" }));
                     return;
                 }
-                const isValid = await verifyMessage({ address, message, signature });
-                if (!isValid) { res.writeHead(401); res.end(JSON.stringify({ error: "Invalid signature" })); return; }
+                try {
+                    const isValid = await verifyMessage({ address, message, signature });
+                    if (!isValid) { res.writeHead(401); res.end(JSON.stringify({ error: "Invalid signature" })); return; }
+                } catch (e) {
+                    res.writeHead(401); res.end(JSON.stringify({ error: "Invalid signature format" }));
+                    return;
+                }
             }
 
             mappings.set(pending.platformId, address);
+            if (preauth) {
+                setPreAuthorization(address, { bragApproved: bragApproved ?? true, nftApproved: nftApproved ?? true });
+            }
             pendingTokens.delete(token);
             saveMappings();
             res.writeHead(200);
-            res.end(JSON.stringify({ success: true, platformId: pending.platformId, address }));
+            res.end(JSON.stringify({ success: true, platformId: pending.platformId, address, preauthSet: !!preauth }));
             return;
         }
 
