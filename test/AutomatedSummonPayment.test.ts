@@ -220,6 +220,8 @@ describe("Automated Summon Payment & Critical Test Cases Suite", () => {
         assert.strictEqual(res.reason, "insufficient_brag");
         assert.strictEqual(res.available, "3");
         assert.strictEqual(res.required, "10");
+        assert.strictEqual(res.topUpUrl, "http://localhost:3000/#/home");
+        assert.ok(res.message.includes("Insufficient BRAG balance"));
     });
 
     it("5. Reproduction Test: Recognize .mcstructure from Data URIs and non-extension metadata formats", async () => {

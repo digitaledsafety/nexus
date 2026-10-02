@@ -340,8 +340,23 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
             const avail = typeof userStatus.bragBalance === 'number' ? userStatus.bragBalance : parseFloat(userStatus.bragBalance.toString());
             const req = parseFloat(feeAmount.toString());
             if (avail < req) {
-                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[NFT] Insufficient BRAG balance (${avail}/${req} BRAG required).§r"}]}`);
-                return { success: false, reason: "insufficient_brag", available: avail.toString(), required: req.toString() };
+                const topUpUrl = `http://localhost:3000/#/home`;
+                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§e====================================§r"}]}`);
+                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§c[BRAG Error] Insufficient BRAG Token Balance!§r"}]}`);
+                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§fYou currently have §e${avail} BRAG§f, but §a${req} BRAG§f is required to summon this structure into this vault.§r"}]}`);
+                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§bHow to obtain BRAG:§r"}]}`);
+                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§f1. Donate to STEM programs or top-up BRAG tokens at:§r"}]}`);
+                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§a${topUpUrl}§r"}]}`);
+                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§f2. Earn 1,000,000 BRAG per $1 donation or 1M BRAG instant top-up on product pages.§r"}]}`);
+                sendMinecraftCommand(serverId, `tellraw "${playerName}" {"rawtext":[{"text":"§e====================================§r"}]}`);
+                return {
+                    success: false,
+                    reason: "insufficient_brag",
+                    available: avail.toString(),
+                    required: req.toString(),
+                    topUpUrl: topUpUrl,
+                    message: `Insufficient BRAG balance (${avail}/${req} BRAG). Visit ${topUpUrl} to acquire BRAG tokens.`
+                };
             }
         }
 
