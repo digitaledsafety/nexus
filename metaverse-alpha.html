@@ -447,7 +447,11 @@
                     }
                     fetchUserStatus();
                 } else {
-                    log(`Summon failed: ${data.result ? data.result.reason : 'Unknown reason'}`, 'error');
+                    const failReason = data.result ? (data.result.message || data.result.reason) : 'Unknown reason';
+                    log(`Summon failed: ${failReason}`, 'error');
+                    if (data.result && data.result.reason === 'insufficient_brag') {
+                        showAlert(`Insufficient BRAG balance! ${data.result.message || ''}`);
+                    }
                 }
             } else if (data.type === 'nft_summoned') {
                 log(`★ EVENT: Player ${data.playerName} summoned NFT #${data.tokenId} to ${data.serverName || data.serverId}!`, 'info');
