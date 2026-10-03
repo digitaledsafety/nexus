@@ -42,20 +42,20 @@ describe("Minecraft Bridge WebSocket Logic Unit Tests", () => {
         pendingTokens.clear();
     });
 
-    it("should register active WebSocket connection for server-1", () => {
+    it("should register active WebSocket connection for minecraft-server-1", () => {
         const mockWs = new MockWebSocket();
-        serverSockets.set("server-1", mockWs as any);
+        serverSockets.set("minecraft-server-1", mockWs as any);
 
-        assert.ok(serverSockets.has("server-1"));
-        assert.strictEqual(serverSockets.get("server-1"), mockWs as any);
+        assert.ok(serverSockets.has("minecraft-server-1"));
+        assert.strictEqual(serverSockets.get("minecraft-server-1"), mockWs as any);
     });
 
     it("should send command line JSON payload via sendMinecraftCommand", () => {
         const mockWs = new MockWebSocket();
-        serverSockets.set("server-1", mockWs as any);
+        serverSockets.set("minecraft-server-1", mockWs as any);
 
         const command = 'tellraw "Steve" {"rawtext":[{"text":"Welcome"}]}';
-        sendMinecraftCommand("server-1", command);
+        sendMinecraftCommand("minecraft-server-1", command);
 
         assert.strictEqual(mockWs.sentMessages.length, 1);
         const sent = mockWs.sentMessages[0];
@@ -65,13 +65,13 @@ describe("Minecraft Bridge WebSocket Logic Unit Tests", () => {
 
     it("should dispatch real-time status tags and notification messages via handleStatusChange for holder", async () => {
         const mockWs = new MockWebSocket();
-        serverSockets.set("server-1", mockWs as any);
+        serverSockets.set("minecraft-server-1", mockWs as any);
 
         const testAddress = "0x1234567890123456789012345678901234567890";
         const xuid = "xuid-miner-100";
 
         mappings.set(xuid, testAddress);
-        activePlayers.set(xuid, { serverId: "server-1", playerName: "Alex" });
+        activePlayers.set(xuid, { serverId: "minecraft-server-1", playerName: "Alex" });
 
         statusCache.set(testAddress.toLowerCase(), {
             walletNfts: [{ tokenId: "10", location: "Wallet" }],
@@ -90,13 +90,13 @@ describe("Minecraft Bridge WebSocket Logic Unit Tests", () => {
 
     it("should remove nft_holder tag when handleStatusChange is called for non-holder", async () => {
         const mockWs = new MockWebSocket();
-        serverSockets.set("server-1", mockWs as any);
+        serverSockets.set("minecraft-server-1", mockWs as any);
 
         const testAddress = "0x9999999999999999999999999999999999999999";
         const xuid = "xuid-miner-200";
 
         mappings.set(xuid, testAddress);
-        activePlayers.set(xuid, { serverId: "server-1", playerName: "Bob" });
+        activePlayers.set(xuid, { serverId: "minecraft-server-1", playerName: "Bob" });
 
         statusCache.set(testAddress.toLowerCase(), {
             walletNfts: [],
@@ -118,13 +118,13 @@ describe("Minecraft Bridge WebSocket Logic Unit Tests", () => {
 
     it("should trigger real-time WebSocket updates when blockchain event logs arrive via setupEventListeners", async () => {
         const mockWs = new MockWebSocket();
-        serverSockets.set("server-1", mockWs as any);
+        serverSockets.set("minecraft-server-1", mockWs as any);
 
         const testAddress = "0x1111222233334444555566667777888899990000";
         const xuid = "xuid-event-player";
 
         mappings.set(xuid, testAddress);
-        activePlayers.set(xuid, { serverId: "server-1", playerName: "Charlie" });
+        activePlayers.set(xuid, { serverId: "minecraft-server-1", playerName: "Charlie" });
 
         // Pre-populate status cache
         statusCache.set(testAddress.toLowerCase(), {
@@ -133,7 +133,7 @@ describe("Minecraft Bridge WebSocket Logic Unit Tests", () => {
         });
 
         // Set up mock vault in serverConfigs to test watchEvent for vaults as well
-        serverConfigs["server-1"].vaultAddress = "0xVaultAddress000000000000000000000000000";
+        serverConfigs["minecraft-server-1"].vaultAddress = "0xVaultAddress000000000000000000000000000";
 
         const watchedEvents: Array<{ address: string; onLogs: Function }> = [];
         (publicClient as any).watchEvent = (params: any) => {

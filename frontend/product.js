@@ -201,7 +201,7 @@ async function loadProductData(contractAddr, tokenId) {
         }
 
         // Detect and display collection name if external
-        const externalCollections = CONTRACT_DATA.externalCollections || [];
+        const externalCollections = window.APP_CONFIG?.externalCollections || (typeof CONTRACT_DATA !== 'undefined' ? CONTRACT_DATA.externalCollections : []) || [];
         const externalColl = externalCollections.find(c => c.address.toLowerCase() === contractAddr.toLowerCase());
         if (externalColl) {
             const collBadge = document.createElement('span');

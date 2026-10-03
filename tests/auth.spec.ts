@@ -89,6 +89,120 @@ test.describe('Authentication Flow', () => {
     await expect(page.locator('#displayToken')).toHaveText('LINK123');
   });
 
+  test('should handle navigation from URL with token in GET query parameters', async ({ page }) => {
+    // Navigate directly to URL with token in GET query parameters (no hash)
+    await page.goto(`${landingUrl}?token=LINK456`);
+
+    // Router should redirect to login page with token
+    await expect(page).toHaveURL(/#\/login\?token=LINK456/);
+
+    const banner = page.locator('#linkingStatus');
+    await expect(banner).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('#displayToken')).toHaveText('LINK456');
+  });
+
+  test('should complete registration successfully when navigating from GET token URL and signing SIWE', async ({ page }) => {
+    const mockAddress = '0x0000000000000000000000000000000000000123';
+
+    await page.addInitScript(() => {
+        const mockAddr = '0x0000000000000000000000000000000000000123';
+        (window as any).ethereum = {
+            request: async (request: any) => {
+                if (request.method === 'eth_accounts' || request.method === 'eth_requestAccounts') return [mockAddr];
+                if (request.method === 'eth_chainId') return '0x1';
+                if (request.method === 'personal_sign') return '0xmocksignature';
+                return null;
+            },
+            on: () => {},
+            removeListener: () => {}
+        };
+    });
+
+    let verifyLinkCalled = false;
+    let verifyPayload: any = null;
+
+    // Intercept bridge /verify-link call
+    await page.route('**/verify-link', async (route) => {
+        verifyLinkCalled = true;
+        const request = route.request();
+        verifyPayload = request.postDataJSON();
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ success: true, platformId: 'xuid-player123' })
+        });
+    });
+
+    // Navigate to landing with GET token parameter
+    await page.goto(`${landingUrl}?token=REGTEST789`);
+
+    // Verify token banner displays token
+    const banner = page.locator('#linkingStatus');
+    await expect(banner).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('#displayToken')).toHaveText('REGTEST789');
+
+    // Click SIWE button to connect wallet and complete registration
+    const btnSiwe = page.locator('#btnSiwe');
+    await expect(btnSiwe).toBeVisible({ timeout: 15000 });
+    await btnSiwe.click();
+
+    // Verify redirect to manager
+    await expect(page).toHaveURL(/#\/manager/);
+
+    // Verify verify-link request details
+    expect(verifyLinkCalled).toBe(true);
+    expect(verifyPayload).not.toBeNull();
+    expect(verifyPayload.token).toBe('REGTEST789');
+    expect(verifyPayload.address.toLowerCase()).toBe(mockAddress.toLowerCase());
+    expect(verifyPayload.signature).toBe('0xmocksignature');
+    expect(verifyPayload.message).toContain(mockAddress);
+
+    // Verify local storage updated
+    const isConnected = await page.evaluate(() => localStorage.getItem('wallet_connected'));
+    const savedAddress = await page.evaluate(() => localStorage.getItem('brag_address'));
+    expect(isConnected).toBe('true');
+    expect(savedAddress?.toLowerCase()).toBe(mockAddress.toLowerCase());
+  });
+
+  test('should handle registration failure gracefully when verify-link fails', async ({ page }) => {
+    await page.addInitScript(() => {
+        const mockAddr = '0x0000000000000000000000000000000000000123';
+        (window as any).ethereum = {
+            request: async (request: any) => {
+                if (request.method === 'eth_accounts' || request.method === 'eth_requestAccounts') return [mockAddr];
+                if (request.method === 'eth_chainId') return '0x1';
+                if (request.method === 'personal_sign') return '0xmocksignature';
+                return null;
+            },
+            on: () => {},
+            removeListener: () => {}
+        };
+    });
+
+    await page.route('**/verify-link', async (route) => {
+        await route.fulfill({
+            status: 400,
+            contentType: 'application/json',
+            body: JSON.stringify({ error: 'Invalid or expired token' })
+        });
+    });
+
+    let alertMessage = '';
+    page.on('dialog', async (dialog) => {
+        alertMessage = dialog.message();
+        await dialog.accept();
+    });
+
+    await page.goto(`${landingUrl}?token=EXPIRED_TOK`);
+
+    const btnSiwe = page.locator('#btnSiwe');
+    await expect(btnSiwe).toBeVisible({ timeout: 15000 });
+    await btnSiwe.click();
+
+    await page.waitForTimeout(500);
+    expect(alertMessage).toContain('Linking failed: Invalid or expired token');
+  });
+
   test('should connect wallet and see address', async ({ page }) => {
     // Mock ethers and window.ethereum - MUST BE BEFORE page.goto
     await page.addInitScript(() => {

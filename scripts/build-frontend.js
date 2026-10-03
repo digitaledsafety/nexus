@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { generateFrontendConfigJS } from './loader.js';
 
 const SRC_DIR = 'frontend';
 const DIST_DIR = 'dist/frontend';
@@ -27,6 +28,9 @@ function main() {
   if (!fs.existsSync(DIST_DIR)) {
     fs.mkdirSync(DIST_DIR, { recursive: true });
   }
+
+  // Generate fresh frontend/config.js before copying
+  generateFrontendConfigJS();
 
   // Simply copy everything from SRC_DIR to DIST_DIR, preserving structure
   // Since we are now a SPA, index.html is the only entry point and it handles its own "includes" via the router/shell
