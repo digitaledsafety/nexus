@@ -94,4 +94,40 @@ describe("Batch Operations", async function () {
     assert.equal(await vault2.read.balances1155([mock1155.address, 1n, seller.account.address]), 5n);
     assert.equal(await vault2.read.balances1155([mock1155.address, 2n, seller.account.address]), 10n);
   });
+
+  it("ExhibitVault: Should batch move ERC721 tokens with custom duration", async function () {
+    const { bragNFT, vault1, vault2, seller } = await deployAll();
+
+    await bragNFT.write.donate(["nft1", ""], { account: seller.account, value: parseEther("0.1") });
+    await bragNFT.write.donate(["nft2", ""], { account: seller.account, value: parseEther("0.1") });
+
+    await bragNFT.write.safeTransferFrom([seller.account.address, vault1.address, 0n], { account: seller.account });
+    await bragNFT.write.safeTransferFrom([seller.account.address, vault1.address, 1n], { account: seller.account });
+
+    const duration = 3600n; // 1 hour
+    await vault1.write.batchMove721WithDuration([[bragNFT.address, bragNFT.address], [0n, 1n], vault2.address, duration], { account: seller.account });
+
+    assert.equal(await bragNFT.read.ownerOf([0n]), getAddress(vault2.address));
+    assert.equal(await bragNFT.read.ownerOf([1n]), getAddress(vault2.address));
+    assert.ok((await vault2.read.expiry721([bragNFT.address, 0n])) > 0n);
+    assert.ok((await vault2.read.expiry721([bragNFT.address, 1n])) > 0n);
+  });
+
+  it("ExhibitVault: Should batch move ERC1155 tokens with custom duration", async function () {
+    const { mock1155, vault1, vault2, seller, owner } = await deployAll();
+
+    await mock1155.write.mint([seller.account.address, 1n, 10n], { account: owner.account });
+    await mock1155.write.mint([seller.account.address, 2n, 20n], { account: owner.account });
+
+    await mock1155.write.safeTransferFrom([seller.account.address, vault1.address, 1n, 5n, "0x"], { account: seller.account });
+    await mock1155.write.safeTransferFrom([seller.account.address, vault1.address, 2n, 10n, "0x"], { account: seller.account });
+
+    const duration = 3600n; // 1 hour
+    await vault1.write.batchMove1155WithDuration([[mock1155.address, mock1155.address], [1n, 2n], [5n, 10n], vault2.address, duration], { account: seller.account });
+
+    assert.equal(await mock1155.read.balanceOf([vault2.address, 1n]), 5n);
+    assert.equal(await mock1155.read.balanceOf([vault2.address, 2n]), 10n);
+    assert.ok((await vault2.read.expiry1155([mock1155.address, 1n, seller.account.address])) > 0n);
+    assert.ok((await vault2.read.expiry1155([mock1155.address, 2n, seller.account.address])) > 0n);
+  });
 });
