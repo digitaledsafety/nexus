@@ -964,8 +964,12 @@ async function fetchWithRetry(fn, label, maxRetries = 3) {
 async function fetchCurrentStatus(address, targetVaultAddr = null) {
     console.log(`[fetchCurrentStatus] Starting fresh on-chain status fetch for address ${address}...`);
     const bragAddress = getContractAddress('BragNFT');
+    if (!bragAddress) {
+        throw new Error(`Configuration Error: BragNFT contract address could not be resolved for chain ID ${CHAIN_ID}. Please verify contract deployment and configuration.`);
+    }
+
     const bragTokenAddress = getContractAddress('BragToken');
-    console.log(`[fetchCurrentStatus] Resolved BragNFT contract address: ${bragAddress || 'null (not found)'}`);
+    console.log(`[fetchCurrentStatus] Resolved BragNFT contract address: ${bragAddress}`);
     console.log(`[fetchCurrentStatus] Resolved BragToken contract address: ${bragTokenAddress || 'null (not found)'}`);
 
     let walletNfts = [];
@@ -991,84 +995,81 @@ async function fetchCurrentStatus(address, targetVaultAddr = null) {
         }
     }
 
-
     // Check Wallet
-    if (bragAddress) {
-        try {
-            const balance = await fetchWithRetry(() => publicClient.readContract({
-                address: bragAddress,
-                abi: BRAG_ABI,
-                functionName: 'balanceOf',
-                args: [address]
-            }), `balanceOf(${address})`);
+    try {
+        const balance = await fetchWithRetry(() => publicClient.readContract({
+            address: bragAddress,
+            abi: BRAG_ABI,
+            functionName: 'balanceOf',
+            args: [address]
+        }), `balanceOf(${address})`);
 
-            console.log(`[fetchCurrentStatus] On-chain balanceOf(${address}) on BragNFT: ${balance}`);
+        console.log(`[fetchCurrentStatus] On-chain balanceOf(${address}) on BragNFT: ${balance}`);
 
-            if (balance > 0n) {
-                let foundTokens = false;
-                try {
-                    const bragNFTAbi = getContractAbi('BragNFT') || BRAG_ABI;
-                    const total = await fetchWithRetry(() => publicClient.readContract({
-                        address: bragAddress,
-                        abi: bragNFTAbi,
-                        functionName: 'nextTokenId'
-                    }), 'nextTokenId()');
+        if (balance > 0n) {
+            let foundTokens = false;
+            try {
+                const bragNFTAbi = getContractAbi('BragNFT') || BRAG_ABI;
+                const total = await fetchWithRetry(() => publicClient.readContract({
+                    address: bragAddress,
+                    abi: bragNFTAbi,
+                    functionName: 'nextTokenId'
+                }), 'nextTokenId()');
 
-                    const maxCheck = Number(total);
-                    console.log(`[fetchCurrentStatus] BragNFT nextTokenId: ${maxCheck}. Checking token IDs 0 to ${maxCheck - 1}...`);
+                const maxCheck = Number(total);
+                console.log(`[fetchCurrentStatus] BragNFT nextTokenId: ${maxCheck}. Checking token IDs 0 to ${maxCheck - 1}...`);
 
-                    for (let i = 0; i < maxCheck; i++) {
-                        try {
-                            const owner = await publicClient.readContract({
-                                address: bragAddress,
-                                abi: bragNFTAbi,
-                                functionName: 'ownerOf',
-                                args: [BigInt(i)]
-                            });
-                            if (owner.toLowerCase() === address.toLowerCase()) {
-                                foundTokens = true;
-                                console.log(`[fetchCurrentStatus] Direct wallet token match: Token #${i} owned by ${address}`);
-                                let media = { image: null, animation_url: null };
-                                try {
-                                    const uri = await publicClient.readContract({
-                                        address: bragAddress,
-                                        abi: bragNFTAbi,
-                                        functionName: 'tokenURI',
-                                        args: [BigInt(i)]
-                                    });
-                                    if (uri.startsWith('data:application/json;base64,')) {
-                                        const json = JSON.parse(Buffer.from(uri.split(',')[1], 'base64').toString());
-                                        media.image = json.image;
-                                        media.animation_url = json.animation_url;
-                                    }
-                                } catch (e) {
-                                    console.error(`[fetchCurrentStatus] Error parsing tokenURI for token #${i}:`, e.message);
-                                }
-
-                                walletNfts.push({
-                                    tokenId: i.toString(),
-                                    location: "Wallet",
-                                    nftContract: bragAddress,
-                                    image: media.image,
-                                    animation_url: media.animation_url
+                for (let i = 0; i < maxCheck; i++) {
+                    try {
+                        const owner = await publicClient.readContract({
+                            address: bragAddress,
+                            abi: bragNFTAbi,
+                            functionName: 'ownerOf',
+                            args: [BigInt(i)]
+                        });
+                        if (owner.toLowerCase() === address.toLowerCase()) {
+                            foundTokens = true;
+                            console.log(`[fetchCurrentStatus] Direct wallet token match: Token #${i} owned by ${address}`);
+                            let media = { image: null, animation_url: null };
+                            try {
+                                const uri = await publicClient.readContract({
+                                    address: bragAddress,
+                                    abi: bragNFTAbi,
+                                    functionName: 'tokenURI',
+                                    args: [BigInt(i)]
                                 });
+                                if (uri.startsWith('data:application/json;base64,')) {
+                                    const json = JSON.parse(Buffer.from(uri.split(',')[1], 'base64').toString());
+                                    media.image = json.image;
+                                    media.animation_url = json.animation_url;
+                                }
+                            } catch (e) {
+                                console.error(`[fetchCurrentStatus] Error parsing tokenURI for token #${i}:`, e.message);
                             }
-                        } catch (e) {
-                            // Token might be burned or ownerOf reverted
-                        }
-                    }
-                } catch (e) {
-                    console.error(`[fetchCurrentStatus] Error reading nextTokenId for BragNFT:`, e.message);
-                }
 
-                if (!foundTokens) {
-                    console.warn(`[fetchCurrentStatus] Wallet balance is ${balance}, but explicit token ID matching yielded 0 tokens. Adding fallback entry.`);
-                    walletNfts.push({ tokenId: "any", location: "Wallet", nftContract: bragAddress });
+                            walletNfts.push({
+                                tokenId: i.toString(),
+                                location: "Wallet",
+                                nftContract: bragAddress,
+                                image: media.image,
+                                animation_url: media.animation_url
+                            });
+                        }
+                    } catch (e) {
+                        // Token might be burned or ownerOf reverted
+                    }
                 }
+            } catch (e) {
+                console.error(`[fetchCurrentStatus] Error reading nextTokenId for BragNFT:`, e.message);
             }
-        } catch (e) {
-            console.error(`[fetchCurrentStatus] Error checking balance for ${address}:`, e.message);
+
+            if (!foundTokens) {
+                console.warn(`[fetchCurrentStatus] Wallet balance is ${balance}, but explicit token ID matching yielded 0 tokens. Adding fallback entry.`);
+                walletNfts.push({ tokenId: "any", location: "Wallet", nftContract: bragAddress });
+            }
         }
+    } catch (e) {
+        console.error(`[fetchCurrentStatus] Error checking balance for ${address}:`, e.message);
     }
 
     const registryAddr = getContractAddress('ExhibitRegistry');
@@ -1078,45 +1079,54 @@ async function fetchCurrentStatus(address, targetVaultAddr = null) {
     const vaultsToQuery = new Map(); // vaultAddr -> locationName
 
     if (targetVaultAddr) {
-        vaultsToQuery.set(targetVaultAddr.toLowerCase(), "Target Vault");
-    }
-
-    for (const [configKey, config] of Object.entries(activeConfigs)) {
-        if (config.vaultAddress) {
-            vaultsToQuery.set(config.vaultAddress.toLowerCase(), config.name);
-        }
-    }
-
-    if (registryAddr && vaultsToQuery.size === 0) {
-        try {
-            const registryAbi = getContractAbi('ExhibitRegistry') || [
-                parseAbiItem('function getVaultCount() view returns (uint256)'),
-                parseAbiItem('function vaultAddresses(uint256) view returns (address)')
-            ];
-            const vaultCount = await fetchWithRetry(() => publicClient.readContract({
-                address: registryAddr,
-                abi: registryAbi,
-                functionName: 'getVaultCount'
-            }), 'getVaultCount()');
-            console.log(`[fetchCurrentStatus] ExhibitRegistry has ${vaultCount} registered vaults`);
-
-            for (let i = 0n; i < vaultCount; i++) {
-                try {
-                    const vAddr = await publicClient.readContract({
-                        address: registryAddr,
-                        abi: registryAbi,
-                        functionName: 'vaultAddresses',
-                        args: [i]
-                    });
-                    if (vAddr && vAddr !== '0x0000000000000000000000000000000000000000') {
-                        vaultsToQuery.set(vAddr.toLowerCase(), "Verified Vault");
-                    }
-                } catch (e) {
-                    console.error(`[fetchCurrentStatus] Error fetching vaultAddress[${i}]:`, e.message);
-                }
+        // Query specifically the target vault for the client/server
+        let name = "Target Vault";
+        for (const config of Object.values(activeConfigs)) {
+            if (config.vaultAddress && config.vaultAddress.toLowerCase() === targetVaultAddr.toLowerCase()) {
+                name = config.name;
+                break;
             }
-        } catch (e) {
-            console.error(`[fetchCurrentStatus] Error reading ExhibitRegistry count:`, e.message);
+        }
+        vaultsToQuery.set(targetVaultAddr.toLowerCase(), name);
+    } else {
+        // Fallback: Query configured server vaults or registered vaults if no target vault specified
+        for (const [configKey, config] of Object.entries(activeConfigs)) {
+            if (config.vaultAddress) {
+                vaultsToQuery.set(config.vaultAddress.toLowerCase(), config.name);
+            }
+        }
+
+        if (registryAddr && vaultsToQuery.size === 0) {
+            try {
+                const registryAbi = getContractAbi('ExhibitRegistry') || [
+                    parseAbiItem('function getVaultCount() view returns (uint256)'),
+                    parseAbiItem('function vaultAddresses(uint256) view returns (address)')
+                ];
+                const vaultCount = await fetchWithRetry(() => publicClient.readContract({
+                    address: registryAddr,
+                    abi: registryAbi,
+                    functionName: 'getVaultCount'
+                }), 'getVaultCount()');
+                console.log(`[fetchCurrentStatus] ExhibitRegistry has ${vaultCount} registered vaults`);
+
+                for (let i = 0n; i < vaultCount; i++) {
+                    try {
+                        const vAddr = await publicClient.readContract({
+                            address: registryAddr,
+                            abi: registryAbi,
+                            functionName: 'vaultAddresses',
+                            args: [i]
+                        });
+                        if (vAddr && vAddr !== '0x0000000000000000000000000000000000000000') {
+                            vaultsToQuery.set(vAddr.toLowerCase(), "Verified Vault");
+                        }
+                    } catch (e) {
+                        console.error(`[fetchCurrentStatus] Error fetching vaultAddress[${i}]:`, e.message);
+                    }
+                }
+            } catch (e) {
+                console.error(`[fetchCurrentStatus] Error reading ExhibitRegistry count:`, e.message);
+            }
         }
     }
 
