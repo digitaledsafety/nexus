@@ -39,12 +39,12 @@ const preAuthorizations = new Map(); // address.toLowerCase() -> { bragApproved:
 
 function getPreAuthorization(address) {
     if (!address) return { bragApproved: false, nftApproved: false };
-    return preAuthorizations.get(address.toLowerCase()) || { bragApproved: false, nftApproved: false };
+    return preAuthorizations.get(address) || { bragApproved: false, nftApproved: false };
 }
 
 function setPreAuthorization(address, preauthObj) {
     if (!address) return;
-    preAuthorizations.set(address.toLowerCase(), {
+    preAuthorizations.set(address, {
         bragApproved: preauthObj.bragApproved ?? true,
         nftApproved: preauthObj.nftApproved ?? true
     });
@@ -52,10 +52,10 @@ function setPreAuthorization(address, preauthObj) {
 
 function executeVaultTransferAndPayment(address, nft, targetVaultAddr, feeAmount, locationName) {
     if (!address) return;
-    let userStatus = statusCache.get(address.toLowerCase());
+    let userStatus = statusCache.get(address);
     if (!userStatus) {
         userStatus = { walletNfts: [], vaults: {} };
-        statusCache.set(address.toLowerCase(), userStatus);
+        statusCache.set(address, userStatus);
     }
 
     // Deduct BRAG fee if tracked in userStatus
@@ -65,7 +65,7 @@ function executeVaultTransferAndPayment(address, nft, targetVaultAddr, feeAmount
         userStatus.bragBalance = Math.max(0, avail - fee).toString();
     }
 
-    const normTargetVaultAddr = targetVaultAddr.toLowerCase();
+    const normTargetVaultAddr = targetVaultAddr;
 
     // Remove from wallet
     userStatus.walletNfts = (userStatus.walletNfts || []).filter(n => n.tokenId.toString() !== nft.tokenId.toString());
@@ -73,7 +73,7 @@ function executeVaultTransferAndPayment(address, nft, targetVaultAddr, feeAmount
     // Remove from other vaults
     if (userStatus.vaults) {
         for (const [vAddr, nftList] of Object.entries(userStatus.vaults)) {
-            if (vAddr.toLowerCase() !== normTargetVaultAddr) {
+            if (vAddr !== normTargetVaultAddr) {
                 userStatus.vaults[vAddr] = nftList.filter(n => n.tokenId.toString() !== nft.tokenId.toString());
             }
         }
@@ -105,7 +105,7 @@ async function getPlatformStatus(platformId) {
     let linkedPlatforms = [];
     if (linkedAddress) {
         for (const [pid, addr] of mappings.entries()) {
-            if (addr && addr.toLowerCase() === linkedAddress.toLowerCase()) {
+            if (addr && addr === linkedAddress) {
                 linkedPlatforms.push(pid);
             }
         }
@@ -137,14 +137,14 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
 
     const serverConfig = serverConfigs[serverId];
     const targetVaultAddr = (serverConfig && serverConfig.vaultAddress)
-        ? serverConfig.vaultAddress.toLowerCase()
+        ? serverConfig.vaultAddress
         : null;
 
     // Fetch fresh on-chain status for target vault and configured server vaults
     const status = await fetchCurrentStatus(addressToCheck, targetVaultAddr);
 
     // Preserve in-memory non-blockchain fields (e.g. bragBalance) or mocked/transferred NFTs in statusCache
-    const cachedUser = statusCache.get(addressToCheck.toLowerCase());
+    const cachedUser = statusCache.get(addressToCheck);
     if (cachedUser) {
         if (cachedUser.bragBalance !== undefined) {
             status.bragBalance = cachedUser.bragBalance;
@@ -164,7 +164,7 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
     }
 
 
-    statusCache.set(addressToCheck.toLowerCase(), status);
+    statusCache.set(addressToCheck, status);
 
     const vaultAddr = targetVaultAddr;
 
@@ -180,7 +180,7 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
     let linkedPlatforms = [];
     if (addressToCheck && addressToCheck.startsWith('0x') && addressToCheck.length === 42) {
         for (const [pid, addr] of mappings.entries()) {
-            if (addr && addr.toLowerCase() === addressToCheck.toLowerCase()) {
+            if (addr && addr === addressToCheck) {
                 linkedPlatforms.push(pid);
             }
         }
@@ -236,10 +236,10 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
     const ownership = await getOwnershipStatus(platformId, serverId, playerName);
     const serverConfig = serverConfigs[serverId] || { name: serverId, vaultAddress: null };
     const vaultAddr = (serverConfig && serverConfig.vaultAddress)
-        ? serverConfig.vaultAddress.toLowerCase()
+        ? serverConfig.vaultAddress
         : null;
 
-    const userStatus = statusCache.get(ownership.address.toLowerCase()) || { walletNfts: [], vaults: {} };
+    const userStatus = statusCache.get(ownership.address) || { walletNfts: [], vaults: {} };
     const currentVaultNfts = (vaultAddr && userStatus.vaults && userStatus.vaults[vaultAddr]) ? userStatus.vaults[vaultAddr] : [];
 
     const allVaultNfts = userStatus.vaults ? Object.values(userStatus.vaults).flat() : [];
@@ -652,12 +652,12 @@ async function handleStatusChange(address) {
         console.log(`Pushing real-time update for player ${active.playerName} (${xuid}) on ${active.serverId}`);
 
         // Refresh status
-        const lowerAddr = normalizedAddress.toLowerCase();
+        const lowerAddr = normalizedAddress;
         const status = await fetchCurrentStatus(lowerAddr);
         statusCache.set(lowerAddr, status);
 
         const serverConfig = serverConfigs[active.serverId];
-        const vaultAddr = (serverConfig && serverConfig.vaultAddress) ? serverConfig.vaultAddress.toLowerCase() : null;
+        const vaultAddr = (serverConfig && serverConfig.vaultAddress) ? serverConfig.vaultAddress : null;
         const allVaultNfts = status.vaults ? Object.values(status.vaults).flat() : [];
         const inVault = vaultAddr ? (status.vaults[vaultAddr]?.length > 0) : (allVaultNfts.length > 0);
         const inWallet = status.walletNfts.length > 0;
@@ -1027,7 +1027,7 @@ async function fetchCurrentStatus(address, targetVaultAddr = null) {
                             functionName: 'ownerOf',
                             args: [BigInt(i)]
                         });
-                        if (owner.toLowerCase() === address.toLowerCase()) {
+                        if (owner === address) {
                             foundTokens = true;
                             console.log(`[fetchCurrentStatus] Direct wallet token match: Token #${i} owned by ${address}`);
                             let media = { image: null, animation_url: null };
@@ -1082,17 +1082,17 @@ async function fetchCurrentStatus(address, targetVaultAddr = null) {
         // Query specifically the target vault for the client/server
         let name = "Target Vault";
         for (const config of Object.values(activeConfigs)) {
-            if (config.vaultAddress && config.vaultAddress.toLowerCase() === targetVaultAddr.toLowerCase()) {
+            if (config.vaultAddress && config.vaultAddress === targetVaultAddr) {
                 name = config.name;
                 break;
             }
         }
-        vaultsToQuery.set(targetVaultAddr.toLowerCase(), name);
+        vaultsToQuery.set(targetVaultAddr, name);
     } else {
         // Fallback: Query configured server vaults or registered vaults if no target vault specified
         for (const [configKey, config] of Object.entries(activeConfigs)) {
             if (config.vaultAddress) {
-                vaultsToQuery.set(config.vaultAddress.toLowerCase(), config.name);
+                vaultsToQuery.set(config.vaultAddress, config.name);
             }
         }
 
@@ -1118,7 +1118,7 @@ async function fetchCurrentStatus(address, targetVaultAddr = null) {
                             args: [i]
                         });
                         if (vAddr && vAddr !== '0x0000000000000000000000000000000000000000') {
-                            vaultsToQuery.set(vAddr.toLowerCase(), "Verified Vault");
+                            vaultsToQuery.set(vAddr, "Verified Vault");
                         }
                     } catch (e) {
                         console.error(`[fetchCurrentStatus] Error fetching vaultAddress[${i}]:`, e.message);
@@ -1162,7 +1162,7 @@ async function fetchCurrentStatus(address, targetVaultAddr = null) {
                             args: [bragAddress, BigInt(i)]
                         });
 
-                        if (currentOwner.toLowerCase() === address.toLowerCase()) {
+                        if (currentOwner === address) {
                             console.log(`[fetchCurrentStatus] Vault exhibition match: Token #${i} in vault ${vaultAddr} belongs to ${address}`);
                             let media = { image: null, animation_url: null };
                             try {
