@@ -55,6 +55,42 @@ describe("BragToken Integration", async function () {
     assert.equal(balance, parseEther("2500000000"));
   });
 
+  it("Should receive BRAG governance token and NFT after donations on homepage", async function () {
+    const { donor, bragNFT, bragToken } = await deploySystem();
+
+    // Verify initial balances
+    const initialNftBalance = await bragNFT.read.balanceOf([donor.account.address]);
+    const initialBragBalance = await bragToken.read.balanceOf([donor.account.address]);
+    assert.equal(initialNftBalance, 0n);
+    assert.equal(initialBragBalance, 0n);
+
+    // Perform homepage donation: donate("Home Page Donation", "", false)
+    const donationAmount = parseEther("0.1"); // 0.1 ETH ($250 at $2500/ETH rate)
+    await bragNFT.write.donate(["Home Page Donation", "", false], {
+      account: donor.account,
+      value: donationAmount
+    });
+
+    // 1. Check NFT balance and ownership
+    const finalNftBalance = await bragNFT.read.balanceOf([donor.account.address]);
+    assert.equal(finalNftBalance, 1n);
+
+    const tokenId = 0n; // first minted NFT
+    const ownerOfNft = await bragNFT.read.ownerOf([tokenId]);
+    assert.equal(ownerOfNft.toLowerCase(), donor.account.address.toLowerCase());
+
+    // 2. Check PermanentRecord in taxRegistry for token message and details
+    const record = await bragNFT.read.taxRegistry([tokenId]);
+    assert.equal(record[0].toLowerCase(), donor.account.address.toLowerCase()); // originalDonor
+    assert.equal(record[5], "Home Page Donation"); // message
+
+    // 3. Check BRAG governance token balance
+    // 0.1 ETH * $2500/ETH = $250 USD value
+    // 1,000,000 BRAG per $1 USD = 250,000,000 BRAG tokens
+    const finalBragBalance = await bragToken.read.balanceOf([donor.account.address]);
+    assert.equal(finalBragBalance, parseEther("250000000"));
+  });
+
   it("Should fail to mint beyond maxSupply", async function () {
     const maxSupply = parseEther("10000000"); // 10M BRAG
     const { donor, bragNFT } = await deploySystem(0n, maxSupply);
