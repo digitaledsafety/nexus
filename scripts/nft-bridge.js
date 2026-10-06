@@ -52,10 +52,11 @@ function setPreAuthorization(address, preauthObj) {
 
 function executeVaultTransferAndPayment(address, nft, targetVaultAddr, feeAmount, locationName) {
     if (!address) return;
-    let userStatus = statusCache.get(address);
+    let userStatus = statusCache.get(address) || statusCache.get(address.toLowerCase());
     if (!userStatus) {
         userStatus = { walletNfts: [], vaults: {} };
         statusCache.set(address, userStatus);
+        statusCache.set(address.toLowerCase(), userStatus);
     }
 
     // Deduct BRAG fee if tracked in userStatus
@@ -144,7 +145,7 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
     const status = await fetchCurrentStatus(addressToCheck, targetVaultAddr);
 
     // Preserve in-memory non-blockchain fields (e.g. bragBalance) or mocked/transferred NFTs in statusCache
-    const cachedUser = statusCache.get(addressToCheck);
+    const cachedUser = statusCache.get(addressToCheck) || statusCache.get(addressToCheck.toLowerCase());
     if (cachedUser) {
         if (cachedUser.bragBalance !== undefined) {
             status.bragBalance = cachedUser.bragBalance;
@@ -156,8 +157,10 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
         // If fresh on-chain query returned 0 vault NFTs for a vault but statusCache has mocked/transferred vault NFTs, preserve them
         if (cachedUser.vaults && Object.keys(cachedUser.vaults).length > 0) {
             for (const [vAddr, nfts] of Object.entries(cachedUser.vaults)) {
-                if ((!status.vaults[vAddr] || status.vaults[vAddr].length === 0) && nfts.length > 0) {
+                const existing = status.vaults[vAddr] || status.vaults[vAddr.toLowerCase()];
+                if ((!existing || existing.length === 0) && nfts.length > 0) {
                     status.vaults[vAddr] = nfts;
+                    status.vaults[vAddr.toLowerCase()] = nfts;
                 }
             }
         }
@@ -165,11 +168,12 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
 
 
     statusCache.set(addressToCheck, status);
+    statusCache.set(addressToCheck.toLowerCase(), status);
 
     const vaultAddr = targetVaultAddr;
 
     const allVaultNfts = status.vaults ? Object.values(status.vaults).flat() : [];
-    const vaultNftsForServer = vaultAddr ? (status.vaults[vaultAddr] || []) : allVaultNfts;
+    const vaultNftsForServer = vaultAddr ? (status.vaults[vaultAddr] || status.vaults[vaultAddr.toLowerCase()] || []) : allVaultNfts;
     const inVault = vaultNftsForServer.length > 0;
     const inWallet = status.walletNfts.length > 0;
 
@@ -239,8 +243,8 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
         ? serverConfig.vaultAddress
         : null;
 
-    const userStatus = statusCache.get(ownership.address) || { walletNfts: [], vaults: {} };
-    const currentVaultNfts = (vaultAddr && userStatus.vaults && userStatus.vaults[vaultAddr]) ? userStatus.vaults[vaultAddr] : [];
+    const userStatus = statusCache.get(ownership.address) || statusCache.get(ownership.address.toLowerCase()) || { walletNfts: [], vaults: {} };
+    const currentVaultNfts = vaultAddr ? (userStatus.vaults[vaultAddr] || userStatus.vaults[vaultAddr.toLowerCase()] || []) : [];
 
     const allVaultNfts = userStatus.vaults ? Object.values(userStatus.vaults).flat() : [];
     const allNfts = [...(userStatus.walletNfts || []), ...allVaultNfts];

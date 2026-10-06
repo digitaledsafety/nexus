@@ -4,6 +4,7 @@
  */
 
 let ethPrice = 0;
+let ethPriceAnswer = ethers.utils.parseUnits("2500", 8); // Default 8 decimals BigNumber
 let selectedUsdAmount = 50; // Default
 
 const CAUSE_NAME = "Empowering STEM Education";
@@ -16,16 +17,54 @@ async function initHome() {
 }
 
 async function fetchEthPrice() {
+    const bragNFT = getContract('BragNFT');
+    if (bragNFT && provider) {
+        try {
+            const priceFeedAddr = await bragNFT.priceFeed();
+            if (priceFeedAddr && priceFeedAddr !== ethers.constants.AddressZero) {
+                const feedContract = new ethers.Contract(priceFeedAddr, [
+                    'function latestRoundData() external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)'
+                ], provider);
+                const roundData = await feedContract.latestRoundData();
+                if (roundData && roundData.answer && roundData.answer.gt(0)) {
+                    ethPriceAnswer = roundData.answer;
+                    ethPrice = parseFloat(ethers.utils.formatUnits(roundData.answer, 8));
+                    updateHomeConversion();
+                    updateDynamicRewards();
+                    return;
+                }
+            }
+            const manualPrice = await bragNFT.manualEthPrice();
+            if (manualPrice && manualPrice.gt(0)) {
+                ethPriceAnswer = manualPrice;
+                ethPrice = parseFloat(ethers.utils.formatUnits(manualPrice, 8));
+                updateHomeConversion();
+                updateDynamicRewards();
+                return;
+            }
+        } catch (e) {
+            console.warn("Could not read price feed on-chain, falling back to CoinGecko/default", e);
+        }
+    }
+
     try {
         const resp = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
         const data = await resp.json();
-        ethPrice = data.ethereum.usd;
-        updateHomeConversion();
-        updateDynamicRewards();
+        if (data && data.ethereum && data.ethereum.usd) {
+            ethPrice = data.ethereum.usd;
+            ethPriceAnswer = ethers.utils.parseUnits(ethPrice.toString(), 8);
+            updateHomeConversion();
+            updateDynamicRewards();
+            return;
+        }
     } catch (e) {
         console.error("Failed to fetch ETH price", e);
-        ethPrice = 2500; // Fallback
     }
+
+    ethPrice = 2500; // Fallback
+    ethPriceAnswer = ethers.utils.parseUnits("2500", 8);
+    updateHomeConversion();
+    updateDynamicRewards();
 }
 
 async function refreshHomeStats() {
@@ -98,13 +137,18 @@ function updateDynamicRewards() {
 
 function updateHomeConversion() {
     const ethDisplay = document.getElementById('ethConversion');
-    if (selectedUsdAmount > 0 && ethPrice > 0) {
-        const eth = selectedUsdAmount / ethPrice;
-        const ethStr = eth.toFixed(4);
-        const bragAmount = (selectedUsdAmount * 1000000).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2});
-        document.getElementById('ethAmount').innerText = ethStr;
-        document.getElementById('bragRewardAmount').innerText = bragAmount;
-        ethDisplay.classList.remove('hidden');
+    if (selectedUsdAmount > 0 && ethPriceAnswer && ethPriceAnswer.gt(0)) {
+        try {
+            const usdBN = ethers.utils.parseUnits(selectedUsdAmount.toString(), 8);
+            const ethValueBN = usdBN.mul(ethers.utils.parseEther("1")).div(ethPriceAnswer);
+            const ethStr = parseFloat(ethers.utils.formatEther(ethValueBN)).toFixed(6);
+            const bragAmount = (selectedUsdAmount * 1000000).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2});
+            document.getElementById('ethAmount').innerText = ethStr;
+            document.getElementById('bragRewardAmount').innerText = bragAmount;
+            ethDisplay.classList.remove('hidden');
+        } catch (e) {
+            ethDisplay.classList.add('hidden');
+        }
     } else {
         ethDisplay.classList.add('hidden');
     }
@@ -127,7 +171,9 @@ async function donateETH() {
         return;
     }
 
-    const ethValue = ethers.utils.parseEther((selectedUsdAmount / ethPrice).toFixed(18));
+    // Exact BigNumber precision calculation: ethValue = (usdIn8Decimals * 1e18) / ethPriceAnswer
+    const usdBN = ethers.utils.parseUnits(selectedUsdAmount.toString(), 8);
+    const ethValue = usdBN.mul(ethers.utils.parseEther("1")).div(ethPriceAnswer);
 
     try {
         showModal("Minting in Progress", "Please confirm the transaction in your wallet and wait for blockchain confirmation.");
