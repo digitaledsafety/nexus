@@ -35,16 +35,30 @@ if (fs.existsSync(MAPPINGS_FILE)) {
 
 const pendingTokens = new Map();
 const statusCache = new Map();
-const preAuthorizations = new Map(); // address.toLowerCase() -> { bragApproved: boolean, nftApproved: boolean }
+const preAuthorizations = new Map(); // address -> { bragApproved: boolean, nftApproved: boolean }
+
+function normalizeAddress(address) {
+    if (!address || typeof address !== 'string') return address;
+    try {
+        if (address.startsWith('0x') && address.length === 42) {
+            return getAddress(address);
+        }
+    } catch (e) {
+        // Return lowercased or original string if checksum parsing fails
+    }
+    return address.toLowerCase();
+}
 
 function getPreAuthorization(address) {
     if (!address) return { bragApproved: false, nftApproved: false };
-    return preAuthorizations.get(address) || { bragApproved: false, nftApproved: false };
+    const normAddr = normalizeAddress(address);
+    return preAuthorizations.get(normAddr) || { bragApproved: false, nftApproved: false };
 }
 
 function setPreAuthorization(address, preauthObj) {
     if (!address) return;
-    preAuthorizations.set(address, {
+    const normAddr = normalizeAddress(address);
+    preAuthorizations.set(normAddr, {
         bragApproved: preauthObj.bragApproved ?? true,
         nftApproved: preauthObj.nftApproved ?? true
     });
@@ -52,10 +66,20 @@ function setPreAuthorization(address, preauthObj) {
 
 function executeVaultTransferAndPayment(address, nft, targetVaultAddr, feeAmount, locationName) {
     if (!address) return;
-    let userStatus = statusCache.get(address);
+    const normUserAddr = normalizeAddress(address);
+    let userStatus = statusCache.get(normUserAddr);
     if (!userStatus) {
-        userStatus = { walletNfts: [], vaults: {} };
-        statusCache.set(address, userStatus);
+        // Fallback: check if statusCache has entry under lowercase or unnormalized address
+        for (const [key, val] of statusCache.entries()) {
+            if (normalizeAddress(key) === normUserAddr) {
+                userStatus = val;
+                break;
+            }
+        }
+        if (!userStatus) {
+            userStatus = { walletNfts: [], vaults: {} };
+        }
+        statusCache.set(normUserAddr, userStatus);
     }
 
     // Deduct BRAG fee if tracked in userStatus
@@ -65,7 +89,16 @@ function executeVaultTransferAndPayment(address, nft, targetVaultAddr, feeAmount
         userStatus.bragBalance = Math.max(0, avail - fee).toString();
     }
 
-    const normTargetVaultAddr = targetVaultAddr;
+    // Also update cached status under normalized address in statusCache if key differs
+    for (const [key, val] of statusCache.entries()) {
+        if (normalizeAddress(key) === normUserAddr && val !== userStatus) {
+            val.bragBalance = userStatus.bragBalance;
+            val.walletNfts = userStatus.walletNfts;
+            val.vaults = userStatus.vaults;
+        }
+    }
+
+    const normTargetVaultAddr = normalizeAddress(targetVaultAddr);
 
     // Remove from wallet
     userStatus.walletNfts = (userStatus.walletNfts || []).filter(n => n.tokenId.toString() !== nft.tokenId.toString());
@@ -73,7 +106,7 @@ function executeVaultTransferAndPayment(address, nft, targetVaultAddr, feeAmount
     // Remove from other vaults
     if (userStatus.vaults) {
         for (const [vAddr, nftList] of Object.entries(userStatus.vaults)) {
-            if (vAddr !== normTargetVaultAddr) {
+            if (normalizeAddress(vAddr) !== normTargetVaultAddr) {
                 userStatus.vaults[vAddr] = nftList.filter(n => n.tokenId.toString() !== nft.tokenId.toString());
             }
         }
@@ -81,12 +114,17 @@ function executeVaultTransferAndPayment(address, nft, targetVaultAddr, feeAmount
 
     // Add to target vault
     if (!userStatus.vaults) userStatus.vaults = {};
-    if (!userStatus.vaults[normTargetVaultAddr]) userStatus.vaults[normTargetVaultAddr] = [];
 
-    const existingInVault = userStatus.vaults[normTargetVaultAddr].find(n => n.tokenId.toString() === nft.tokenId.toString());
+    let targetVaultKey = Object.keys(userStatus.vaults).find(k => normalizeAddress(k) === normTargetVaultAddr);
+    if (!targetVaultKey) {
+        targetVaultKey = normTargetVaultAddr;
+        userStatus.vaults[targetVaultKey] = [];
+    }
+
+    const existingInVault = userStatus.vaults[targetVaultKey].find(n => n.tokenId.toString() === nft.tokenId.toString());
     if (!existingInVault) {
         const transferredNft = { ...nft, location: locationName || "Exhibited Vault" };
-        userStatus.vaults[normTargetVaultAddr].push(transferredNft);
+        userStatus.vaults[targetVaultKey].push(transferredNft);
     }
 }
 
@@ -104,8 +142,9 @@ async function getPlatformStatus(platformId) {
     const linkedAddress = mappings.get(platformId);
     let linkedPlatforms = [];
     if (linkedAddress) {
+        const normLinked = normalizeAddress(linkedAddress);
         for (const [pid, addr] of mappings.entries()) {
-            if (addr && addr === linkedAddress) {
+            if (addr && normalizeAddress(addr) === normLinked) {
                 linkedPlatforms.push(pid);
             }
         }
@@ -122,16 +161,18 @@ async function createRegistrationToken(platformId) {
 async function getOwnershipStatus(uuid, serverId, playerName) {
     console.log(`[getOwnershipStatus] Request received for uuid='${uuid}', serverId='${serverId}', playerName='${playerName}'`);
 
-    const addressToCheck = mappings.get(uuid) || uuid;
+    const rawAddressToCheck = mappings.get(uuid) || uuid;
 
     if (uuid && serverId && playerName) {
         activePlayers.set(uuid, { serverId, playerName });
     }
 
-    if (!addressToCheck || !addressToCheck.startsWith('0x') || addressToCheck.length !== 42) {
-         console.warn(`[getOwnershipStatus] Unlinked or invalid address resolved for uuid='${uuid}': '${addressToCheck}'`);
-         return { isHolder: false, address: addressToCheck, linked: false, nfts: [] };
+    if (!rawAddressToCheck || typeof rawAddressToCheck !== 'string' || !rawAddressToCheck.startsWith('0x') || rawAddressToCheck.length !== 42) {
+         console.warn(`[getOwnershipStatus] Unlinked or invalid address resolved for uuid='${uuid}': '${rawAddressToCheck}'`);
+         return { isHolder: false, address: rawAddressToCheck, linked: false, nfts: [] };
     }
+
+    const addressToCheck = normalizeAddress(rawAddressToCheck);
 
     console.log(`[getOwnershipStatus] Resolved target wallet address: ${addressToCheck} (mapping lookup for uuid='${uuid}')`);
 
@@ -144,7 +185,16 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
     const status = await fetchCurrentStatus(addressToCheck, targetVaultAddr);
 
     // Preserve in-memory non-blockchain fields (e.g. bragBalance) or mocked/transferred NFTs in statusCache
-    const cachedUser = statusCache.get(addressToCheck);
+    let cachedUser = statusCache.get(addressToCheck);
+    if (!cachedUser) {
+        for (const [key, val] of statusCache.entries()) {
+            if (normalizeAddress(key) === addressToCheck) {
+                cachedUser = val;
+                break;
+            }
+        }
+    }
+
     if (cachedUser) {
         if (cachedUser.bragBalance !== undefined) {
             status.bragBalance = cachedUser.bragBalance;
@@ -156,7 +206,10 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
         // If fresh on-chain query returned 0 vault NFTs for a vault but statusCache has mocked/transferred vault NFTs, preserve them
         if (cachedUser.vaults && Object.keys(cachedUser.vaults).length > 0) {
             for (const [vAddr, nfts] of Object.entries(cachedUser.vaults)) {
-                if ((!status.vaults[vAddr] || status.vaults[vAddr].length === 0) && nfts.length > 0) {
+                const normVAddr = normalizeAddress(vAddr);
+                const matchingFreshKey = Object.keys(status.vaults || {}).find(k => normalizeAddress(k) === normVAddr);
+                if ((!matchingFreshKey || status.vaults[matchingFreshKey].length === 0) && nfts.length > 0) {
+                    if (!status.vaults) status.vaults = {};
                     status.vaults[vAddr] = nfts;
                 }
             }
@@ -167,9 +220,19 @@ async function getOwnershipStatus(uuid, serverId, playerName) {
     statusCache.set(addressToCheck, status);
 
     const vaultAddr = targetVaultAddr;
+    const normVaultAddr = vaultAddr ? normalizeAddress(vaultAddr) : null;
 
     const allVaultNfts = status.vaults ? Object.values(status.vaults).flat() : [];
-    const vaultNftsForServer = vaultAddr ? (status.vaults[vaultAddr] || []) : allVaultNfts;
+    let vaultNftsForServer = [];
+    if (normVaultAddr && status.vaults) {
+        for (const [vAddr, nfts] of Object.entries(status.vaults)) {
+            if (normalizeAddress(vAddr) === normVaultAddr) {
+                vaultNftsForServer.push(...nfts);
+            }
+        }
+    } else {
+        vaultNftsForServer = allVaultNfts;
+    }
     const inVault = vaultNftsForServer.length > 0;
     const inWallet = status.walletNfts.length > 0;
 
@@ -239,8 +302,16 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
         ? serverConfig.vaultAddress
         : null;
 
-    const userStatus = statusCache.get(ownership.address) || { walletNfts: [], vaults: {} };
-    const currentVaultNfts = (vaultAddr && userStatus.vaults && userStatus.vaults[vaultAddr]) ? userStatus.vaults[vaultAddr] : [];
+    const userStatus = statusCache.get(normalizeAddress(ownership.address)) || { walletNfts: [], vaults: {} };
+    const normVaultAddr = vaultAddr ? normalizeAddress(vaultAddr) : null;
+    let currentVaultNfts = [];
+    if (normVaultAddr && userStatus.vaults) {
+        for (const [vAddr, nftList] of Object.entries(userStatus.vaults)) {
+            if (normalizeAddress(vAddr) === normVaultAddr) {
+                currentVaultNfts.push(...nftList);
+            }
+        }
+    }
 
     const allVaultNfts = userStatus.vaults ? Object.values(userStatus.vaults).flat() : [];
     const allNfts = [...(userStatus.walletNfts || []), ...allVaultNfts];
@@ -316,7 +387,7 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
     }
 
     // Check if matchingNft is ALREADY in current vaultAddr
-    const isInCurrentVault = vaultAddr ? currentVaultNfts.some(n => n.tokenId.toString() === matchingNft.tokenId.toString()) : true;
+    const isInCurrentVault = normVaultAddr ? currentVaultNfts.some(n => n.tokenId.toString() === matchingNft.tokenId.toString()) : true;
     const targetVaultAddr = vaultAddr || "0xdefaultvault";
 
     const feeAmount = (serverConfig && serverConfig.summonFeeBrag)
@@ -962,7 +1033,8 @@ async function fetchWithRetry(fn, label, maxRetries = 3) {
 }
 
 async function fetchCurrentStatus(address, targetVaultAddr = null) {
-    console.log(`[fetchCurrentStatus] Starting fresh on-chain status fetch for address ${address}...`);
+    const normAddress = normalizeAddress(address);
+    console.log(`[fetchCurrentStatus] Starting fresh on-chain status fetch for address ${normAddress}...`);
     const bragAddress = getContractAddress('BragNFT');
     if (!bragAddress) {
         throw new Error(`Configuration Error: BragNFT contract address could not be resolved for chain ID ${CHAIN_ID}. Please verify contract deployment and configuration.`);
@@ -985,8 +1057,8 @@ async function fetchCurrentStatus(address, targetVaultAddr = null) {
                 address: bragTokenAddress,
                 abi: erc20Abi,
                 functionName: 'balanceOf',
-                args: [address]
-            }), `BragToken.balanceOf(${address})`);
+                args: [normAddress]
+            }), `BragToken.balanceOf(${normAddress})`);
             // Format from 18 decimals or raw units
             onChainBragBalance = (Number(rawBalance) / 1e18).toString();
             console.log(`[fetchCurrentStatus] On-chain BragToken balanceOf(${address}): ${onChainBragBalance} (${rawBalance.toString()} wei)`);
@@ -1001,8 +1073,8 @@ async function fetchCurrentStatus(address, targetVaultAddr = null) {
             address: bragAddress,
             abi: BRAG_ABI,
             functionName: 'balanceOf',
-            args: [address]
-        }), `balanceOf(${address})`);
+            args: [normAddress]
+        }), `balanceOf(${normAddress})`);
 
         console.log(`[fetchCurrentStatus] On-chain balanceOf(${address}) on BragNFT: ${balance}`);
 
@@ -1027,7 +1099,7 @@ async function fetchCurrentStatus(address, targetVaultAddr = null) {
                             functionName: 'ownerOf',
                             args: [BigInt(i)]
                         });
-                        if (owner === address) {
+                        if (normalizeAddress(owner) === normAddress) {
                             foundTokens = true;
                             console.log(`[fetchCurrentStatus] Direct wallet token match: Token #${i} owned by ${address}`);
                             let media = { image: null, animation_url: null };
@@ -1162,7 +1234,7 @@ async function fetchCurrentStatus(address, targetVaultAddr = null) {
                             args: [bragAddress, BigInt(i)]
                         });
 
-                        if (currentOwner === address) {
+                        if (normalizeAddress(currentOwner) === normAddress) {
                             console.log(`[fetchCurrentStatus] Vault exhibition match: Token #${i} in vault ${vaultAddr} belongs to ${address}`);
                             let media = { image: null, animation_url: null };
                             try {
