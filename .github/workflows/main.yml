@@ -74,26 +74,6 @@ jobs:
           name: roblox-addon
           path: roblox-addon.zip
 
-      - name: Deploy to Sepolia (Gasless)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          SEPOLIA_RPC_URL: ${{ secrets.SEPOLIA_RPC_URL }}
-          SEPOLIA_PRIVATE_KEY: ${{ secrets.SEPOLIA_PRIVATE_KEY }}
-          TREASURY_ADDRESS: ${{ secrets.TREASURY_ADDRESS }}
-          ALCHEMY_API_KEY: ${{ secrets.ALCHEMY_API_KEY }}
-          ALCHEMY_GAS_POLICY_ID: ${{ secrets.ALCHEMY_GAS_POLICY_ID }}
-        run: npm run deploy:sepolia:gasless
-
-      - name: Seed Data on Sepolia (Gasless)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          SEPOLIA_RPC_URL: ${{ secrets.SEPOLIA_RPC_URL }}
-          SEPOLIA_PRIVATE_KEY: ${{ secrets.SEPOLIA_PRIVATE_KEY }}
-          SEPOLIA_BUYER_PRIVATE_KEY: ${{ secrets.SEPOLIA_BUYER_PRIVATE_KEY }}
-          ALCHEMY_API_KEY: ${{ secrets.ALCHEMY_API_KEY }}
-          ALCHEMY_GAS_POLICY_ID: ${{ secrets.ALCHEMY_GAS_POLICY_ID }}
-        run: npm run seed:sepolia
-
       - name: Build frontend
         run: npm run build:frontend
 
