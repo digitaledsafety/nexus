@@ -134,7 +134,8 @@ function setupManagerListeners() {
                 btnAI.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
                 log('Requesting AI NFT generation...');
 
-                const response = await fetch('http://localhost:9000/generate-nft', {
+                const fetchFn = typeof fetchBridgeEndpoint === 'function' ? fetchBridgeEndpoint : (path, opts) => fetch(`http://localhost:9000${path}`, opts);
+                const response = await fetchFn('/generate-nft', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
@@ -176,7 +177,9 @@ function setupManagerListeners() {
                 // Max gas if huge file
                 let gasOverride = null;
                 if (onChain && tokenURI.length > 50000) {
-                    gasOverride = BigInt(APP_CONFIG.gasLimits.hugeCalldataGasLimit);
+                    const cfg = window.APP_CONFIG || (typeof CONTRACT_DATA !== 'undefined' ? CONTRACT_DATA : {});
+                    const hugeLimit = cfg.frontend?.gasLimits?.hugeCalldataGasLimit || cfg.gasLimits?.hugeCalldataGasLimit || 25000000;
+                    gasOverride = BigInt(hugeLimit);
                     log(`Large file detected (${Math.round(tokenURI.length/1024)}KB). Applying gas limit override: ${gasOverride.toString()}`);
                 }
 
@@ -201,9 +204,10 @@ function setupManagerListeners() {
                     throw new Error("Contract deployment not yet supported in Gasless mode via Manager. Use standard mode.");
                 }
 
+                const contractsData = (window.APP_CONFIG || CONTRACT_DATA || {}).contracts || {};
                 const factory = new ethers.ContractFactory(
-                    CONTRACT_DATA.contracts.ExhibitVault.abi,
-                    CONTRACT_DATA.contracts.ExhibitVault.bytecode,
+                    contractsData.ExhibitVault.abi,
+                    contractsData.ExhibitVault.bytecode,
                     signer
                 );
                 const registry = document.getElementById('addrExhibitRegistry').value;
@@ -234,7 +238,8 @@ function setupManagerListeners() {
         btnAutofill.onclick = () => {
             if (!network) return log('Connect wallet first', 'error');
             const chainId = network.chainId.toString();
-            const deps = CONTRACT_DATA.deployments[chainId] || CONTRACT_DATA.deployments[`chain-${chainId}`];
+            const deployments = (window.APP_CONFIG || CONTRACT_DATA || {}).deployments || {};
+            const deps = deployments[chainId] || deployments[`chain-${chainId}`];
             if (deps) {
                 Object.entries(deps).forEach(([name, addr]) => {
                     let fieldId = `addr${name}`;
@@ -267,7 +272,12 @@ function getAdminContract(name, addressOverride = null) {
     if (!address || !ethers.utils.isAddress(address)) {
         throw new Error(`Invalid address for ${name}`);
     }
-    return new ethers.Contract(address, CONTRACT_DATA.contracts[name].abi, signer || provider);
+    const contractsData = (window.APP_CONFIG || CONTRACT_DATA || {}).contracts || {};
+    const abi = contractsData[name]?.abi;
+    if (!abi) {
+        throw new Error(`No ABI found for ${name}`);
+    }
+    return new ethers.Contract(address, abi, signer || provider);
 }
 
 /**

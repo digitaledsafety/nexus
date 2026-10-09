@@ -384,9 +384,10 @@ function getContract(name, addressOverride = null) {
         console.warn(`No valid address for contract ${name} on network ${network?.chainId}`);
         return null;
     }
-    const contractData = CONTRACT_DATA.contracts[name];
+    const configData = window.APP_CONFIG || (typeof CONTRACT_DATA !== 'undefined' ? CONTRACT_DATA : {});
+    const contractData = configData.contracts?.[name];
     if (!contractData || !contractData.abi) {
-        console.warn(`No ABI found for contract ${name} in CONTRACT_DATA`);
+        console.warn(`No ABI found for contract ${name} in config`);
         return null;
     }
     const abi = contractData.abi;
@@ -411,10 +412,12 @@ function getDeploymentAddress(name) {
     }
     if (override && ethers.utils.isAddress(override)) return override;
 
-    // Priority 2: CONTRACT_DATA
+    // Priority 2: window.APP_CONFIG (single configuration)
     if (!network) return null;
     const chainId = network.chainId.toString();
-    const deps = CONTRACT_DATA.deployments[chainId] || CONTRACT_DATA.deployments[`chain-${chainId}`];
+    const configData = window.APP_CONFIG || (typeof CONTRACT_DATA !== 'undefined' ? CONTRACT_DATA : {});
+    const deployments = configData.deployments || {};
+    const deps = deployments[chainId] || deployments[`chain-${chainId}`];
 
     if (deps) {
         return deps[name] || (alias ? deps[alias] : null) || null;
@@ -645,6 +648,44 @@ function updateCartUI() {
     });
 }
 
+
+/**
+ * Dynamic Bridge Endpoint Fetcher
+ * Tries window.APP_CONFIG.bridgeUrl, current host on port 9000, localhost:9000, and 127.0.0.1:9000 with fallbacks.
+ */
+async function fetchBridgeEndpoint(path, options = {}) {
+    const candidateUrls = [];
+    if (window.APP_CONFIG && window.APP_CONFIG.bridgeUrl) {
+        candidateUrls.push(window.APP_CONFIG.bridgeUrl);
+    }
+
+    const host = window.location.hostname || 'localhost';
+    const protocol = window.location.protocol.startsWith('https') ? 'https' : 'http';
+
+    candidateUrls.push(`${protocol}://${host}:9000`);
+
+    if (host !== 'localhost') {
+        candidateUrls.push(`${protocol}://localhost:9000`);
+    }
+    if (host !== '127.0.0.1') {
+        candidateUrls.push(`${protocol}://127.0.0.1:9000`);
+    }
+
+    const uniqueUrls = Array.from(new Set(candidateUrls));
+
+    let lastError = null;
+    for (const baseUrl of uniqueUrls) {
+        try {
+            const cleanBase = baseUrl.replace(/\/$/, '');
+            const url = `${cleanBase}${path}`;
+            const res = await fetch(url, options);
+            return res;
+        } catch (e) {
+            lastError = e;
+        }
+    }
+    throw lastError || new Error("Failed to connect to bridge server");
+}
 
 // Global initialization
 window.addEventListener('DOMContentLoaded', initCore);

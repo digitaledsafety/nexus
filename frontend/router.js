@@ -27,6 +27,12 @@ const router = {
         // Parse query params if any
         const params = new URLSearchParams(queryString || window.location.search);
 
+        // If navigating directly with GET search parameter ?token=... and no hash route specified, redirect to login page
+        if (!window.location.hash && params.has('token')) {
+            this.navigateTo('login', `?token=${params.get('token')}`);
+            return;
+        }
+
         let route = this.routes[path];
 
         // Fallback for sub-paths or unknown routes

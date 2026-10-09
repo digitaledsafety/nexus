@@ -1,5 +1,3 @@
-const API_BASE = 'http://localhost:9000';
-
 async function initLogin() {
     const btnSiwe = document.getElementById('btnSiwe');
     if (!btnSiwe) return;
@@ -49,7 +47,8 @@ async function initLogin() {
             if (token) {
                 console.log('Attempting to link account with token:', token);
                 try {
-                    const linkRes = await fetch(`${API_BASE}/verify-link`, {
+                    const fetchFn = typeof fetchBridgeEndpoint === 'function' ? fetchBridgeEndpoint : (path, opts) => fetch(`http://localhost:9000${path}`, opts);
+                    const linkRes = await fetchFn('/verify-link', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ token, address, message, signature })
@@ -64,6 +63,28 @@ async function initLogin() {
                 }
             }
 
+            // 5. Handle Pre-Authorization if requested
+            const isPreauth = params.get('preauth');
+            if (isPreauth) {
+                console.log('Attempting pre-authorization for address:', address);
+                try {
+                    const fetchFn = typeof fetchBridgeEndpoint === 'function' ? fetchBridgeEndpoint : (path, opts) => fetch(`http://localhost:9000${path}`, opts);
+                    const preauthRes = await fetchFn('/verify-preauth', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ address, bragApproved: true, nftApproved: true, message, signature })
+                    });
+                    if (preauthRes.ok) {
+                        alert(token ? 'Account linked & in-game automated summoning successfully pre-authorized!' : 'In-game automated summoning successfully pre-authorized!');
+                    } else {
+                        const err = await preauthRes.json();
+                        alert('Pre-authorization failed: ' + err.error);
+                    }
+                } catch (e) {
+                    console.error('Pre-authorization failed', e);
+                }
+            }
+
             router.navigateTo('manager');
         } catch (err) {
             console.error(err);
@@ -73,10 +94,15 @@ async function initLogin() {
 
     const params = getParams();
     const token = params.get('token');
+    const isPreauth = params.get('preauth');
     const linkingStatus = document.getElementById('linkingStatus');
     const displayToken = document.getElementById('displayToken');
+    const preauthStatus = document.getElementById('preauthStatus');
     if (token && linkingStatus && displayToken) {
         linkingStatus.classList.remove('hidden');
         displayToken.innerText = token;
+    }
+    if (isPreauth && preauthStatus) {
+        preauthStatus.classList.remove('hidden');
     }
 }

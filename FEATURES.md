@@ -52,3 +52,10 @@ The Vault system enables NFTs to be securely locked for cross-platform utility (
 *   **Minecraft Bridge:** A secure WebSocket/HTTP bridge for the "Verification Handshake" (SIWE mapping of Wallets to Minecraft XUIDs).
 *   **Admin Manager:** A comprehensive web interface for contract configuration, treasury management, and environment monitoring.
 *   **Tax Receipt PDF Engine:** Automated generation of IRS-compliant donation receipts based on on-chain `PermanentRecord` data.
+
+## 7. Multi-Game Architecture & Platform Compatibility
+The brag.charity bridge supports multi-game ecosystem expansion across Minecraft Bedrock, Roblox, and engine.digitaleducationsafety.org.
+
+*   **Unified Platform Identifier Mapping:** Compatible with diverse platform ID formats, including Minecraft Xbox XUIDs (`xuid-...`), Roblox User IDs (`roblox:...`), and Digital Education Safety Engine user identifiers (`engine:...`).
+*   **Streamlined Registration Flow:** Players initiate `/nexus:register` in-game to generate a secure, 10-minute single-use token. The web interface (`login.js`) signs a Sign-In with Ethereum (SIWE) payload, binding the user's wallet to their game platform identity upon `/verify-link` validation.
+*   **Single-Vault Exclusivity (Cross-Game Summoning MVP):** To prevent duplicate NFT usage across different game clients, structure summoning (`nexus:summon`) strictly verifies that an NFT is currently held in the target server's verified `ExhibitVault`. Players can seamlessly transition assets between games (e.g., Minecraft to Roblox or Digital Education Safety Hub) using vault-to-vault transfers (`moveBatch721` or `deposit721`).

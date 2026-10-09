@@ -18,6 +18,23 @@ npm run serve
 ```
 Then navigate to `http://localhost:3000`.
 
+### Connecting Wallet to Nexus Custom Local Network
+
+When testing or interacting with the frontend against local smart contracts (`npm run env:init`), you must configure your Web3 wallet (e.g. MetaMask) to connect to the local Nexus network spun up on port `8545`.
+
+**Custom Network Configuration:**
+*   **Network Name:** `Nexus Devnet` (or `Hardhat Local`)
+*   **RPC URL:** `http://127.0.0.1:8545` (or `http://localhost:8545`)
+*   **Chain ID:** `31337` (Hex: `0x7A69`)
+*   **Currency Symbol:** `ETH`
+*   **Block Explorer:** *(Leave blank)*
+
+**Adding to MetaMask:**
+1. Open MetaMask and click the network selector at top left.
+2. Click **Add Network** -> **Add a network manually**.
+3. Enter the network parameters above and save.
+4. Import a pre-funded local account private key (e.g., `0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80`) to send test transactions and mint NFTs on the local network.
+
 ## Dual-State Architecture (Nexus)
 
 The frontend implements conditional rendering for the **Nexus Dual-State** model:
