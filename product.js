@@ -104,11 +104,43 @@ async function loadProductData(contractAddr, tokenId) {
             }
         }
 
+        // Vault State & Original Owner Resolution
+        let isExhibited = false;
+        let originalOwner = owner;
+        if (registry && owner !== ethers.constants.AddressZero) {
+            try {
+                isExhibited = await registry.isVerified(owner);
+                if (isExhibited) {
+                    document.getElementById('vaultBadge')?.classList.remove('hidden');
+                    const vaultContract = getContract('ExhibitVault', owner);
+                    if (vaultContract) {
+                        try {
+                            const realOwner = await vaultContract.owner721(contractAddr, tokenId);
+                            if (realOwner && realOwner !== ethers.constants.AddressZero) {
+                                originalOwner = realOwner;
+                            }
+                        } catch (e) {
+                            console.warn("Could not query owner721 from vault", e);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn("Failed to check vault status", err);
+            }
+        }
+
+        const currentAddr = (userAddress || localStorage.getItem('brag_address') || '').toLowerCase();
+        const isOwnerYou = originalOwner && originalOwner.toLowerCase() === currentAddr && currentAddr !== '';
+        let ownerLabel = isOwnerYou ? 'You' : (originalOwner === ethers.constants.AddressZero ? 'Unknown' : originalOwner);
+        if (isExhibited) {
+            ownerLabel += ' (Exhibited in Vault)';
+        }
+
         // UI Injection
         document.getElementById('nftName').textContent = metadata.name || "Unnamed NFT";
         document.getElementById('breadcrumbName').textContent = metadata.name || "Asset Detail";
         document.getElementById('nftDescription').textContent = metadata.description || 'Verified impact contribution.';
-        document.getElementById('dispOwner').textContent = owner === userAddress ? 'You' : (owner === ethers.constants.AddressZero ? 'Unknown' : owner);
+        document.getElementById('dispOwner').textContent = ownerLabel;
         document.getElementById('dispContract').textContent = contractAddr;
         document.getElementById('dispTokenId').textContent = tokenId.length > 20 ? tokenId.substring(0, 8) + '...' + tokenId.substring(tokenId.length - 8) : tokenId;
         document.getElementById('dispNetwork').textContent = NETWORK_NAMES[network?.chainId] || 'Connected Network';
@@ -194,11 +226,6 @@ async function loadProductData(contractAddr, tokenId) {
             }
         }
 
-        // Vault State
-        if (registry) {
-            const isExhibited = await registry.isVerified(owner); // Simplified check for MVP
-            if (isExhibited) document.getElementById('vaultBadge').classList.remove('hidden');
-        }
 
         // Detect and display collection name if external
         const externalCollections = window.APP_CONFIG?.externalCollections || (typeof CONTRACT_DATA !== 'undefined' ? CONTRACT_DATA.externalCollections : []) || [];
