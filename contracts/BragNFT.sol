@@ -268,22 +268,75 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
     }
 
     /**
+     * @dev Batch mint new BragNFTs by donating ETH.
+     */
+    function batchDonate(string[] calldata messages, string[] calldata tokenURIs) external payable nonReentrant whenNotPaused {
+        require(messages.length == tokenURIs.length, "Mismatched arrays");
+        uint256 count = messages.length;
+        require(count > 0, "Empty batch");
+
+        uint256 perEth = msg.value / count;
+        uint256 dust = msg.value % count;
+
+        for (uint256 i = 0; i < count; ) {
+            uint256 ethAmount = perEth + (i == count - 1 ? dust : 0);
+            _donateWithAmount(msg.sender, messages[i], tokenURIs[i], false, ethAmount, false);
+            unchecked { i++; }
+        }
+
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Transfer to treasury failed");
+    }
+
+    /**
+     * @dev Batch mint new BragNFTs by donating ETH to specified recipients.
+     */
+    function batchDonateTo(address[] calldata recipients, string[] calldata messages, string[] calldata tokenURIs) external payable nonReentrant whenNotPaused {
+        require(recipients.length == messages.length && messages.length == tokenURIs.length, "Mismatched arrays");
+        uint256 count = recipients.length;
+        require(count > 0, "Empty batch");
+
+        uint256 perEth = msg.value / count;
+        uint256 dust = msg.value % count;
+
+        for (uint256 i = 0; i < count; ) {
+            uint256 ethAmount = perEth + (i == count - 1 ? dust : 0);
+            _donateWithAmount(recipients[i], messages[i], tokenURIs[i], false, ethAmount, false);
+            unchecked { i++; }
+        }
+
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Transfer to treasury failed");
+    }
+
+    /**
      * @dev Internal donation logic. Records a permanent tax record and mints the NFT.
      */
     function _donate(address recipient, string memory message, string memory media, bool onChain) internal {
-        require(msg.value >= minimumDonation, "Donation below minimum");
+        _donateWithAmount(recipient, message, media, onChain, msg.value, true);
+    }
+
+    function _donateWithAmount(
+        address recipient,
+        string memory message,
+        string memory media,
+        bool onChain,
+        uint256 ethAmount,
+        bool transferToTreasury
+    ) internal {
+        require(ethAmount >= minimumDonation, "Donation below minimum");
         require(nextTokenId < maxSupply, "Max supply reached");
 
         uint256 nftTokenId = nextTokenId++;
 
         // 1. Get USD Value from Chainlink
-        uint256 usdValue = _getUsdValue(msg.value);
+        uint256 usdValue = _getUsdValue(ethAmount);
 
         // 2. Create Permanent Record (Effect)
         taxRegistry[nftTokenId] = PermanentRecord({
             originalDonor: msg.sender,
             usdValue: usdValue,
-            ethAmount: msg.value,
+            ethAmount: ethAmount,
             timestamp: block.timestamp,
             status: TaxStatus.Pending,
             message: message
@@ -308,10 +361,12 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
         }
 
         // 6. Transfer to treasury
-        (bool success, ) = treasury.call{value: msg.value}("");
-        require(success, "Transfer to treasury failed");
+        if (transferToTreasury && ethAmount > 0) {
+            (bool success, ) = treasury.call{value: ethAmount}("");
+            require(success, "Transfer to treasury failed");
+        }
 
-        emit Donated(msg.sender, msg.value, usdValue, nftTokenId, message);
+        emit Donated(msg.sender, ethAmount, usdValue, nftTokenId, message);
     }
 
     /**
@@ -319,9 +374,13 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
      * Required amount is $1.00 USD worth of ETH.
      */
     function topUp(uint256 tokenId) external payable nonReentrant whenNotPaused {
+        _topUpWithAmount(tokenId, msg.value, true);
+    }
+
+    function _topUpWithAmount(uint256 tokenId, uint256 ethAmount, bool transferToTreasury) internal {
         _requireOwned(tokenId);
 
-        uint256 usdValue = _getUsdValue(msg.value);
+        uint256 usdValue = _getUsdValue(ethAmount);
 
         require(usdValue >= 1e8, "Top-up requires $1.00 USD");
 
@@ -336,10 +395,32 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
             bragToken.mint(msg.sender, usdValue * 10**16);
         }
 
+        if (transferToTreasury && ethAmount > 0) {
+            (bool success, ) = treasury.call{value: ethAmount}("");
+            require(success, "Transfer to treasury failed");
+        }
+
+        emit TopUp(tokenId, msg.sender, ethAmount);
+    }
+
+    /**
+     * @dev Batch top up multiple NFTs using ETH.
+     */
+    function batchTopUp(uint256[] calldata tokenIds) external payable nonReentrant whenNotPaused {
+        uint256 count = tokenIds.length;
+        require(count > 0, "Empty batch");
+
+        uint256 perEth = msg.value / count;
+        uint256 dust = msg.value % count;
+
+        for (uint256 i = 0; i < count; ) {
+            uint256 ethAmount = perEth + (i == count - 1 ? dust : 0);
+            _topUpWithAmount(tokenIds[i], ethAmount, false);
+            unchecked { i++; }
+        }
+
         (bool success, ) = treasury.call{value: msg.value}("");
         require(success, "Transfer to treasury failed");
-
-        emit TopUp(tokenId, msg.sender, msg.value);
     }
 
     /**
@@ -347,6 +428,23 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
      * Requires 1,000,000 BRAG tokens (fixed at $1 value).
      */
     function topUpWithBrag(uint256 tokenId) external nonReentrant whenNotPaused {
+        _topUpWithBragSingle(tokenId);
+    }
+
+    /**
+     * @dev Batch top up multiple NFTs using BRAG tokens.
+     */
+    function batchTopUpWithBrag(uint256[] calldata tokenIds) external nonReentrant whenNotPaused {
+        uint256 count = tokenIds.length;
+        require(count > 0, "Empty batch");
+
+        for (uint256 i = 0; i < count; ) {
+            _topUpWithBragSingle(tokenIds[i]);
+            unchecked { i++; }
+        }
+    }
+
+    function _topUpWithBragSingle(uint256 tokenId) internal {
         _requireOwned(tokenId);
         uint256 bragAmount = 1_000_000 * 10**18; // 1,000,000 BRAG tokens
 
@@ -462,33 +560,14 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
 
         // Check for 3-letter extensions: .mp3, .wav, .ogg, .m4a, .aac, .mp4, .mov, .ogv, .m4v, .gif, .glb
         if (b[len - 4] == '.') {
-            bytes1 b1 = _toLower(b[len - 3]);
-            bytes1 b2 = _toLower(b[len - 2]);
-            bytes1 b3 = _toLower(b[len - 1]);
-
-            if (b1 == 'm' && b2 == 'p' && b3 == '3') return true;
-            if (b1 == 'w' && b2 == 'a' && b3 == 'v') return true;
-            if (b1 == 'o' && b2 == 'g' && b3 == 'g') return true;
-            if (b1 == 'm' && b2 == '4' && b3 == 'a') return true;
-            if (b1 == 'a' && b2 == 'a' && b3 == 'c') return true;
-            if (b1 == 'm' && b2 == 'p' && b3 == '4') return true;
-            if (b1 == 'm' && b2 == 'o' && b3 == 'v') return true;
-            if (b1 == 'o' && b2 == 'g' && b3 == 'v') return true;
-            if (b1 == 'm' && b2 == '4' && b3 == 'v') return true;
-            if (b1 == 'g' && b2 == 'i' && b3 == 'f') return true;
-            if (b1 == 'g' && b2 == 'l' && b3 == 'b') return true;
+            bytes3 ext = bytes3(_toLower(b[len - 3])) | (bytes3(_toLower(b[len - 2])) >> 8) | (bytes3(_toLower(b[len - 1])) >> 16);
+            if (ext == "mp3" || ext == "wav" || ext == "ogg" || ext == "m4a" || ext == "aac" || ext == "mp4" || ext == "mov" || ext == "ogv" || ext == "m4v" || ext == "gif" || ext == "glb") return true;
         }
 
         // Check for 4-letter extensions: .webm, .webp, .gltf
         if (len >= 5 && b[len - 5] == '.') {
-            bytes1 b1 = _toLower(b[len - 4]);
-            bytes1 b2 = _toLower(b[len - 3]);
-            bytes1 b3 = _toLower(b[len - 2]);
-            bytes1 b4 = _toLower(b[len - 1]);
-
-            if (b1 == 'w' && b2 == 'e' && b3 == 'b' && b4 == 'm') return true;
-            if (b1 == 'w' && b2 == 'e' && b3 == 'b' && b4 == 'p') return true;
-            if (b1 == 'g' && b2 == 'l' && b3 == 't' && b4 == 'f') return true;
+            bytes4 ext4 = bytes4(_toLower(b[len - 4])) | (bytes4(_toLower(b[len - 3])) >> 8) | (bytes4(_toLower(b[len - 2])) >> 16) | (bytes4(_toLower(b[len - 1])) >> 24);
+            if (ext4 == "webm" || ext4 == "webp" || ext4 == "gltf") return true;
         }
 
         // Check for .mcstructure extension anywhere in string
@@ -607,11 +686,12 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
         uint256 extraLength = 0;
 
         for (uint256 i = 0; i < length; ) {
-            if (inputBytes[i] == '&') extraLength += 4; // &amp;
-            else if (inputBytes[i] == '<') extraLength += 3; // &lt;
-            else if (inputBytes[i] == '>') extraLength += 3; // &gt;
-            else if (inputBytes[i] == '"') extraLength += 5; // &quot;
-            else if (inputBytes[i] == '\'') extraLength += 5; // &apos;
+            bytes1 b = inputBytes[i];
+            if (b == '&') extraLength += 4; // &amp;
+            else if (b == '<') extraLength += 3; // &lt;
+            else if (b == '>') extraLength += 3; // &gt;
+            else if (b == '"') extraLength += 5; // &quot;
+            else if (b == '\'') extraLength += 5; // &apos;
             unchecked { i++; }
         }
 
@@ -648,10 +728,11 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
         uint256 extraLength = 0;
 
         for (uint256 i = 0; i < length; ) {
-            if (inputBytes[i] == '"' || inputBytes[i] == '\\') {
+            uint8 b = uint8(inputBytes[i]);
+            if (b == 0x22 || b == 0x5C) {
                 extraLength++;
-            } else if (uint8(inputBytes[i]) < 0x20) {
-                extraLength += 5; // \uXXXX
+            } else if (b < 0x20) {
+                extraLength += 5;
             }
             unchecked { i++; }
         }
@@ -663,7 +744,7 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
         bytes memory hexAlphabet = "0123456789abcdef";
         for (uint256 i = 0; i < length; ) {
             uint8 b = uint8(inputBytes[i]);
-            if (b == 0x22 || b == 0x5C) { // " or \
+            if (b == 0x22 || b == 0x5C) {
                 outputBytes[j++] = '\\';
                 outputBytes[j++] = bytes1(b);
             } else if (b < 0x20) {
