@@ -173,6 +173,14 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
         taxRegistry[tokenId].status = status;
     }
 
+    /**
+     * @dev Update USD value recorded in a tax record. Restricted to DEFAULT_ADMIN_ROLE.
+     */
+    function updateUsdValue(uint256 tokenId, uint256 newUsdValue) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _requireOwned(tokenId);
+        taxRegistry[tokenId].usdValue = newUsdValue;
+    }
+
     function setBragToken(address _bragToken) external onlyRole(DEFAULT_ADMIN_ROLE) {
         bragToken = IBragToken(_bragToken);
     }
@@ -231,6 +239,78 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
     }
 
     /**
+     * @dev Batch mint new BragNFTs by donating ETH.
+     */
+    function batchDonate(string[] calldata messages, string[] calldata URIs) external payable nonReentrant whenNotPaused {
+        _batchDonate(msg.sender, messages, URIs);
+    }
+
+    /**
+     * @dev Batch mint new BragNFTs to a specified recipient by donating ETH.
+     */
+    function batchDonateTo(address recipient, string[] calldata messages, string[] calldata URIs) external payable nonReentrant whenNotPaused {
+        _batchDonate(recipient, messages, URIs);
+    }
+
+    function _mintDonationNFT(
+        address recipient,
+        string memory message,
+        string memory media,
+        bool onChain,
+        uint256 itemEth
+    ) internal returns (uint256) {
+        uint256 nftTokenId = nextTokenId++;
+        uint256 usdValue = _getUsdValue(itemEth);
+
+        taxRegistry[nftTokenId] = PermanentRecord({
+            originalDonor: msg.sender,
+            usdValue: usdValue,
+            ethAmount: itemEth,
+            timestamp: block.timestamp,
+            status: TaxStatus.Pending,
+            message: message
+        });
+
+        glowExpiry[nftTokenId] = block.timestamp + 30 days;
+
+        if (onChain) {
+            onChainMedia[nftTokenId] = media;
+        } else if (bytes(media).length > 0) {
+            _setTokenURI(nftTokenId, media);
+        }
+
+        _safeMint(recipient, nftTokenId);
+
+        emit Donated(msg.sender, itemEth, usdValue, nftTokenId, message);
+
+        return usdValue;
+    }
+
+    function _batchDonate(address recipient, string[] calldata messages, string[] calldata URIs) internal {
+        uint256 count = messages.length;
+        require(count > 0 && count == URIs.length, "Mismatched arrays");
+        require(nextTokenId + count <= maxSupply, "Max supply reached");
+
+        uint256 ethPerItem = msg.value / count;
+        require(ethPerItem >= minimumDonation, "Donation below minimum");
+
+        uint256 totalUsdValue = 0;
+
+        for (uint256 i = 0; i < count; ) {
+            uint256 itemEth = (i == count - 1) ? ethPerItem + (msg.value % count) : ethPerItem;
+            totalUsdValue += _mintDonationNFT(recipient, messages[i], URIs[i], false, itemEth);
+            unchecked { i++; }
+        }
+
+        if (address(bragToken) != address(0) && totalUsdValue > 0) {
+            bragToken.mint(msg.sender, totalUsdValue * 10**16);
+        }
+
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Transfer to treasury failed");
+    }
+
+    /**
      * @dev Fallback to handle raw ETH transfers.
      */
     receive() external payable nonReentrant whenNotPaused {
@@ -274,44 +354,22 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
         require(msg.value >= minimumDonation, "Donation below minimum");
         require(nextTokenId < maxSupply, "Max supply reached");
 
-        uint256 nftTokenId = nextTokenId++;
+        uint256 usdValue = _mintDonationNFT(recipient, message, media, onChain, msg.value);
 
-        // 1. Get USD Value from Chainlink
-        uint256 usdValue = _getUsdValue(msg.value);
-
-        // 2. Create Permanent Record (Effect)
-        taxRegistry[nftTokenId] = PermanentRecord({
-            originalDonor: msg.sender,
-            usdValue: usdValue,
-            ethAmount: msg.value,
-            timestamp: block.timestamp,
-            status: TaxStatus.Pending,
-            message: message
-        });
-
-        // Initialize glow
-        glowExpiry[nftTokenId] = block.timestamp + 30 days;
-
-        // 3. Set metadata
-        if (onChain) {
-            onChainMedia[nftTokenId] = media;
-        } else if (bytes(media).length > 0) {
-            _setTokenURI(nftTokenId, media);
-        }
-
-        // 4. Mint the transferable BragNFT
-        _safeMint(recipient, nftTokenId);
-
-        // 5. Mint Brag Tokens (1,000,000 per USD)
         if (address(bragToken) != address(0) && usdValue > 0) {
             bragToken.mint(msg.sender, usdValue * 10**16);
         }
 
-        // 6. Transfer to treasury
         (bool success, ) = treasury.call{value: msg.value}("");
         require(success, "Transfer to treasury failed");
+    }
 
-        emit Donated(msg.sender, msg.value, usdValue, nftTokenId, message);
+    function _updateGlow(uint256 tokenId) internal {
+        if (glowExpiry[tokenId] < block.timestamp) {
+            glowExpiry[tokenId] = block.timestamp + 30 days;
+        } else {
+            glowExpiry[tokenId] += 30 days;
+        }
     }
 
     /**
@@ -322,16 +380,10 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
         _requireOwned(tokenId);
 
         uint256 usdValue = _getUsdValue(msg.value);
-
         require(usdValue >= 1e8, "Top-up requires $1.00 USD");
 
-        if (glowExpiry[tokenId] < block.timestamp) {
-            glowExpiry[tokenId] = block.timestamp + 30 days;
-        } else {
-            glowExpiry[tokenId] += 30 days;
-        }
+        _updateGlow(tokenId);
 
-        // Mint Brag Tokens (1,000,000 per USD)
         if (address(bragToken) != address(0) && usdValue > 0) {
             bragToken.mint(msg.sender, usdValue * 10**16);
         }
@@ -353,13 +405,63 @@ contract BragNFT is ERC721URIStorage, AccessControl, ReentrancyGuard, Pausable, 
         require(address(bragToken) != address(0), "BRAG token not set");
         require(bragToken.transferFrom(msg.sender, treasury, bragAmount), "BRAG transfer failed");
 
-        if (glowExpiry[tokenId] < block.timestamp) {
-            glowExpiry[tokenId] = block.timestamp + 30 days;
-        } else {
-            glowExpiry[tokenId] += 30 days;
-        }
+        _updateGlow(tokenId);
 
         emit TopUp(tokenId, msg.sender, bragAmount);
+    }
+
+    /**
+     * @dev Batch top up multiple NFTs with ETH.
+     */
+    function batchTopUp(uint256[] calldata tokenIds) external payable nonReentrant whenNotPaused {
+        uint256 count = tokenIds.length;
+        require(count > 0, "Empty array");
+        uint256 ethPerItem = msg.value / count;
+        uint256 totalUsdValue = 0;
+
+        for (uint256 i = 0; i < count; ) {
+            uint256 tokenId = tokenIds[i];
+            _requireOwned(tokenId);
+
+            uint256 itemEth = (i == count - 1) ? ethPerItem + (msg.value % count) : ethPerItem;
+            uint256 usdValue = _getUsdValue(itemEth);
+            require(usdValue >= 1e8, "Top-up requires $1.00 USD");
+
+            totalUsdValue += usdValue;
+            _updateGlow(tokenId);
+
+            emit TopUp(tokenId, msg.sender, itemEth);
+
+            unchecked { i++; }
+        }
+
+        if (address(bragToken) != address(0) && totalUsdValue > 0) {
+            bragToken.mint(msg.sender, totalUsdValue * 10**16);
+        }
+
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Transfer to treasury failed");
+    }
+
+    /**
+     * @dev Batch top up multiple NFTs with BRAG tokens.
+     */
+    function batchTopUpWithBrag(uint256[] calldata tokenIds) external nonReentrant whenNotPaused {
+        uint256 count = tokenIds.length;
+        require(count > 0, "Empty array");
+        uint256 bragAmount = 1_000_000 * 10**18;
+        uint256 totalBrag = bragAmount * count;
+
+        require(address(bragToken) != address(0), "BRAG token not set");
+        require(bragToken.transferFrom(msg.sender, treasury, totalBrag), "BRAG transfer failed");
+
+        for (uint256 i = 0; i < count; ) {
+            uint256 tokenId = tokenIds[i];
+            _requireOwned(tokenId);
+            _updateGlow(tokenId);
+            emit TopUp(tokenId, msg.sender, bragAmount);
+            unchecked { i++; }
+        }
     }
 
     /**
