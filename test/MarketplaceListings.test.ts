@@ -146,4 +146,16 @@ describe("NFTMarketplace Fixed-Price Listings", async function () {
       /Price mismatch/
     );
   });
+
+  it("Should revert when updating an ERC721 listing with amount > 1", async function () {
+    await bragNFT.write.donate(["Update test", "uri"], { value: 1n });
+    const tokenId = 4n;
+    await bragNFT.write.approve([marketplace.address, tokenId]);
+    await marketplace.write.createListing([bragNFT.address, tokenId, 1n, parseEther("10")]);
+
+    await assert.rejects(
+      marketplace.write.updateListing([bragNFT.address, tokenId, 2n, parseEther("15")]),
+      /ERC721 listing must have amount 1/
+    );
+  });
 });

@@ -108,6 +108,18 @@ describe("Treasury Multi-sig Smart Wallet", async function () {
       const finalBalance = await publicClient.getBalance({ address: target });
       assert.equal(finalBalance - initialBalance, value);
     });
+
+    it("Should revert propose if array lengths are mismatched", async () => {
+      const target = nonOwner.account.address;
+      const value = parseEther("0.1");
+
+      await assert.rejects(
+        async () => {
+          await treasury.write.propose([[target, target], [value], ["0x" as Hex], 0n], { account: owner1.account });
+        },
+        /Mismatched arrays/
+      );
+    });
   });
 
   describe("Account Abstraction (EIP-4337)", async () => {
