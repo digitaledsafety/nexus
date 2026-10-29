@@ -22,7 +22,7 @@ async function loadNFTs() {
     const bragNFT = getContract('BragNFT');
 
     nftGrid.innerHTML = '';
-    emptyState.classList.add('hidden');
+    if (emptyState) emptyState.classList.add('hidden');
 
     const nativeNFTPromises = [];
     const externalNFTPromises = [];
@@ -71,14 +71,14 @@ async function loadNFTs() {
         if (items.length === 0) {
             if (!network || network.chainId !== 1) {
                 renderDemoMarketCard();
-            } else {
+            } else if (emptyState) {
                 emptyState.classList.remove('hidden');
             }
         }
 
     } catch (e) {
         console.error('Error loading marketplace NFTs:', e);
-        if (nftGrid.querySelectorAll('.glass-card').length === 0) {
+        if (nftGrid.querySelectorAll('.glass-card').length === 0 && emptyState) {
             emptyState.classList.remove('hidden');
         }
     }

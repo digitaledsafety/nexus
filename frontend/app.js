@@ -473,13 +473,16 @@ async function refreshTreasuryInfo() {
 
         // 1. Get Balance
         const balance = await provider.getBalance(treasuryAddr);
-        document.getElementById('treasuryBalance').innerText = `${ethers.utils.formatEther(balance)} ETH`;
+        const balEl = document.getElementById('treasuryBalance');
+        if (balEl) balEl.innerText = `${ethers.utils.formatEther(balance)} ETH`;
 
         // 2. Get Threshold & Owners
         const threshold = await treasury.threshold();
         const owners = await treasury.getOwners();
-        document.getElementById('treasuryThreshold').innerText = `${threshold} / ${owners.length}`;
-        document.getElementById('treasuryOwners').innerText = owners.join('\n');
+        const threshEl = document.getElementById('treasuryThreshold');
+        if (threshEl) threshEl.innerText = `${threshold} / ${owners.length}`;
+        const ownersEl = document.getElementById('treasuryOwners');
+        if (ownersEl) ownersEl.innerText = owners.join('\n');
 
         // 3. Render Proposals
         await renderProposals(treasury);
