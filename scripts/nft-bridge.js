@@ -381,7 +381,8 @@ async function handleSummonCommand(target, platformId, serverId, playerName) {
             fs.mkdirSync(structuresDir, { recursive: true });
         }
 
-        const structureName = `nft_${matchingNft.tokenId}`;
+        const safeTokenId = matchingNft.tokenId.toString().replace(/[^a-zA-Z0-9_-]/g, '');
+        const structureName = `nft_${safeTokenId || '0'}`;
         const structureFilePath = path.join(structuresDir, `${structureName}.mcstructure`);
 
         if (structureUrl.startsWith('data:')) {

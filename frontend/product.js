@@ -16,8 +16,10 @@ async function initProduct() {
     const contractAddr = urlParams.get('addr');
 
     if (!tokenId || !contractAddr) {
-        document.getElementById('productLoading').classList.add('hidden');
-        document.getElementById('productError').classList.remove('hidden');
+        const loadingEl = document.getElementById('productLoading');
+        const errorEl = document.getElementById('productError');
+        if (loadingEl) loadingEl.classList.add('hidden');
+        if (errorEl) errorEl.classList.remove('hidden');
         return;
     }
 
@@ -82,22 +84,27 @@ async function loadProductData(contractAddr, tokenId) {
 
                 if (record && record.originalDonor.toLowerCase() === currentAddr) {
                     console.log("Donor match - showing tax section");
-                    taxRecordSection.classList.remove('hidden');
-                    document.getElementById('taxValue').textContent = `$${(parseFloat(ethers.utils.formatUnits(record.usdValue, 8))).toFixed(2)}`;
+                    if (taxRecordSection) taxRecordSection.classList.remove('hidden');
+                    const taxValEl = document.getElementById('taxValue');
+                    if (taxValEl) taxValEl.textContent = `$${(parseFloat(ethers.utils.formatUnits(record.usdValue, 8))).toFixed(2)}`;
                     const statusNames = ['Pending', 'Verified', 'Claimed', 'Flagged'];
-                    document.getElementById('taxStatus').textContent = statusNames[record.status] || 'Unknown';
-                    document.getElementById('taxStatus').className = `badge text-[8px] ${record.status === 1 ? 'badge-verified' : ''}`;
+                    const taxStatEl = document.getElementById('taxStatus');
+                    if (taxStatEl) {
+                        taxStatEl.textContent = statusNames[record.status] || 'Unknown';
+                        taxStatEl.className = `badge text-[8px] ${record.status === 1 ? 'badge-verified' : ''}`;
+                    }
                 } else {
                     console.log("Not donor - hiding tax section");
-                    taxRecordSection.classList.add('hidden');
+                    if (taxRecordSection) taxRecordSection.classList.add('hidden');
                 }
 
                 if (topUpSection) {
                     topUpSection.classList.remove('hidden');
                 }
 
-                if (isGlowing) {
-                    document.getElementById('nftImage').style.filter = 'drop-shadow(0 0 20px rgba(99, 102, 241, 0.6))';
+                const nftImgEl = document.getElementById('nftImage');
+                if (isGlowing && nftImgEl) {
+                    nftImgEl.style.filter = 'drop-shadow(0 0 20px rgba(99, 102, 241, 0.6))';
                 }
             } catch (e) {
                 console.warn("Failed to fetch dual-state record", e);
@@ -137,13 +144,26 @@ async function loadProductData(contractAddr, tokenId) {
         }
 
         // UI Injection
-        document.getElementById('nftName').textContent = metadata.name || "Unnamed NFT";
-        document.getElementById('breadcrumbName').textContent = metadata.name || "Asset Detail";
-        document.getElementById('nftDescription').textContent = metadata.description || 'Verified impact contribution.';
-        document.getElementById('dispOwner').textContent = ownerLabel;
-        document.getElementById('dispContract').textContent = contractAddr;
-        document.getElementById('dispTokenId').textContent = tokenId.length > 20 ? tokenId.substring(0, 8) + '...' + tokenId.substring(tokenId.length - 8) : tokenId;
-        document.getElementById('dispNetwork').textContent = NETWORK_NAMES[network?.chainId] || 'Connected Network';
+        const nftNameEl = document.getElementById('nftName');
+        if (nftNameEl) nftNameEl.textContent = metadata.name || "Unnamed NFT";
+
+        const breadcrumbEl = document.getElementById('breadcrumbName');
+        if (breadcrumbEl) breadcrumbEl.textContent = metadata.name || "Asset Detail";
+
+        const descEl = document.getElementById('nftDescription');
+        if (descEl) descEl.textContent = metadata.description || 'Verified impact contribution.';
+
+        const ownerEl = document.getElementById('dispOwner');
+        if (ownerEl) ownerEl.textContent = ownerLabel;
+
+        const contractEl = document.getElementById('dispContract');
+        if (contractEl) contractEl.textContent = contractAddr;
+
+        const tokenIdEl = document.getElementById('dispTokenId');
+        if (tokenIdEl) tokenIdEl.textContent = tokenId.length > 20 ? tokenId.substring(0, 8) + '...' + tokenId.substring(tokenId.length - 8) : tokenId;
+
+        const networkEl = document.getElementById('dispNetwork');
+        if (networkEl) networkEl.textContent = NETWORK_NAMES[network?.chainId] || 'Connected Network';
 
         // Detect Standard
         let standard = "ERC-721 Impact Asset";
@@ -153,8 +173,11 @@ async function loadProductData(contractAddr, tokenId) {
             isERC1155 = await contract.supportsInterface("0xd9b67a26");
             if (isERC1155) standard = "ERC-1155 Collection";
         } catch (e) {}
-        const stdDisp = document.getElementById('dispTokenId').closest('.grid').querySelector('div:nth-child(3) p:nth-child(2)');
-        if (stdDisp) stdDisp.textContent = standard;
+        const stdDispContainer = document.getElementById('dispTokenId');
+        if (stdDispContainer) {
+            const stdDisp = stdDispContainer.closest('.grid')?.querySelector('div:nth-child(3) p:nth-child(2)');
+            if (stdDisp) stdDisp.textContent = standard;
+        }
 
         const messageAttr = metadata.attributes?.find(a => a.trait_type === 'Message');
         const messageDisp = document.getElementById('dispMessage');
@@ -175,21 +198,33 @@ async function loadProductData(contractAddr, tokenId) {
             document.getElementById(id)?.classList.add('hidden');
         });
 
+        const audioPlayerEl = document.getElementById('audioPlayer');
+        const audioEl = document.getElementById('nftAudio');
+        const videoPlayerEl = document.getElementById('videoPlayer');
+        const videoEl = document.getElementById('nftVideo');
+        const threeDPlayerEl = document.getElementById('threeDPlayer');
+        const threeDEl = document.getElementById('nft3d');
+        const imageEl = document.getElementById('nftImage');
+
         if (isAudio) {
-            document.getElementById('audioPlayer').classList.remove('hidden');
-            document.getElementById('nftAudio').src = animUrl;
+            if (audioPlayerEl) audioPlayerEl.classList.remove('hidden');
+            if (audioEl) audioEl.src = animUrl;
         } else if (isVideo) {
-            document.getElementById('videoPlayer').classList.remove('hidden');
-            document.getElementById('nftVideo').src = animUrl;
+            if (videoPlayerEl) videoPlayerEl.classList.remove('hidden');
+            if (videoEl) videoEl.src = animUrl;
         } else if (is3d) {
-            document.getElementById('threeDPlayer').classList.remove('hidden');
-            document.getElementById('nft3d').src = animUrl;
+            if (threeDPlayerEl) threeDPlayerEl.classList.remove('hidden');
+            if (threeDEl) threeDEl.src = animUrl;
         } else if (isGif) {
-            document.getElementById('nftImage').classList.remove('hidden');
-            document.getElementById('nftImage').src = animUrl;
+            if (imageEl) {
+                imageEl.classList.remove('hidden');
+                imageEl.src = animUrl;
+            }
         } else {
-            document.getElementById('nftImage').classList.remove('hidden');
-            document.getElementById('nftImage').src = metadata.image;
+            if (imageEl) {
+                imageEl.classList.remove('hidden');
+                imageEl.src = metadata.image;
+            }
         }
 
         // Marketplace State - Find highest active offer
@@ -216,10 +251,15 @@ async function loadProductData(contractAddr, tokenId) {
                 }
 
                 if (highestOffer.price.gt(0)) {
-                    document.getElementById('noOffer').classList.add('hidden');
-                    document.getElementById('offerExists').classList.remove('hidden');
-                    document.getElementById('highestOfferPrice').textContent = `${ethers.utils.formatEther(highestOffer.price)} BRAG`;
-                    document.getElementById('highestOfferBuyer').textContent = `by ${highestOffer.buyer.substring(0, 6)}...${highestOffer.buyer.substring(38)}`;
+                    const noOfferEl = document.getElementById('noOffer');
+                    const offerExistsEl = document.getElementById('offerExists');
+                    const highestOfferPriceEl = document.getElementById('highestOfferPrice');
+                    const highestOfferBuyerEl = document.getElementById('highestOfferBuyer');
+
+                    if (noOfferEl) noOfferEl.classList.add('hidden');
+                    if (offerExistsEl) offerExistsEl.classList.remove('hidden');
+                    if (highestOfferPriceEl) highestOfferPriceEl.textContent = `${ethers.utils.formatEther(highestOffer.price)} BRAG`;
+                    if (highestOfferBuyerEl) highestOfferBuyerEl.textContent = `by ${highestOffer.buyer.substring(0, 6)}...${highestOffer.buyer.substring(38)}`;
                 }
             } catch (err) {
                 console.warn("Failed to load offers", err);
@@ -234,19 +274,24 @@ async function loadProductData(contractAddr, tokenId) {
             const collBadge = document.createElement('span');
             collBadge.className = 'px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-400 text-[8px] font-black uppercase tracking-widest ml-2';
             collBadge.textContent = externalColl.name;
-            document.getElementById('nftName').appendChild(collBadge);
+            const nameEl = document.getElementById('nftName');
+            if (nameEl) nameEl.appendChild(collBadge);
         }
 
         // Buttons
         setupProductActions(contractAddr, tokenId, metadata);
 
-        document.getElementById('productLoading').classList.add('hidden');
-        document.getElementById('productContent').classList.remove('hidden');
+        const loadingEl = document.getElementById('productLoading');
+        const contentEl = document.getElementById('productContent');
+        if (loadingEl) loadingEl.classList.add('hidden');
+        if (contentEl) contentEl.classList.remove('hidden');
 
     } catch (e) {
         console.error("Product load error", e);
-        document.getElementById('productLoading').classList.add('hidden');
-        document.getElementById('productError').classList.remove('hidden');
+        const loadingEl = document.getElementById('productLoading');
+        const errorEl = document.getElementById('productError');
+        if (loadingEl) loadingEl.classList.add('hidden');
+        if (errorEl) errorEl.classList.remove('hidden');
     }
 }
 
@@ -319,47 +364,54 @@ function setupProductActions(contractAddr, tokenId, metadata) {
         }
     }
 
-    document.getElementById('btnMakeOffer').onclick = async () => {
-        const priceStr = document.getElementById('offerAmount').value;
-        if (!priceStr || parseFloat(priceStr) <= 0) return alert('Enter valid BRAG price');
+    const btnMakeOffer = document.getElementById('btnMakeOffer');
+    if (btnMakeOffer) {
+        btnMakeOffer.onclick = async () => {
+            const amountInput = document.getElementById('offerAmount');
+            const priceStr = amountInput ? amountInput.value : '';
+            if (!priceStr || parseFloat(priceStr) <= 0) return alert('Enter valid BRAG price');
 
-        const marketplace = getContract('NFTMarketplace');
-        const bragToken = getContract('BragToken');
-        if (!marketplace || !bragToken) return alert('Marketplace not configured on this network');
+            const marketplace = getContract('NFTMarketplace');
+            const bragToken = getContract('BragToken');
+            if (!marketplace || !bragToken) return alert('Marketplace not configured on this network');
 
-        try {
-            const price = ethers.utils.parseEther(priceStr);
-            const amount = 1; // Default to 1 for now
+            try {
+                const price = ethers.utils.parseEther(priceStr);
+                const amount = 1; // Default to 1 for now
 
-            // In gasless mode, the SCA is the one making the offer, so it needs the allowance.
-            const owner = isGaslessMode ? scaAddress : userAddress;
-            const allowance = await bragToken.allowance(owner, marketplace.address);
+                // In gasless mode, the SCA is the one making the offer, so it needs the allowance.
+                const owner = isGaslessMode ? scaAddress : userAddress;
+                const allowance = await bragToken.allowance(owner, marketplace.address);
 
-            if (allowance.lt(price)) {
-                alert('Approval required for BRAG tokens.');
-                const appTx = await txHandler(bragToken, 'approve', [marketplace.address, price], 'Approval successful');
-                if (!appTx) return; // Error handled in txHandler
-                if (appTx.wait) await appTx.wait();
+                if (allowance.lt(price)) {
+                    alert('Approval required for BRAG tokens.');
+                    const appTx = await txHandler(bragToken, 'approve', [marketplace.address, price], 'Approval successful');
+                    if (!appTx) return; // Error handled in txHandler
+                    if (appTx.wait) await appTx.wait();
+                }
+
+                // Use unified txHandler
+                const tx = await txHandler(marketplace, 'createOffer', [contractAddr, tokenId, amount, price]);
+                alert('Offer submitted!');
+                await tx.wait();
+                window.location.reload();
+            } catch (e) {
+                alert('Offer failed: ' + (e.reason || e.message));
             }
+        };
+    }
 
-            // Use unified txHandler
-            const tx = await txHandler(marketplace, 'createOffer', [contractAddr, tokenId, amount, price]);
-            alert('Offer submitted!');
-            await tx.wait();
-            window.location.reload();
-        } catch (e) {
-            alert('Offer failed: ' + (e.reason || e.message));
-        }
-    };
-
-    document.getElementById('btnAddToCart').onclick = () => {
-        addToCart({
-            id: tokenId,
-            address: contractAddr,
-            name: metadata.name,
-            image: metadata.image
-        });
-    };
+    const btnAddToCart = document.getElementById('btnAddToCart');
+    if (btnAddToCart) {
+        btnAddToCart.onclick = () => {
+            addToCart({
+                id: tokenId,
+                address: contractAddr,
+                name: metadata.name,
+                image: metadata.image
+            });
+        };
+    }
 }
 
 function generateTaxPDF(tokenId, metadata) {
@@ -384,7 +436,8 @@ function generateTaxPDF(tokenId, metadata) {
     doc.text(`Asset: BragNFT #${tokenId}`, 20, 60);
     doc.text(`Donor Wallet: ${userAddress}`, 20, 70);
 
-    const usdValue = document.getElementById('taxValue').textContent;
+    const taxValEl = document.getElementById('taxValue');
+    const usdValue = taxValEl ? taxValEl.textContent : '$0.00';
     doc.setFontSize(16);
     doc.text(`Verified Fair Market Value: ${usdValue} USD`, 20, 85);
 
