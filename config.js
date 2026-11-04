@@ -10465,12 +10465,20 @@ const APP_CONFIG = {
       "NFTMarketplace": "",
       "Treasury": ""
     },
+    "11155111": {
+      "BragNFT": "0x1111111111111111111111111111111111111111",
+      "ExhibitRegistry": "0x2222222222222222222222222222222222222222"
+    },
     "chain-31337": {
       "BragNFT": "0xLOCAL_NEXUS_ADDRESS",
       "BragToken": "",
       "ExhibitRegistry": "",
       "NFTMarketplace": "",
       "Treasury": ""
+    },
+    "chain-11155111": {
+      "BragNFT": "0x1111111111111111111111111111111111111111",
+      "ExhibitRegistry": "0x2222222222222222222222222222222222222222"
     }
   },
   "externalCollections": []
