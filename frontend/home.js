@@ -38,8 +38,10 @@ async function refreshHomeStats() {
         const current = await bragNFT.totalSupply();
         const remaining = total.sub(current);
 
-        document.getElementById('nftsTotal').innerText = total.toString();
-        document.getElementById('nftsRemaining').innerText = remaining.toString();
+        const elTotal = document.getElementById('nftsTotal');
+        const elRemaining = document.getElementById('nftsRemaining');
+        if (elTotal) elTotal.innerText = total.toString();
+        if (elRemaining) elRemaining.innerText = remaining.toString();
 
         // Raised Stats
         const treasuryAddr = await bragNFT.treasury();
@@ -48,8 +50,10 @@ async function refreshHomeStats() {
             const ethVal = parseFloat(ethers.utils.formatEther(balance));
             const usdVal = ethVal * ethPrice;
 
-            document.getElementById('totalRaisedETH').innerText = ethVal.toFixed(4);
-            document.getElementById('totalRaisedUSD').innerText = `$${usdVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            const elRaisedEth = document.getElementById('totalRaisedETH');
+            const elRaisedUsd = document.getElementById('totalRaisedUSD');
+            if (elRaisedEth) elRaisedEth.innerText = ethVal.toFixed(4);
+            if (elRaisedUsd) elRaisedUsd.innerText = `$${usdVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         }
 
         // Contract Link
@@ -98,12 +102,16 @@ function updateDynamicRewards() {
 
 function updateHomeConversion() {
     const ethDisplay = document.getElementById('ethConversion');
+    if (!ethDisplay) return;
+
     if (selectedUsdAmount > 0 && ethPrice > 0) {
         const eth = selectedUsdAmount / ethPrice;
         const ethStr = eth.toFixed(4);
         const bragAmount = (selectedUsdAmount * 1000000).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2});
-        document.getElementById('ethAmount').innerText = ethStr;
-        document.getElementById('bragRewardAmount').innerText = bragAmount;
+        const elEth = document.getElementById('ethAmount');
+        const elBrag = document.getElementById('bragRewardAmount');
+        if (elEth) elEth.innerText = ethStr;
+        if (elBrag) elBrag.innerText = bragAmount;
         ethDisplay.classList.remove('hidden');
     } else {
         ethDisplay.classList.add('hidden');
