@@ -143,6 +143,7 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
      * @dev Propose a batch of transactions. The proposer auto-approves it.
      */
     function propose(address[] calldata targets, uint256[] calldata values, bytes[] calldata datas, uint256 nonce) external onlyOwner(nonce) returns (uint256) {
+        require(targets.length == values.length && values.length == datas.length, "Mismatched arrays");
         Call[] memory calls = new Call[](targets.length);
         for (uint256 i = 0; i < targets.length; i++) {
             calls[i] = Call({target: targets[i], value: values[i], data: datas[i]});
@@ -179,6 +180,21 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
      */
     function approve(uint256 proposalId, uint256 nonce) public onlyOwner(nonce) {
         address owner = _getMsgSender(nonce);
+        _approve(proposalId, owner);
+    }
+
+    /**
+     * @dev Batch approve multiple proposals in a single transaction.
+     */
+    function batchApprove(uint256[] calldata proposalIds, uint256 nonce) external onlyOwner(nonce) {
+        address owner = _getMsgSender(nonce);
+        for (uint256 i = 0; i < proposalIds.length; ) {
+            _approve(proposalIds[i], owner);
+            unchecked { i++; }
+        }
+    }
+
+    function _approve(uint256 proposalId, address owner) internal {
         if (proposalId >= proposalCount) revert ProposalNotFound();
 
         Proposal storage p = proposals[proposalId];
@@ -250,8 +266,23 @@ contract Treasury is Account, ERC721Holder, ERC1155Holder, IERC1271, AccessContr
     /**
      * @dev Cancel a proposal (only by proposer or via treasury execution).
      */
-    function cancel(uint256 proposalId, uint256 nonce) external {
+    function cancel(uint256 proposalId, uint256 nonce) public {
         address caller = _getMsgSender(nonce);
+        _cancel(proposalId, caller);
+    }
+
+    /**
+     * @dev Batch cancel multiple proposals in a single transaction.
+     */
+    function batchCancel(uint256[] calldata proposalIds, uint256 nonce) external {
+        address caller = _getMsgSender(nonce);
+        for (uint256 i = 0; i < proposalIds.length; ) {
+            _cancel(proposalIds[i], caller);
+            unchecked { i++; }
+        }
+    }
+
+    function _cancel(uint256 proposalId, address caller) internal {
         if (proposalId >= proposalCount) revert ProposalNotFound();
 
         Proposal storage p = proposals[proposalId];
